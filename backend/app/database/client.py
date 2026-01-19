@@ -5,7 +5,7 @@ This module provides the Supabase client for database operations,
 including connection management and health checks.
 """
 
-from typing import Any
+import threading
 
 from supabase import Client, create_client
 
@@ -20,17 +20,21 @@ class SupabaseClient:
     """
     Supabase client wrapper for database operations.
 
-    Provides a singleton client instance with connection pooling
+    Provides a thread-safe singleton client instance with connection pooling
     and health check capabilities.
     """
 
     _instance: Client | None = None
     _initialized: bool = False
+    _init_lock: threading.Lock = threading.Lock()
 
     @classmethod
     def get_client(cls) -> Client:
         """
-        Get or create Supabase client instance.
+        Get or create Supabase client instance (thread-safe).
+
+        Uses double-checked locking to ensure thread-safe singleton
+        initialization without unnecessary lock acquisition.
 
         Returns:
             Client: Supabase client instance
@@ -38,7 +42,16 @@ class SupabaseClient:
         Raises:
             DatabaseError: If client initialization fails
         """
-        if cls._instance is None:
+        # First check (without lock) - fast path for already initialized client
+        if cls._instance is not None:
+            return cls._instance
+
+        # Acquire lock for initialization
+        with cls._init_lock:
+            # Second check (with lock) - ensure another thread didn't initialize
+            if cls._instance is not None:
+                return cls._instance
+
             try:
                 logger.info(
                     "Initializing Supabase client",
@@ -71,20 +84,23 @@ class SupabaseClient:
         """
         Check if database connection is healthy.
 
+        Performs a real connectivity test by executing a lightweight query.
+
         Returns:
             bool: True if connection is healthy, False otherwise
         """
         try:
             client = cls.get_client()
 
-            # Try a simple query to verify connection
-            # We'll query the documents table (will create this later)
-            # For now, just check if client exists
-            if client is not None:
+            # Perform a real connectivity test with a simple query
+            # This verifies the database is actually reachable
+            response = await client.rpc("version").execute()
+
+            if response:
                 logger.debug("Database health check passed")
                 return True
 
-            logger.warning("Database client not initialized")
+            logger.warning("Database health check returned empty response")
             return False
 
         except Exception as e:
@@ -98,15 +114,16 @@ class SupabaseClient:
     @classmethod
     def close(cls) -> None:
         """
-        Close the database connection.
+        Close the database connection (thread-safe).
 
         Note: Supabase client doesn't require explicit closing,
         but this method is here for consistency and future use.
         """
-        if cls._instance is not None:
-            logger.info("Closing Supabase client")
-            cls._instance = None
-            cls._initialized = False
+        with cls._init_lock:
+            if cls._instance is not None:
+                logger.info("Closing Supabase client")
+                cls._instance = None
+                cls._initialized = False
 
 
 def get_db() -> Client:
@@ -129,8 +146,3 @@ def get_db() -> Client:
         ```
     """
     return SupabaseClient.get_client()
-
-
-# Create a global client instance for direct imports
-# (Can be used outside of FastAPI dependency injection)
-supabase_client = SupabaseClient.get_client()

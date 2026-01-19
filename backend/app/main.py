@@ -44,8 +44,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
 
     try:
-        # Initialize Supabase client
-        client = SupabaseClient.get_client()
+        # Initialize Supabase client (for side effects)
+        SupabaseClient.get_client()
         logger.info("Database client initialized successfully")
 
         # Verify database connection

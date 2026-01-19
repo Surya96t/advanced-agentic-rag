@@ -8,6 +8,7 @@
 ## 📚 Planning Documents (In Reading Order)
 
 ### **1. [01_Roadmap.md](./01_Roadmap.md)**
+
 - **Purpose:** High-level project vision and goals
 - **Key Content:**
   - Problem statement (developers struggle with siloed docs)
@@ -16,6 +17,7 @@
   - Tech stack overview
 
 ### **2. [02_Planning_ROI.md](./02_Planning_ROI.md)**
+
 - **Purpose:** Skills you'll learn and system architecture
 - **Key Content:**
   - Learning outcomes (production RAG, agentic orchestration, hybrid search)
@@ -24,6 +26,7 @@
   - Risk mitigation strategies
 
 ### **3. [03_Planning_and_Architecture.md](./03_Planning_and_Architecture.md)**
+
 - **Purpose:** Detailed system architecture and component design
 - **Key Content:**
   - System architecture (microservices lite pattern)
@@ -34,6 +37,7 @@
   - Open questions and resolutions
 
 ### **4. [04_DB_Design.md](./04_DB_Design.md)**
+
 - **Purpose:** Complete database schema and indexing strategy
 - **Key Content:**
   - ERD (Entity-Relationship Diagram)
@@ -45,6 +49,7 @@
   - Advanced chunking implementation notes
 
 ### **5. [05_RAG_Learning_Topics.md](./05_RAG_Learning_Topics.md)**
+
 - **Purpose:** Deep dive into advanced RAG techniques
 - **Key Content:**
   - Multi-stage chunking pipeline (5 stages: MVP → Expert)
@@ -60,6 +65,7 @@
   - Success metrics and KPIs
 
 ### **6. [06_API_Contract.md](./06_API_Contract.md)**
+
 - **Purpose:** API specification and data contracts
 - **Key Content:**
   - Authentication strategy (Bearer tokens)
@@ -69,6 +75,7 @@
   - Error handling standards
 
 ### **7. [07_System_Diagram.md](./07_System_Diagram.md)**
+
 - **Purpose:** Visual system architecture
 - **Key Content:**
   - Mermaid diagram of data flow
@@ -77,6 +84,7 @@
   - Chat flow with streaming
 
 ### **8. [08_Final_Technical_Decisions.md](./08_Final_Technical_Decisions.md)** ⭐ **NEW**
+
 - **Purpose:** Consolidated technical decisions reference
 - **Key Content:**
   - Re-ranking strategy (FlashRank → Cohere)
@@ -96,15 +104,18 @@
 ## 🎯 Quick Reference Guide
 
 ### **For Implementation:**
+
 Start with → **08_Final_Technical_Decisions.md**  
 Then refer to → **04_DB_Design.md** for schema  
 API contracts → **06_API_Contract.md**
 
 ### **For Understanding Advanced RAG:**
+
 Deep dive → **05_RAG_Learning_Topics.md**  
 Architecture → **03_Planning_and_Architecture.md**
 
 ### **For Interview Prep:**
+
 Learning outcomes → **02_Planning_ROI.md**  
 Technical decisions → **08_Final_Technical_Decisions.md**  
 Senior interview questions → **05_RAG_Learning_Topics.md** (Summary section)
@@ -127,21 +138,27 @@ Senior interview questions → **05_RAG_Learning_Topics.md** (Summary section)
 ## ✅ Finalized Decisions Summary
 
 ### **Chunking Strategy**
+
 - ✅ Multi-stage: RecursiveCharacter → Semantic → Parent-Child → Contextual → Code-Aware
 
 ### **Re-ranking**
+
 - ✅ FlashRank (MVP, free) → Cohere Rerank (production, paid)
 
 ### **Search**
+
 - ✅ Hybrid: pgvector (dense) + tsvector (sparse) + RRF fusion
 
 ### **Query Expansion**
+
 - ✅ LLM-based decomposition with parallel execution
 
 ### **Rate Limits**
+
 - ✅ 5MB file, 50 docs, 100MB storage, 1M tokens/month
 
 ### **Security**
+
 - ✅ Database-level RLS + Clerk JWT validation
 
 ---
@@ -149,18 +166,21 @@ Senior interview questions → **05_RAG_Learning_Topics.md** (Summary section)
 ## 🚀 Implementation Sequence
 
 ### **Phase 1: Database Setup**
+
 1. Create Supabase project
 2. Enable pgvector extension
 3. Run schema migrations (from 04_DB_Design.md)
 4. Test RLS policies
 
 ### **Phase 2: Backend Foundation**
+
 1. Initialize FastAPI project
 2. Implement auth middleware
 3. Create health check endpoint
 4. Setup LangSmith integration
 
 ### **Phase 3: Ingestion Pipeline (All Chunking Strategies)**
+
 1. Implement RecursiveCharacterTextSplitter (baseline)
 2. Implement SemanticChunker (embedding-based boundaries)
 3. Implement Parent-Child indexing pattern
@@ -171,6 +191,7 @@ Senior interview questions → **05_RAG_Learning_Topics.md** (Summary section)
 8. Test end-to-end with sample documents
 
 ### **Phase 4: Retrieval Pipeline (Hybrid Search + Re-ranking)**
+
 1. HNSW index creation (dense vectors)
 2. GIN index creation (sparse text search)
 3. RRF fusion implementation
@@ -179,12 +200,14 @@ Senior interview questions → **05_RAG_Learning_Topics.md** (Summary section)
 6. Query expansion with LLM decomposition
 
 ### **Phase 5: Agentic Loop (LangGraph)**
+
 1. LangGraph workflow setup
 2. Self-correction loops
 3. Streaming response handling
 4. Observability with LangSmith
 
 ### **Phase 6: Frontend Integration**
+
 1. Next.js setup with Clerk auth
 2. Upload UI component
 3. Chat interface with streaming
@@ -194,12 +217,12 @@ Senior interview questions → **05_RAG_Learning_Topics.md** (Summary section)
 
 ## 📖 Document Change Log
 
-| Date | Document | Changes |
-|------|----------|---------|
-| Jan 7, 2026 | All (v1.0) | Initial planning documents created |
-| Jan 18, 2026 | 02, 03, 04, 05 | Updated with advanced RAG techniques |
-| Jan 18, 2026 | 08 | Created final technical decisions reference |
-| Jan 18, 2026 | README | Created this index document |
+| Date         | Document       | Changes                                     |
+| ------------ | -------------- | ------------------------------------------- |
+| Jan 7, 2026  | All (v1.0)     | Initial planning documents created          |
+| Jan 18, 2026 | 02, 03, 04, 05 | Updated with advanced RAG techniques        |
+| Jan 18, 2026 | 08             | Created final technical decisions reference |
+| Jan 18, 2026 | README         | Created this index document                 |
 
 ---
 
@@ -219,6 +242,7 @@ Senior interview questions → **05_RAG_Learning_Topics.md** (Summary section)
 **The MVP includes ALL advanced features:**
 
 ### **Chunking (Multi-Stage Pipeline)**
+
 - ✅ RecursiveCharacterTextSplitter (baseline)
 - ✅ SemanticChunker (embedding-based boundaries)
 - ✅ Parent-Child indexing (hierarchical retrieval)
@@ -226,22 +250,26 @@ Senior interview questions → **05_RAG_Learning_Topics.md** (Summary section)
 - ✅ Code-aware splitting (AST-based for source code)
 
 ### **Retrieval**
+
 - ✅ Hybrid search (dense + sparse)
 - ✅ HNSW indexing (fast vector similarity)
 - ✅ GIN indexing (full-text search)
 - ✅ RRF fusion (reciprocal rank fusion)
 
 ### **Re-ranking**
+
 - ✅ FlashRank (local, free, fast)
 - ✅ Cohere Rerank (production upgrade path)
 
 ### **Agentic Features**
+
 - ✅ Query expansion (LLM-based decomposition)
 - ✅ LangGraph orchestration
 - ✅ Self-correction loops
 - ✅ Streaming responses
 
 ### **Production Features**
+
 - ✅ Row-Level Security (RLS)
 - ✅ Rate limiting (storage, documents, tokens)
 - ✅ JWT authentication (Clerk)

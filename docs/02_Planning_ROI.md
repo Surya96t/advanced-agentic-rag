@@ -3,7 +3,7 @@ This i### 1. What You Will Learn (The Skills ROI)
 By building this, you are not just "using an API." You will master:
 
 - **Advanced Data Pipelines:** moving from "text" to "structured knowledge" (Markdown parsing, metadata extraction).
-- **Production-Grade Chunking Strategies:** 
+- **Production-Grade Chunking Strategies:**
   - Semantic Chunking (embedding-based boundary detection)
   - Parent-Child Indexing (small-to-big retrieval pattern)
   - Contextual Enrichment (Anthropic's latest 2024 technique for 35% better precision)

@@ -166,9 +166,9 @@
 
 ## Phase 7: Utilities & Observability
 
-- [ ] Utilities (`app/utils/`)
-  - `logger.py` - Structured logging with structlog
-  - `errors.py` - Custom exceptions
+- [x] Utilities (`app/utils/`)
+  - `logger.py` - ✅ Structured logging with structlog (completed in Phase 1)
+  - `errors.py` - ✅ Custom exceptions (completed in Phase 1)
   - `helpers.py` - Common utility functions
 
 - [ ] Observability

@@ -5,7 +5,7 @@ This module defines common models and base classes that are reused
 throughout the application for consistent data validation.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Generic, TypeVar
 from uuid import UUID
 
@@ -38,14 +38,14 @@ class BaseSchema(BaseModel):
 
 
 class TimestampSchema(BaseSchema):
-    """Schema with created_at and updated_at timestamps."""
+    """Schema with timezone-aware created_at and updated_at timestamps."""
 
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="Timestamp when the record was created"
     )
     updated_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="Timestamp when the record was last updated"
     )
 

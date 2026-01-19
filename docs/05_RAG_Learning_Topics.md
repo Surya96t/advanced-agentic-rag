@@ -21,24 +21,29 @@ If you chunk a Markdown file solely by character count (e.g., 500 chars), you of
 We will implement **Multi-Stage Chunking with Contextual Enrichment**.
 
 ### **Stage 1: MVP - Baseline Chunking**
+
 1.  **RecursiveCharacterTextSplitter:** 1000 chars, 200 overlap
     - Purpose: Prove the pipeline works end-to-end
     - Fast to implement, industry-standard defaults
 
 ### **Stage 2: Semantic Boundary Detection**
+
 1.  **Semantic Chunking:** Split by embedding similarity instead of character count
+
     ```python
     from langchain_experimental.text_splitter import SemanticChunker
-    
+
     semantic_chunker = SemanticChunker(
         OpenAIEmbeddings(),
         breakpoint_threshold_type="percentile",
         breakpoint_threshold_amount=95
     )
     ```
+
 2.  **Benefit:** Each chunk is a complete semantic unit (30-40% better retrieval)
 
 ### **Stage 3: Parent-Child Indexing (Small-to-Big Retrieval)**
+
 1.  **The Pattern:**
     - **Small chunks (child):** Embedded for precise search
     - **Large chunks (parent):** Retrieved for LLM context
@@ -51,30 +56,36 @@ We will implement **Multi-Stage Chunking with Contextual Enrichment**.
     - Send parent to LLM, cite child to user
 
 ### **Stage 4: Contextual Enrichment (Anthropic 2024)**
+
 1.  **Context Injection:** Prepend document metadata before embedding
+
     ```python
     original = "Use the create() method to insert records."
-    
+
     enriched = """
     [Document: Prisma ORM Guide | Section: Database Operations | Topic: Creating Records]
-    
+
     Use the create() method to insert records.
     """
     ```
+
 2.  **Benefit:** 25-35% improvement in retrieval precision
 3.  **Why it works:** Embeddings now capture WHERE the chunk came from
 
 ### **Stage 5: Code-Aware Splitting**
+
 1.  **Language-Specific Splitters:**
+
     ```python
     from langchain_text_splitters import RecursiveCharacterTextSplitter, Language
-    
+
     code_splitter = RecursiveCharacterTextSplitter.from_language(
         language=Language.PYTHON,  # or JS, TS, etc.
         chunk_size=1000,
         chunk_overlap=100
     )
     ```
+
 2.  **Split by:**
     - Function definitions
     - Class boundaries
@@ -110,6 +121,7 @@ We will build a **Hybrid Search Engine** using **Reciprocal Rank Fusion (RRF)**.
 ### **The Implementation:**
 
 1.  **Dense Search (Semantic):** Query the vector store (`text-embedding-3-small`, pgvector) to find _conceptually_ similar docs.
+
     ```sql
     SELECT *, embedding <=> query_vector AS distance
     FROM document_chunks
@@ -119,6 +131,7 @@ We will build a **Hybrid Search Engine** using **Reciprocal Rank Fusion (RRF)**.
     ```
 
 2.  **Sparse Search (Keyword):** Query a Keyword Index (BM25 via PostgreSQL `tsvector`) to find _exact keyword_ matches.
+
     ```sql
     SELECT *, ts_rank_cd(search_vector, query) AS rank
     FROM document_chunks
@@ -133,9 +146,10 @@ We will build a **Hybrid Search Engine** using **Reciprocal Rank Fusion (RRF)**.
     - _Constant k:_ Typically 60 (prevents division by zero, dampens rank differences)
 
 4.  **Query Expansion (LLM-Based Decomposition):**
+
     ```python
     # User query: "Integrate Clerk webhooks with Prisma"
-    
+
     # LLM decomposes into:
     sub_queries = [
         {
@@ -147,7 +161,7 @@ We will build a **Hybrid Search Engine** using **Reciprocal Rank Fusion (RRF)**.
             "filter": {"tag": "prisma"}
         }
     ]
-    
+
     # Execute both searches in parallel
     # Combine results
     ```
@@ -171,14 +185,16 @@ Retrieving the "Top 5" chunks often includes 2 or 3 irrelevant ones (False Posit
 We introduce a **"Judge" Model** (Cross-Encoder) into the pipeline.
 
 ### **Phase 1: MVP - FlashRank (Open-Source)**
+
 1.  **Broad Retrieval:** Fetch Top 50 documents using fast Hybrid Search.
 2.  **The Re-ranker:** Pass 50 candidates + User Query into FlashRank.
 3.  **The Verdict:** FlashRank scores every document from 0.0 to 1.0 based on _actual relevance_.
 4.  **Implementation:**
+
     ```python
     from langchain.retrievers import ContextualCompressionRetriever
     from langchain_community.document_compressors import FlashrankRerank
-    
+
     compressor = FlashrankRerank()
     compression_retriever = ContextualCompressionRetriever(
         base_compressor=compressor,
@@ -187,12 +203,14 @@ We introduce a **"Judge" Model** (Cross-Encoder) into the pipeline.
     ```
 
 ### **Phase 2: Production - Cohere Rerank**
+
 1.  **When to Upgrade:** After MVP is working, for better accuracy
 2.  **Trade-off:** Paid API, but 10-15% better precision
 3.  **Implementation:**
+
     ```python
     from langchain.retrievers.document_compressors import CohereRerank
-    
+
     compressor = CohereRerank(model="rerank-english-v2.0")
     ```
 
@@ -251,6 +269,7 @@ By the end of this project, you will be able to answer these Senior Interview Qu
 ## 🎯 Implementation Roadmap
 
 ### **Week 1-2: MVP (Baseline)**
+
 - ✅ RecursiveCharacterTextSplitter (1000 chars, 200 overlap)
 - ✅ Basic pgvector + tsvector hybrid search
 - ✅ FlashRank re-ranking
@@ -258,24 +277,28 @@ By the end of this project, you will be able to answer these Senior Interview Qu
 - **Goal:** Prove end-to-end pipeline works
 
 ### **Week 3: Semantic Chunking**
+
 - ✅ Implement SemanticChunker
 - ✅ A/B test: RecursiveCharacter vs Semantic
 - ✅ Measure retrieval accuracy improvement
 - **Goal:** 30-40% better chunk quality
 
 ### **Week 4: Parent-Child Indexing**
+
 - ✅ Add `parent_chunk_id` to database schema
 - ✅ Implement small-to-big retrieval
 - ✅ Update search logic to retrieve parents
 - **Goal:** Better context for LLM without sacrificing search precision
 
 ### **Week 5: Contextual Enrichment**
+
 - ✅ Implement context prefix injection
 - ✅ A/B test: enriched vs non-enriched embeddings
 - ✅ Measure precision improvement (target: 25-35%)
 - **Goal:** Anthropic 2024 research implementation
 
 ### **Week 6: Code-Aware Splitting**
+
 - ✅ Detect code blocks in documents
 - ✅ Language-specific splitters (Python, TypeScript, JavaScript)
 - ✅ Function/class boundary detection
@@ -283,12 +306,14 @@ By the end of this project, you will be able to answer these Senior Interview Qu
 - **Goal:** Production-grade code documentation handling
 
 ### **Week 7: Query Expansion**
+
 - ✅ LLM-based query decomposition
 - ✅ Parallel sub-query execution
 - ✅ Result merging and deduplication
 - **Goal:** Handle multi-source integration queries
 
 ### **Week 8: Production Optimization**
+
 - ✅ Upgrade to Cohere Rerank (compare vs FlashRank)
 - ✅ Implement RLS policies
 - ✅ LangSmith cost tracking integration
@@ -301,14 +326,14 @@ By the end of this project, you will be able to answer these Senior Interview Qu
 
 Track these metrics to validate your advanced RAG implementation:
 
-| Metric | Baseline (MVP) | Target (Advanced) | How to Measure |
-|--------|----------------|-------------------|----------------|
-| **Retrieval Precision@5** | 60-70% | 85-95% | Human eval: % of top-5 chunks relevant |
-| **Chunk Boundary Quality** | 50% mid-sentence | 90% semantic boundaries | Manual review of 100 chunks |
-| **Code Block Preservation** | 60% broken syntax | 95% intact | Test code blocks for syntax validity |
-| **Cross-Document Queries** | 40% success | 80% success | "Clerk + Prisma" type queries |
-| **Avg Query Latency** | <5s | <3s | P95 latency from LangSmith |
-| **Cost per Query** | $0.05 | $0.03 | LangSmith cost tracking |
+| Metric                      | Baseline (MVP)    | Target (Advanced)       | How to Measure                         |
+| --------------------------- | ----------------- | ----------------------- | -------------------------------------- |
+| **Retrieval Precision@5**   | 60-70%            | 85-95%                  | Human eval: % of top-5 chunks relevant |
+| **Chunk Boundary Quality**  | 50% mid-sentence  | 90% semantic boundaries | Manual review of 100 chunks            |
+| **Code Block Preservation** | 60% broken syntax | 95% intact              | Test code blocks for syntax validity   |
+| **Cross-Document Queries**  | 40% success       | 80% success             | "Clerk + Prisma" type queries          |
+| **Avg Query Latency**       | <5s               | <3s                     | P95 latency from LangSmith             |
+| **Cost per Query**          | $0.05             | $0.03                   | LangSmith cost tracking                |
 
 ---
 

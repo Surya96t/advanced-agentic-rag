@@ -1,5 +1,5 @@
 {
-  "python.defaultInterpreterPath": "/Users/surya/Documents/projects/rag-agents/advanced-agentic-rag/backend/.venv/bin/python",
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
   "python.terminal.activateEnvironment": true,
   "python.terminal.activateEnvInCurrentTerminal": true,
   "[python]": {

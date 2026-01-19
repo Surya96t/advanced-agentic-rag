@@ -8,7 +8,7 @@ It provides type-safe configuration with automatic validation.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -46,7 +46,8 @@ class Settings(BaseSettings):
     supabase_url: str = Field(..., description="Supabase project URL")
     supabase_service_key: str = Field(
         ...,
-        description="Supabase service role key (for backend operations)"
+        description="Supabase service role key (for backend operations)",
+        repr=False
     )
 
     # Database Settings
@@ -58,7 +59,7 @@ class Settings(BaseSettings):
         default=30, description="Database timeout in seconds")
 
     # OpenAI Configuration
-    openai_api_key: str = Field(..., description="OpenAI API key")
+    openai_api_key: str = Field(..., description="OpenAI API key", repr=False)
     openai_model: str = Field(
         default="gpt-4o", description="OpenAI model for chat")
     openai_embedding_model: str = Field(
@@ -76,7 +77,7 @@ class Settings(BaseSettings):
 
     # LangSmith Configuration (Optional - for observability)
     langsmith_api_key: str | None = Field(
-        default=None, description="LangSmith API key")
+        default=None, description="LangSmith API key", repr=False)
     langsmith_project: str = Field(
         default="integration-forge",
         description="LangSmith project name"
@@ -86,7 +87,7 @@ class Settings(BaseSettings):
 
     # Cohere Configuration (for re-ranking)
     cohere_api_key: str | None = Field(
-        default=None, description="Cohere API key")
+        default=None, description="Cohere API key", repr=False)
     cohere_model: str = Field(
         default="rerank-english-v3.0", description="Cohere rerank model")
 
@@ -131,6 +132,29 @@ class Settings(BaseSettings):
         if v not in allowed:
             raise ValueError(f"environment must be one of {allowed}")
         return v
+
+    @model_validator(mode="after")
+    def enforce_production_safety(self) -> "Settings":
+        """
+        Enforce safe defaults for production environment.
+
+        Raises:
+            ValueError: If production environment has unsafe configuration
+        """
+        if self.environment == "production":
+            if self.debug:
+                raise ValueError(
+                    "DEBUG mode must be disabled in production (set DEBUG=false)"
+                )
+            if self.reload:
+                raise ValueError(
+                    "Auto-reload must be disabled in production (set RELOAD=false)"
+                )
+            if self.host == "0.0.0.0":
+                raise ValueError(
+                    "Host must not be 0.0.0.0 in production (use 127.0.0.1 or specific IP)"
+                )
+        return self
 
     @property
     def is_production(self) -> bool:
