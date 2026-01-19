@@ -49,7 +49,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("Database client initialized successfully")
 
         # Verify database connection
-        is_healthy = await SupabaseClient.health_check()
+        is_healthy = SupabaseClient.health_check()
         if not is_healthy:
             logger.warning("Database health check failed during startup")
         else:
@@ -162,9 +162,10 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
         content=ErrorResponse(
-            success=False,
-            error=exc.message,
-            details=exc.details,
+            error="ApplicationError",
+            message=exc.message,
+            status_code=exc.status_code,
+            details=exc.details or {},
         ).model_dump(),
     )
 
@@ -195,8 +196,9 @@ async def validation_error_handler(
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content=ErrorResponse(
-            success=False,
-            error="Request validation failed",
+            error="ValidationError",
+            message="Request validation failed",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             details={"validation_errors": errors},
         ).model_dump(),
     )
@@ -231,8 +233,9 @@ async def generic_error_handler(request: Request, exc: Exception) -> JSONRespons
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=ErrorResponse(
-            success=False,
-            error=error_message,
+            error="InternalServerError",
+            message=error_message,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             details={},
         ).model_dump(),
     )
@@ -260,7 +263,7 @@ async def health_check() -> HealthResponse:
         HealthResponse with service status
     """
     # Check database health
-    db_healthy = await SupabaseClient.health_check()
+    db_healthy = SupabaseClient.health_check()
 
     # Determine overall status
     is_healthy = db_healthy
