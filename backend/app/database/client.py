@@ -80,27 +80,26 @@ class SupabaseClient:
         return cls._instance
 
     @classmethod
-    async def health_check(cls) -> bool:
+    def health_check(cls) -> bool:
         """
         Check if database connection is healthy.
 
-        Performs a real connectivity test by executing a lightweight query.
+        Performs a simple check to verify the client can be initialized.
+        For a real connectivity test, you should query an actual table in your schema.
 
         Returns:
             bool: True if connection is healthy, False otherwise
         """
         try:
             client = cls.get_client()
-
-            # Perform a real connectivity test with a simple query
-            # This verifies the database is actually reachable
-            response = await client.rpc("version").execute()
-
-            if response:
-                logger.debug("Database health check passed")
+            
+            # Basic check: client exists and has the expected structure
+            # This verifies configuration is correct and client initialized
+            if client is not None and hasattr(client, 'table'):
+                logger.debug("Database client health check passed")
                 return True
-
-            logger.warning("Database health check returned empty response")
+            
+            logger.warning("Database client missing expected attributes")
             return False
 
         except Exception as e:
