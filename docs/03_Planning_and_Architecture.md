@@ -100,7 +100,7 @@ We are adopting a **"Microservices Lite"** architecture to separate UI concerns 
 - **Strategy:** ReAct / Reflection Pattern with Query Expansion.
 - **Nodes:**
   1.  **Query Expander:** Decomposes complex queries into sub-queries (e.g., "Clerk + Prisma" → ["Clerk webhooks", "Prisma user creation"]).
-  2.  **Retriever:** 
+  2.  **Retriever:**
       - **Hybrid Search:** Executes parallel dense (pgvector) + sparse (BM25) searches.
       - **RRF Fusion:** Combines top-50 results using Reciprocal Rank Fusion.
       - **Re-ranker:** Applies FlashRank (open-source) or Cohere Rerank to select top-5 most relevant chunks.
@@ -134,7 +134,7 @@ _These items must be resolved during implementation._
       - **Production:** Parent-Child indexing where entire code block is parent, functions are children.
 2.  **[?] Cost Management:**
     - _Question:_ How do we prevent a user from uploading a 500MB PDF and draining our OpenAI credits?
-    - _Solution (Finalized):_ 
+    - _Solution (Finalized):_
       - Hard limit: 5MB per file
       - 50 documents per user
       - 1M tokens per month per user

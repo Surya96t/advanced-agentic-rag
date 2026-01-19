@@ -211,28 +211,35 @@ We will not rely on the Backend API for data security. We will enforce it at the
 The system implements a **Multi-Stage Chunking Pipeline** for production-grade retrieval:
 
 ### **Phase 1: MVP (Baseline)**
+
 - `RecursiveCharacterTextSplitter`: 1000 chars, 200 overlap
 - Purpose: Prove end-to-end pipeline works
 
 ### **Phase 2: Semantic Chunking**
+
 - `SemanticChunker`: Uses embedding similarity to find natural breakpoints
 - Benefit: 30-40% improvement in retrieval accuracy (preserves semantic boundaries)
 
 ### **Phase 3: Parent-Child Indexing**
+
 - **Small chunks** (child): Embedded and searchable (precise matching)
 - **Large chunks** (parent): Retrieved for LLM context (full context)
 - Database: `parent_chunk_id` foreign key relationship
 
 ### **Phase 4: Contextual Enrichment**
+
 - Prepend document context before embedding:
+
   ```
   [Document: Clerk Auth Guide | Section: Webhooks | Framework: Next.js]
-  
+
   To handle webhook events, create an API route at /api/webhooks...
   ```
+
 - Benefit: 25-35% improvement in retrieval precision (Anthropic 2024 research)
 
 ### **Phase 5: Code-Aware Splitting**
+
 - Detect code blocks via language markers
 - Use `RecursiveCharacterTextSplitter.from_language()` for syntax-aware splitting
 - Split by function/class boundaries instead of arbitrary characters

@@ -16,17 +16,19 @@ This document consolidates all technical decisions made during the planning phas
 
 ### **Decision: Dual-Phase Re-ranking**
 
-| Phase | Technology | Purpose | Status |
-|-------|-----------|---------|--------|
-| **MVP** | **FlashRank** | Open-source, free, local re-ranking | Start Here |
-| **Production** | **Cohere Rerank** | Paid API, 10-15% better precision | Upgrade Later |
+| Phase          | Technology        | Purpose                             | Status        |
+| -------------- | ----------------- | ----------------------------------- | ------------- |
+| **MVP**        | **FlashRank**     | Open-source, free, local re-ranking | Start Here    |
+| **Production** | **Cohere Rerank** | Paid API, 10-15% better precision   | Upgrade Later |
 
 **Rationale:**
+
 - FlashRank allows rapid prototyping without API costs
 - Cohere provides comparison data for measuring ROI
 - Learning both demonstrates understanding of trade-offs
 
 **Implementation:**
+
 ```python
 # Phase 1: MVP
 from langchain_community.document_compressors import FlashrankRerank
@@ -43,15 +45,16 @@ compressor = CohereRerank(model="rerank-english-v2.0")
 
 ### **Decision: Multi-Stage Progressive Enhancement**
 
-| Stage | Technology | Chunk Size | Purpose | Timeline |
-|-------|-----------|------------|---------|----------|
-| **MVP** | RecursiveCharacterTextSplitter | 1000 chars, 200 overlap | Baseline pipeline | Week 1-2 |
-| **Advanced** | SemanticChunker | Variable (embedding-based) | Semantic boundaries | Week 3 |
-| **Production** | Parent-Child Indexing | Small: 500 / Large: 2000 | Small-to-big retrieval | Week 4 |
-| **Pro** | Contextual Enrichment | N/A | +35% precision (Anthropic) | Week 5 |
-| **Expert** | Code-Aware Splitting | Function/class boundaries | Code documentation | Week 6 |
+| Stage          | Technology                     | Chunk Size                 | Purpose                    | Timeline |
+| -------------- | ------------------------------ | -------------------------- | -------------------------- | -------- |
+| **MVP**        | RecursiveCharacterTextSplitter | 1000 chars, 200 overlap    | Baseline pipeline          | Week 1-2 |
+| **Advanced**   | SemanticChunker                | Variable (embedding-based) | Semantic boundaries        | Week 3   |
+| **Production** | Parent-Child Indexing          | Small: 500 / Large: 2000   | Small-to-big retrieval     | Week 4   |
+| **Pro**        | Contextual Enrichment          | N/A                        | +35% precision (Anthropic) | Week 5   |
+| **Expert**     | Code-Aware Splitting           | Function/class boundaries  | Code documentation         | Week 6   |
 
 **Key Features:**
+
 - ✅ Semantic boundary detection using embedding similarity
 - ✅ Parent-child relationships in database (`parent_chunk_id` FK)
 - ✅ Context prefix injection before embedding
@@ -59,6 +62,7 @@ compressor = CohereRerank(model="rerank-english-v2.0")
 - ✅ Metadata enrichment (headers, language, functions, imports)
 
 **Database Schema Additions:**
+
 ```sql
 ALTER TABLE document_chunks ADD COLUMN
     parent_chunk_id UUID REFERENCES document_chunks(id),
@@ -73,15 +77,16 @@ ALTER TABLE document_chunks ADD COLUMN
 
 ### **Decision: Multi-Tier User Limits**
 
-| Limit Type | Value | Enforcement Point | Reset Frequency |
-|------------|-------|-------------------|-----------------|
-| **File Size** | 5 MB per file | Upload API | Per request |
-| **Documents** | 50 documents | Document creation | Lifetime |
-| **Storage** | 100 MB total | Upload API | Lifetime |
-| **Tokens** | 1M tokens/month | Query API | Monthly cron |
-| **Queries** | 100 queries/day | Chat API | Daily reset |
+| Limit Type    | Value           | Enforcement Point | Reset Frequency |
+| ------------- | --------------- | ----------------- | --------------- |
+| **File Size** | 5 MB per file   | Upload API        | Per request     |
+| **Documents** | 50 documents    | Document creation | Lifetime        |
+| **Storage**   | 100 MB total    | Upload API        | Lifetime        |
+| **Tokens**    | 1M tokens/month | Query API         | Monthly cron    |
+| **Queries**   | 100 queries/day | Chat API          | Daily reset     |
 
 **Database Schema:**
+
 ```sql
 ALTER TABLE users ADD COLUMN
     storage_bytes_used BIGINT DEFAULT 0,
@@ -90,6 +95,7 @@ ALTER TABLE users ADD COLUMN
 ```
 
 **Cost Tracking:**
+
 - Integration with **LangSmith** for automatic token counting
 - Set `ls_model_name` and `ls_provider` on all LLM calls
 - Dashboard for real-time cost monitoring
@@ -103,6 +109,7 @@ ALTER TABLE users ADD COLUMN
 **Approach:** Use LLM to break complex multi-source queries into sub-queries
 
 **Example:**
+
 ```python
 # Input: "Integrate Clerk webhooks with Prisma"
 
@@ -114,7 +121,7 @@ ALTER TABLE users ADD COLUMN
         "priority": "high"
     },
     {
-        "query": "Prisma create user syntax", 
+        "query": "Prisma create user syntax",
         "filters": {"tag": "prisma"},
         "priority": "high"
     }
@@ -124,6 +131,7 @@ ALTER TABLE users ADD COLUMN
 ```
 
 **Alternatives Considered:**
+
 - ❌ **HyDE (Hypothetical Document Embeddings):** Too complex for MVP
 - ❌ **Rule-based regex:** Not flexible enough
 - ✅ **LLM decomposition:** Best balance of flexibility and control
@@ -160,6 +168,7 @@ ALTER TABLE users ADD COLUMN
    - Final Top-K: 5 results to LLM
 
 **SQL Implementation:**
+
 ```sql
 -- Dense Search
 WITH vector_results AS (
@@ -184,31 +193,37 @@ keyword_results AS (
 ## 6. ✅ Technology Stack (Finalized)
 
 ### **Frontend**
+
 - **Framework:** Next.js 14+ (App Router)
 - **Styling:** Tailwind CSS + Shadcn/UI
 - **Auth:** Clerk (JWT token handoff to backend)
 - **Streaming:** Vercel AI SDK for SSE
 
 ### **Backend**
+
 - **Framework:** FastAPI (Python 3.11+)
 - **Orchestration:** LangGraph (agentic loops)
 - **Observability:** LangSmith (tracing, cost tracking)
 
 ### **Database**
+
 - **Primary:** Supabase (PostgreSQL 16+)
 - **Extensions:** `pgvector`, `uuid-ossp`
 - **Vector Search:** pgvector with HNSW index
 - **Keyword Search:** PostgreSQL `tsvector` with GIN index
 
 ### **Storage**
+
 - **Blob Storage:** Supabase Storage (S3-compatible)
 
 ### **AI/ML**
+
 - **LLM:** GPT-4o (reasoning/coding)
 - **Embeddings:** text-embedding-3-small (1536 dim)
 - **Re-ranking:** FlashRank → Cohere Rerank
 
 ### **Deployment**
+
 - **Frontend:** Vercel (edge, streaming)
 - **Backend:** Railway (Docker, long-running processes)
 
@@ -248,6 +263,7 @@ graph LR
 8. **Self-Correction:** Rewrites with error context (max 3 retries)
 
 **State Management:**
+
 ```python
 class AgentState(TypedDict):
     query: str
@@ -266,6 +282,7 @@ class AgentState(TypedDict):
 ### **Decision: Database-Level RLS + API Token Validation**
 
 **Authentication Flow:**
+
 1. User logs in via Clerk (Next.js frontend)
 2. Clerk issues JWT token
 3. Frontend sends token in `Authorization: Bearer <jwt>` header
@@ -273,6 +290,7 @@ class AgentState(TypedDict):
 5. FastAPI extracts `user_id` from token
 
 **Row-Level Security (RLS):**
+
 ```sql
 -- Enable RLS
 ALTER TABLE document_chunks ENABLE ROW LEVEL SECURITY;
@@ -284,6 +302,7 @@ CREATE POLICY user_isolation ON document_chunks
 ```
 
 **Enforcement:**
+
 - Backend sets PostgreSQL session variable before queries
 - Even if API has bugs, database enforces isolation
 - Zero-trust architecture
@@ -294,15 +313,16 @@ CREATE POLICY user_isolation ON document_chunks
 
 ### **Quantitative Metrics:**
 
-| Metric | Baseline (MVP) | Target (Advanced) | Measurement Tool |
-|--------|----------------|-------------------|------------------|
-| Retrieval Precision@5 | 60-70% | 85-95% | Human evaluation |
-| Chunk Quality | 50% semantic | 90% semantic | Manual review |
-| Query Latency (P95) | <5s | <3s | LangSmith |
-| Cost per Query | $0.05 | $0.03 | LangSmith |
-| Code Block Intact | 60% | 95% | Syntax validator |
+| Metric                | Baseline (MVP) | Target (Advanced) | Measurement Tool |
+| --------------------- | -------------- | ----------------- | ---------------- |
+| Retrieval Precision@5 | 60-70%         | 85-95%            | Human evaluation |
+| Chunk Quality         | 50% semantic   | 90% semantic      | Manual review    |
+| Query Latency (P95)   | <5s            | <3s               | LangSmith        |
+| Cost per Query        | $0.05          | $0.03             | LangSmith        |
+| Code Block Intact     | 60%            | 95%               | Syntax validator |
 
 ### **Qualitative Metrics:**
+
 - ✅ Can handle "Clerk + Prisma" cross-source queries
 - ✅ Generates working code with correct imports
 - ✅ Cites specific chunks for each answer
@@ -314,28 +334,28 @@ CREATE POLICY user_isolation ON document_chunks
 
 ### **8-Week Roadmap**
 
-| Week | Focus | Deliverables |
-|------|-------|-------------|
-| **1-2** | MVP Pipeline | RecursiveCharacterTextSplitter, basic hybrid search, FlashRank |
-| **3** | Semantic Chunking | SemanticChunker, A/B testing |
-| **4** | Parent-Child | Database migration, small-to-big retrieval |
-| **5** | Contextual Enrichment | Context prefix, embedding A/B test |
-| **6** | Code-Aware | Language splitters, code metadata |
-| **7** | Query Expansion | LLM decomposition, parallel execution |
-| **8** | Production Polish | Cohere upgrade, RLS, cost tracking |
+| Week    | Focus                 | Deliverables                                                   |
+| ------- | --------------------- | -------------------------------------------------------------- |
+| **1-2** | MVP Pipeline          | RecursiveCharacterTextSplitter, basic hybrid search, FlashRank |
+| **3**   | Semantic Chunking     | SemanticChunker, A/B testing                                   |
+| **4**   | Parent-Child          | Database migration, small-to-big retrieval                     |
+| **5**   | Contextual Enrichment | Context prefix, embedding A/B test                             |
+| **6**   | Code-Aware            | Language splitters, code metadata                              |
+| **7**   | Query Expansion       | LLM decomposition, parallel execution                          |
+| **8**   | Production Polish     | Cohere upgrade, RLS, cost tracking                             |
 
 ---
 
 ## 11. ✅ Open Questions (Resolved)
 
-| Question | Decision | Rationale |
-|----------|----------|-----------|
-| Re-ranker choice? | FlashRank → Cohere | Learn both, compare results |
-| Chunking strategy? | Multi-stage progressive | Show expertise progression |
-| Rate limits? | 5MB, 50 docs, 1M tokens/mo | Balance usability + cost |
-| Query expansion? | LLM-based decomposition | Flexible, controllable |
-| Parent-child? | ✅ Implement | Industry best practice |
-| Code splitting? | Language-specific + overlap | Production-grade handling |
+| Question           | Decision                    | Rationale                   |
+| ------------------ | --------------------------- | --------------------------- |
+| Re-ranker choice?  | FlashRank → Cohere          | Learn both, compare results |
+| Chunking strategy? | Multi-stage progressive     | Show expertise progression  |
+| Rate limits?       | 5MB, 50 docs, 1M tokens/mo  | Balance usability + cost    |
+| Query expansion?   | LLM-based decomposition     | Flexible, controllable      |
+| Parent-child?      | ✅ Implement                | Industry best practice      |
+| Code splitting?    | Language-specific + overlap | Production-grade handling   |
 
 ---
 
