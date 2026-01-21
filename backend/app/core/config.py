@@ -47,7 +47,8 @@ class Settings(BaseSettings):
     supabase_service_key: str = Field(
         ...,
         description="Supabase service role key (for backend operations)",
-        repr=False
+        repr=False,
+        alias="SUPABASE_SERVICE_ROLE_KEY"  # Use service role key for admin operations
     )
 
     # Database Settings
@@ -63,12 +64,12 @@ class Settings(BaseSettings):
     openai_model: str = Field(
         default="gpt-4o", description="OpenAI model for chat")
     openai_embedding_model: str = Field(
-        default="text-embedding-3-large",
-        description="OpenAI model for embeddings"
+        default="text-embedding-3-small",
+        description="OpenAI model for embeddings (1536 dimensions)"
     )
     openai_embedding_dimensions: int = Field(
-        default=3072,
-        description="Embedding vector dimensions"
+        default=1536,
+        description="Embedding vector dimensions (text-embedding-3-small)"
     )
     openai_max_tokens: int = Field(
         default=4096, description="Max tokens for responses")
