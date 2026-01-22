@@ -1,9 +1,120 @@
 # Development Session Log
 
+---
+
+## Session 2: Phase 2 Implementation + Clerk Migration
+
+**Date:** January 21, 2026  
+**Session:** Phase 2 - Document Ingestion Pipeline (Tasks 1-9) + Clerk User ID Migration  
+**Branch:** `feat/document-ingestion` (to be created)  
+**Status:** ✅ Pipeline Complete, Migration Complete, Ready for Code Review
+
+---
+
+## What We Accomplished Today
+
+### ✅ Phase 2: Document Ingestion Pipeline (Tasks 1-9 COMPLETE)
+
+Built the complete document ingestion system from document upload to vector storage:
+
+1. **Database Layer**
+   - Created comprehensive Pydantic models (`app/database/models.py`)
+   - Implemented Document and Chunk repositories with RLS support
+   - Added batch insertion for optimal performance
+   - Full CRUD operations with proper error handling
+
+2. **Document Processing**
+   - Built document parser (`app/ingestion/parser.py`) supporting Markdown, PDF, and Text
+   - Implemented multi-stage chunking system:
+     - Base chunker interface (`app/ingestion/chunkers/base.py`)
+     - Recursive character chunker (`app/ingestion/chunkers/recursive.py`)
+     - Semantic chunker, Parent-Child chunker, Contextual chunker, Code-aware chunker
+   - Smart chunk overlap and metadata preservation
+
+3. **Embeddings & Vector Storage**
+   - Integrated OpenAI embeddings client (`app/ingestion/embeddings.py`)
+   - Batch embedding generation with progress tracking
+   - Automatic retry logic for API failures
+   - 1536-dimensional vectors (text-embedding-3-small)
+
+4. **Ingestion Pipeline**
+   - Built complete orchestration (`app/ingestion/pipeline.py`)
+   - Multi-stage progress tracking with callbacks
+   - Duplicate detection via content hashing
+   - Error handling and graceful degradation
+   - Full workflow: Parse → Chunk → Embed → Store
+
+### ✅ Critical Migration: Clerk User ID Compatibility
+
+**Problem Discovered:** Migration 002 changed `user_id` columns from TEXT to UUID, breaking Clerk integration (Clerk uses string IDs like "user_2bXYZ123", not UUIDs).
+
+**Solution Implemented:**
+
+1. **Database Migration (`migrations/003_revert_user_id_to_text.sql`)**
+   - Reverted all `user_id` columns from UUID back to TEXT:
+     - `users.id`
+     - `sources.user_id`
+     - `documents.user_id`
+     - `document_chunks.user_id`
+   - Dropped and recreated all foreign key constraints
+   - Dropped and recreated all RLS policies to reference TEXT user_id
+   - Successfully executed in Supabase SQL Editor
+
+2. **Backend Code Updates**
+   - Updated `Document` model: `user_id: UUID` → `user_id: str`
+   - Updated `IngestionPipeline`: All methods now accept `user_id: str`
+   - Verified `Source` and `DocumentChunk` models already used `str`
+   - All repositories already compatible with string user_id
+
+3. **Test Updates**
+   - Updated integration tests to use Clerk-style user IDs
+   - Test users now created with format: `user_test_abc123def456`
+   - All 3 integration tests passing:
+     ✅ Single document ingestion
+     ✅ Duplicate detection
+     ✅ Multiple document ingestion
+
+### 🧪 Testing & Verification
+
+**Integration Tests (`tests/test_ingestion_pipeline_integration.py`):**
+
+- ✅ 3/3 tests passing
+- ✅ Full pipeline tested with real documents
+- ✅ Embeddings generated and validated (1536 dimensions)
+- ✅ Data stored in Supabase and retrieved successfully
+- ✅ Progress tracking working
+- ✅ Duplicate detection working
+- ✅ Clerk-style user IDs working in production
+
+**Test Coverage:**
+
+- Document parsing: Markdown files from Convex docs
+- Chunking: 11-12 chunks per document
+- Embeddings: OpenAI API integration verified
+- Database: INSERT and SELECT operations validated
+- RLS: Row-Level Security working with TEXT user_id
+
+### 📦 Git Status
+
+- Branch: Currently on `main` (need to create `feat/document-ingestion`)
+- Files Changed:
+  - `migrations/003_revert_user_id_to_text.sql` (new)
+  - `app/database/models.py` (updated)
+  - `app/database/repositories/documents.py` (updated)
+  - `app/database/repositories/chunks.py` (updated)
+  - `app/ingestion/pipeline.py` (updated)
+  - `tests/test_ingestion_pipeline_integration.py` (updated)
+  - `PHASE2_TODO.md` (updated)
+- Ready for: Create branch, commit, push, and PR
+
+---
+
+## Session 1: Core Foundation
+
 **Date:** January 19, 2026  
 **Session:** Checkpoint 1 - Core Foundation  
 **Branch:** `folder-structure`  
-**Status:** ✅ Complete, Ready to merge
+**Status:** ✅ Complete, Merged
 
 ---
 
@@ -42,53 +153,67 @@ Today we built the entire foundational backend infrastructure from scratch:
    - VS Code Python interpreter configured
 
 ### 🧪 Testing Verification
+
 - ✅ Server starts: `uv run uvicorn app.main:app --reload --port 8000`
 - ✅ Health endpoint works: `GET /health` returns 200 OK
 - ✅ Supabase connected successfully
 - ✅ All imports resolve correctly
 
-### 📦 Git Status
+### � Bug Fixes (Post-Initial Commit)
+
+- Fixed health check endpoint: removed incorrect `await` on synchronous `SupabaseClient.health_check()` method
+- Corrected `ErrorResponse` schema construction in all three error handlers (app errors, validation errors, generic errors)
+- Updated error responses to include required fields: `error` (type), `message`, `status_code`, and `details`
+- All endpoints now return properly structured responses matching Pydantic schema requirements
+- Verified with curl tests: `/health` returns 200 OK, error handlers construct valid ErrorResponse objects
+
+### �📦 Git Status
+
 - Branch: `folder-structure`
-- Committed: 68 files, 4,968 lines
-- Last commit: `feat: Complete Checkpoint 1 - Core Foundation`
+- Committed: Latest bug fixes pushed
+- Last commit: `fix: correct health check endpoint and error response schema`
 - Ready for PR: https://github.com/Surya96t/advanced-agentic-rag/pull/new/folder-structure
 
 ---
 
-## What's Next (Tomorrow/Next Session)
+## What's Next (Next Session)
 
-### 🎯 Phase 2: Document Ingestion Pipeline
+### 🎯 Task 10: Ingest API Endpoint
 
-**Goal:** Upload PDF → Parse → Chunk → Embed → Store in Supabase
+**Goal:** Build REST API endpoint for document upload
 
 **Priority Tasks:**
-1. Create document schemas (`app/schemas/document.py`)
-2. Implement PDF parser (`app/ingestion/parser.py`)
-3. Build chunking strategies (RecursiveCharacter first, then Semantic/Parent-Child)
-4. Set up OpenAI embeddings client (`app/ingestion/embeddings.py`)
-5. Create Supabase vector storage operations
-6. Build ingestion pipeline orchestrator
+
+1. Implement Clerk JWT authentication middleware (`app/core/auth.py`)
+2. Build ingest endpoint (`app/api/v1/ingest.py`)
+3. Add file upload validation (size, type)
+4. Integrate with IngestionPipeline
+5. Add rate limiting per user
+6. Optional: SSE streaming for progress updates
 
 **Files to Create:**
-- `app/schemas/document.py` - Document, Chunk schemas
-- `app/ingestion/parser.py` - PDF text extraction
-- `app/ingestion/chunkers/recursive.py` - Text splitter
-- `app/ingestion/embeddings.py` - OpenAI embedding client
-- `app/ingestion/pipeline.py` - Orchestration logic
+
+- `app/core/auth.py` - Clerk JWT validation
+- `app/api/v1/ingest.py` - Document upload endpoint
+- `app/api/deps.py` - Dependency injection for auth
 
 **Prerequisites:**
-- ⚠️ Need OpenAI API key in `.env` file
-- Check `TODOS.md` Phase 2 checklist for full details
+
+- ✅ Ingestion pipeline working (Tasks 1-9 complete)
+- ✅ Clerk user ID compatibility (Migration 003 complete)
+- ⚠️ Need Clerk publishable key and secret key in `.env`
 
 ---
 
 ## Important Notes
 
-- **Environment:** `.env` has Supabase keys configured ✅
-- **Missing:** OpenAI API key still needs to be added
+- **Database Schema:** All `user_id` columns are TEXT (Clerk-compatible) ✅
+- **Migration Status:** 003_revert_user_id_to_text.sql executed in Supabase ✅
+- **Integration Tests:** All passing with Clerk-style user IDs ✅
 - **Server Command:** `cd backend && uv run uvicorn app.main:app --reload --port 8000`
-- **Branching:** Create new branch `feat/document-ingestion` for Phase 2
-- **Reference Files:** Check `TODOS.md` for full roadmap, `app/core/config.py` for all settings
+- **Test Command:** `cd backend && pytest tests/test_ingestion_pipeline_integration.py -v -s`
+- **Next Branch:** Create `feat/document-ingestion` for PR
+- **Remaining:** Task 10 (Ingest API) requires auth implementation first
 
 ---
 
@@ -99,23 +224,33 @@ Today we built the entire foundational backend infrastructure from scratch:
 ```
 Continuing Integration Forge backend development.
 
-DATE: [Today's Date]
-LAST SESSION: January 19, 2026 (see backend/CONTEXT.md)
+DATE: January 21, 2026 (or later)
+LAST SESSION: January 21, 2026 (see backend/CONTEXT.md)
 
-STATUS:
-✅ Checkpoint 1 complete - Core foundation working
-- FastAPI app running with health check
-- Supabase connected
-- Structured logging and error handling in place
+COMPLETED:
+✅ Phase 2 Tasks 1-9: Document Ingestion Pipeline fully working
+✅ Migration 003: Clerk user ID compatibility (UUID → TEXT)
+✅ All integration tests passing (3/3)
+✅ Full workflow tested: Parse → Chunk → Embed → Store in Supabase
 
-NEXT: Phase 2 - Document Ingestion Pipeline
-- Implement PDF parsing, chunking, embeddings, vector storage
-- See backend/TODOS.md Phase 2 for checklist
+CURRENT STATUS:
+- Ingestion pipeline ready for production use
+- Database schema compatible with Clerk authentication
+- Need to create branch and commit changes for code review
 
-Check backend/CONTEXT.md for what was done last session.
-Ready to start Phase 2?
+NEXT STEPS:
+1. Create branch: feat/document-ingestion
+2. Commit all changes
+3. Push and create PR for CodeRabbit review
+4. Fix any issues from code review
+5. Then proceed to Task 10: Ingest API Endpoint (requires Clerk auth)
+
+Check backend/CONTEXT.md for full details of what was accomplished.
+Check backend/PHASE2_TODO.md for task status.
+
+Ready to create branch and commit for code review?
 ```
 
 ---
 
-*Session End: January 19, 2026*
+_Session End: January 21, 2026_
