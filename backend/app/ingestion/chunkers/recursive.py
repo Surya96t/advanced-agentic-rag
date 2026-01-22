@@ -240,7 +240,7 @@ class RecursiveChunker(BaseChunker):
         """Return the chunking strategy identifier."""
         return ChunkStrategy.RECURSIVE
 
-    def detect_separator_used(self, chunk: str) -> str | None:
+    def detect_separator_used(self, chunk: str) -> str:
         """
         Detect which separator was most likely used for a chunk.
 
@@ -251,7 +251,13 @@ class RecursiveChunker(BaseChunker):
             chunk: Chunk text to analyze
 
         Returns:
-            Most likely separator used, or None if unclear
+            Most likely separator used. When DEFAULT_SEPARATORS includes
+            the empty string (""), this will always return a separator
+            (at minimum, the empty string).
+
+        Raises:
+            ValueError: If no separator matched and separators list doesn't
+                       include empty string (defensive behavior)
 
         Learning Note:
         Why is this useful?
@@ -264,11 +270,27 @@ class RecursiveChunker(BaseChunker):
         This is a heuristic! If chunk contains multiple separators,
         we return the first match. Not 100% accurate but good enough
         for debugging and analytics.
+
+        Note on empty string (""):
+        The empty string is always contained in any string, so if it's
+        in the separators list, it will always match (character-level split).
         """
         for separator in self.separators:
+            # Skip empty string check first, handle it last
+            if separator == "":
+                continue
             if separator in chunk:
                 return separator
-        return None
+        
+        # If we didn't find any non-empty separator, check for empty string
+        if "" in self.separators:
+            return ""
+        
+        # Defensive: should not happen with DEFAULT_SEPARATORS, but guard anyway
+        raise ValueError(
+            f"No separator matched chunk (length: {len(chunk)}). "
+            f"Separators list: {self.separators}"
+        )
 
     def add_separator_metadata(self, chunks: list[Chunk]) -> list[Chunk]:
         """
@@ -282,6 +304,10 @@ class RecursiveChunker(BaseChunker):
         Returns:
             Chunks with separator metadata added (modifies in-place)
 
+        Raises:
+            ValueError: If separator detection fails (should not happen
+                       with DEFAULT_SEPARATORS which includes "")
+
         Learning Note:
         Why track separators?
         - Quality Metrics: Measure how often we split at natural boundaries
@@ -291,14 +317,11 @@ class RecursiveChunker(BaseChunker):
         """
         for chunk in chunks:
             separator = self.detect_separator_used(chunk.content)
-            if separator is not None:
-                # Empty string separator means character-level splitting
-                if separator == "":
-                    chunk.metadata["separator_used"] = "character"
-                else:
-                    chunk.metadata["separator_used"] = repr(separator)
+            # Empty string separator means character-level splitting
+            if separator == "":
+                chunk.metadata["separator_used"] = "character"
             else:
-                chunk.metadata["separator_used"] = "unknown"
+                chunk.metadata["separator_used"] = repr(separator)
 
         return chunks
 

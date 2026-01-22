@@ -283,23 +283,7 @@ async def ingest_document(
             size_bytes=file_size,
         )
 
-    # Method 2: Check Content-Length header
-    elif 'content-length' in request.headers:
-        try:
-            file_size = int(request.headers['content-length'])
-            logger.debug(
-                "File size from Content-Length header",
-                filename=file.filename,
-                size_bytes=file_size,
-            )
-        except (ValueError, TypeError) as e:
-            logger.warning(
-                "Invalid Content-Length header",
-                filename=file.filename,
-                error=str(e),
-            )
-
-    # Method 3: If size is available, validate before reading
+    # Method 2: If size is available, validate before reading
     if file_size is not None:
         if not validate_file_size(file_size):
             logger.warning(

@@ -665,7 +665,18 @@ class IngestionPipeline:
             if error_message:
                 # Fetch current document to preserve existing metadata
                 current_doc = self.doc_repo.get_by_id(document_id, user_id)
-                if current_doc and current_doc.metadata:
+                
+                if current_doc is None:
+                    # Document not found - unexpected state
+                    logger.warning(
+                        "Document not found when finalizing with error",
+                        document_id=document_id,
+                        user_id=user_id,
+                        error_message=error_message,
+                    )
+                    # Still apply update with new metadata (RLS will scope it)
+                    updates["metadata"] = {"error": error_message}
+                elif current_doc.metadata:
                     # Merge error into existing metadata
                     merged_metadata = {
                         **current_doc.metadata,
@@ -676,6 +687,7 @@ class IngestionPipeline:
                     # No existing metadata, create new
                     updates["metadata"] = {"error": error_message}
 
+            # Update document (RLS automatically scopes to user_id)
             updated_doc = self.doc_repo.update(document_id, updates)
 
             logger.debug(
