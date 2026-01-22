@@ -305,9 +305,9 @@ async def root() -> dict[str, str]:
     }
 
 
-# TODO: Register API routers here as they are implemented
-# Example:
-# from app.api.v1 import documents, chat, ingestion
-# app.include_router(documents.router, prefix="/api/v1/documents", tags=["Documents"])
-# app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
-# app.include_router(ingestion.router, prefix="/api/v1/ingestion", tags=["Ingestion"])
+# Register API routers
+from app.api.v1 import ingest
+
+app.include_router(ingest.router)
+
+logger.info("API routers registered successfully")
