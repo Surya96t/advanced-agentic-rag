@@ -281,11 +281,11 @@ class RecursiveChunker(BaseChunker):
                 continue
             if separator in chunk:
                 return separator
-        
+
         # If we didn't find any non-empty separator, check for empty string
         if "" in self.separators:
             return ""
-        
+
         # Defensive: should not happen with DEFAULT_SEPARATORS, but guard anyway
         raise ValueError(
             f"No separator matched chunk (length: {len(chunk)}). "

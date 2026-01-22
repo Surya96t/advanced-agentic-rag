@@ -665,7 +665,7 @@ class IngestionPipeline:
             if error_message:
                 # Fetch current document to preserve existing metadata
                 current_doc = self.doc_repo.get_by_id(document_id, user_id)
-                
+
                 if current_doc is None:
                     # Document not found - unexpected state
                     logger.warning(
