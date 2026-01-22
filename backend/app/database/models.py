@@ -18,12 +18,18 @@ These models are used for:
 4. Documentation of the database schema
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, field_validator
+
+
+# Helper function for UTC timestamps
+def utc_now() -> datetime:
+    """Return current UTC time (timezone-aware)."""
+    return datetime.now(UTC)
 
 
 # ============================================================================
@@ -80,11 +86,11 @@ class TimestampMixin(BaseModel):
     All database records should track when they were created/modified.
     """
     created_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=utc_now,
         description="When this record was created (UTC)"
     )
     updated_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=utc_now,
         description="When this record was last updated (UTC)"
     )
 

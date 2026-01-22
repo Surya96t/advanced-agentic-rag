@@ -19,7 +19,7 @@ Why use repository pattern?
 4. Type Safety: Strong typing with Pydantic models
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -88,7 +88,7 @@ class DocumentRepository:
         Note: Duplicate checking is done by the pipeline before calling create
         """
         try:
-            now = datetime.utcnow()
+            now = datetime.now(UTC)
 
             # Prepare document data for insertion
             document_data = {
@@ -399,7 +399,7 @@ class DocumentRepository:
             # Add updated_at timestamp
             update_data = {
                 **updates,
-                "updated_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
             }
 
             # Prevent updating immutable fields
@@ -508,7 +508,7 @@ class DocumentRepository:
 
             update_data = {
                 "status": status.value,
-                "updated_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
             }
 
             if token_count is not None:

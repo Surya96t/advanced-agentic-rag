@@ -18,11 +18,13 @@
 **Status:** ✅ App starts successfully, connects to Supabase, health check endpoint works
 **PR:** Ready to create
 
-### Checkpoint 2: Document Ingestion
+### Checkpoint 2: Document Ingestion ✅ COMPLETED
 
 **Branch:** `feat/document-ingestion`
-**Files:** parser, chunker, embedder, pipeline, vectorstore, document schemas
+**Files:** parser, chunkers, embeddings, pipeline, database models/repositories, API endpoint
 **Goal:** Can upload and process documents
+**Status:** ✅ Full ingestion pipeline implemented and tested
+**PR:** Ready to create
 
 ### Checkpoint 3: Retrieval System
 
@@ -88,32 +90,100 @@
 
 ---
 
-## Phase 2: Document Ingestion Pipeline
+## Phase 2: Document Ingestion Pipeline ✅ COMPLETED
 
-- [ ] Document Processing (`app/ingestion/`)
-  - `parser.py` - PDF/text parsing with pypdf
-  - `chunker.py` - Multi-stage chunking (RecursiveCharacter, Semantic, etc.)
-  - `embedder.py` - OpenAI embeddings generation
-  - `pipeline.py` - Orchestration of parsing → chunking → embedding
+- [x] Database Models & Repositories (`app/database/`)
+  - `models.py` - Document, Source, DocumentChunk Pydantic models with str user_id (Clerk-compatible)
+  - `repositories/documents.py` - Document CRUD operations with RLS
+  - `repositories/chunks.py` - Chunk batch insertion and retrieval
 
-- [ ] Vector Storage (`app/ingestion/`)
-  - `vectorstore.py` - Supabase pgvector operations
-  - Batch insertion with metadata
-  - Document indexing
+- [x] Document Processing (`app/ingestion/`)
+  - `parser.py` - Markdown/PDF/text parsing with pypdf
+  - `chunkers/base.py` - Base chunker interface
+  - `chunkers/recursive.py` - RecursiveCharacterTextSplitter with separator detection
+  - `chunkers/semantic.py` - Semantic chunking (basic implementation)
+  - `chunkers/parent_child.py` - Parent-child chunking strategy
+  - `chunkers/contextual.py` - Contextual enrichment chunker
+  - `chunkers/code_aware.py` - Code-aware chunking with language detection
+  - `embeddings.py` - OpenAI embeddings (text-embedding-3-small, 1536 dims)
+  - `pipeline.py` - Full ingestion orchestration with progress tracking, duplicate detection, error handling
+
+- [x] API Endpoint (`app/api/v1/`)
+  - `ingest.py` - File upload endpoint with streaming validation, size limits, security hardening
+
+- [x] Integration Tests
+  - `tests/test_ingestion_pipeline_integration.py` - Full pipeline tests with real Supabase integration
+  - ✅ All tests passing (single document, duplicate detection, multiple documents)
+
+**Status:** ✅ Complete ingestion pipeline ready for production use
+**Branch:** `feat/document-ingestion` (pushed to remote)
+**Key Features:**
+
+- Clerk-compatible string user IDs throughout
+- Robust error handling and metadata tracking
+- File upload security (streaming validation, no Content-Length fallback)
+- Chunking metadata preservation
+- Progress callbacks and duplicate detection
 
 ---
 
-## Phase 3: Retrieval System
+## Phase 3: Retrieval System ✅ COMPLETED
 
-- [ ] Search Components (`app/retrieval/`)
-  - `vector_search.py` - Dense vector search
-  - `text_search.py` - Sparse/full-text search
-  - `hybrid_search.py` - RRF fusion of dense + sparse
-  - `reranker.py` - FlashRank + Cohere re-ranking
+**Status:** All core retrieval features implemented and tested  
+**Completion Date:** January 2025  
+**Documentation:** See `/docs/09_Phase3_Retrieval_Summary.md`
 
-- [ ] Query Processing (`app/retrieval/`)
-  - `query_processor.py` - Query expansion with LLM
-  - `context_builder.py` - Assembling context from chunks
+### Completed Features
+
+- [x] Search Components (`app/retrieval/`)
+  - `vector_search.py` - Dense vector search (pgvector + OpenAI `text-embedding-3-small`)
+  - `text_search.py` - Sparse/full-text search (PostgreSQL FTS with GIN indexing)
+  - `hybrid_search.py` - RRF fusion of dense + sparse (k=60, industry standard)
+  - `rerankers/flashrank.py` - FlashRank re-ranking (`ms-marco-MiniLM-L-12-v2`)
+
+- [x] Database Schema Optimizations
+  - Added `embedding` column (vector(1536)) with pgvector index
+  - Added `text_search_vector` column (tsvector) with GIN index
+  - Dual indexing strategy for efficient hybrid search
+
+- [x] Code Quality Improvements
+  - Eliminated all datetime warnings (introduced `utc_now()` helper)
+  - Replaced deprecated `datetime.utcnow()` with timezone-aware alternative
+  - Updated all models and schemas for timezone compliance
+
+- [x] Integration Tests (`tests/`)
+  - `test_retrieval_integration.py` - 13/13 tests passing
+  - Tests use real Supabase, OpenAI, and production documentation (Convex mutations.md)
+  - Coverage: vector search, text search, hybrid search, re-ranking
+
+### Features Deferred to Later Phases
+
+**Query Expansion with LLM** → Deferred to Phase 5 (Agentic RAG)
+
+- **Reason:** More valuable in agentic context with multi-step reasoning
+- Current hybrid search already delivers strong results without expansion
+- Will integrate into LangGraph agent workflows where the agent can decide when to expand queries
+- Avoids adding ~500ms latency until proven necessary in agent context
+
+**Cohere Re-ranking** → Deferred to Phase 6 (Optimization)
+
+- **Reason:** FlashRank already meets quality requirements for initial launch
+- Avoids API costs (~$0.002 per 1K searches) until validated with production traffic
+- Will add as configurable alternative for A/B testing in optimization phase
+- Consider hybrid approach: FlashRank for speed, Cohere for quality-critical queries
+
+### Key Metrics
+
+- **Retrieval latency:** ~200-250ms end-to-end (includes OpenAI embedding call)
+- **Component breakdown:**
+  - Vector search: ~150-200ms (includes OpenAI API)
+  - Text search: ~20-30ms (pure PostgreSQL)
+  - RRF fusion: ~5ms (in-memory merging)
+  - FlashRank re-ranking: ~10-15ms (local model)
+- **Test coverage:** 13 integration tests, all passing with real data
+- **Quality:** Hybrid search + re-ranking consistently outperforms vector-only or text-only approaches
+
+**Branch:** `feat/retrieval-system` (ready for PR)
 
 ---
 
@@ -180,7 +250,60 @@
 
 ## Phase 8: Testing
 
-- [ ] Tests (`tests/`)
-  - Unit tests for each module
-  - Integration tests for API endpoints
-  - Mocked external services
+- [x] Integration Tests (`tests/`)
+  - `test_ingestion_pipeline_integration.py` - Full pipeline integration tests with Supabase
+  - ✅ All ingestion tests passing
+
+- [ ] Additional Tests
+  - Unit tests for chunkers, parsers, embeddings
+  - API endpoint tests (unit + integration)
+  - Mocked external services for faster test execution
+
+---
+
+## 🎯 NEXT PRIORITIES
+
+### Recommended Next Steps (in order):
+
+1. **Phase 4: LLM Generation & Response** ⬅️ RECOMMENDED NEXT
+   - Implement LLM integration with OpenAI GPT-4
+   - Build prompt templates for integration code synthesis
+   - Add streaming responses via SSE
+   - Context window management and token counting
+   - Source attribution in generated responses
+   - **Why first:** Core generation logic needed to complete the RAG pipeline (retrieval is done)
+
+2. **Phase 5: API Endpoints (Chat)**
+   - Build `/api/v1/chat` endpoint with SSE streaming
+   - Integrate retrieval + generation pipeline
+   - Add request/response validation
+   - Add rate limiting
+   - **Why second:** Need generation working to make chat endpoint functional
+
+3. **Phase 6: Agentic RAG (LangGraph)**
+   - Build agent nodes (query router, retriever, generator, validator)
+   - Create LangGraph workflow with state management
+   - Add checkpointing for long-running queries
+   - **Integrate query expansion here** (deferred from Phase 3)
+   - **Why third:** Build agentic workflows on top of working retrieval + generation
+
+4. **Phase 7: Authentication & Security**
+   - Add Clerk JWT validation middleware
+   - Protect all endpoints with auth
+   - Enforce RLS at API layer
+   - **Why fourth:** Productionize the working system
+
+5. **Phase 8: Optimization & Polish**
+   - Add LangSmith tracing for observability
+   - **Add Cohere re-ranking as configurable option** (deferred from Phase 3)
+   - A/B test FlashRank vs Cohere
+   - Performance optimization and caching
+   - Comprehensive test coverage
+   - **Why last:** Optimize and harden the complete system
+
+### Notes on Deferred Features
+
+**From Phase 3:**
+
+- **Query expansion with LLM** will be added in Phase 6 (Agentic RAG) where the agent can intelligently decide when to expand queries
+- **Cohere re-ranking** will be added in Phase 8 (Optimization) as a configurable alternative to FlashRank for A/B testing

@@ -92,14 +92,66 @@ class Settings(BaseSettings):
     cohere_model: str = Field(
         default="rerank-english-v3.0", description="Cohere rerank model")
 
-    # RAG Configuration
+    # RAG Configuration - Chunking
     chunk_size: int = Field(
         default=1000, description="Default chunk size for text splitting")
     chunk_overlap: int = Field(
         default=200, description="Chunk overlap for context continuity")
-    top_k: int = Field(default=10, description="Number of chunks to retrieve")
+
+    # RAG Configuration - Vector Search
+    vector_search_top_k: int = Field(
+        default=20,
+        description="Number of results from vector search (semantic)"
+    )
+    vector_search_min_similarity: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Minimum cosine similarity threshold (0.0-1.0)"
+    )
+
+    # RAG Configuration - Text Search
+    text_search_top_k: int = Field(
+        default=20,
+        description="Number of results from text search (keyword)"
+    )
+    text_search_min_rank: float = Field(
+        default=0.01,
+        ge=0.0,
+        description="Minimum ts_rank score threshold for FTS"
+    )
+
+    # RAG Configuration - Hybrid Search
+    hybrid_search_alpha: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Weight for vector vs text (0.0=text only, 1.0=vector only, 0.5=equal)"
+    )
+    hybrid_rrf_k: int = Field(
+        default=60,
+        description="Reciprocal Rank Fusion constant (controls score decay)"
+    )
+
+    # RAG Configuration - Re-ranking
+    rerank_enabled: bool = Field(
+        default=True,
+        description="Enable re-ranking of search results"
+    )
+    rerank_model: str = Field(
+        default="ms-marco-MiniLM-L-6-v2",
+        description="FlashRank model name (TinyBERT, MiniLM-L-6, MiniLM-L-12)"
+    )
     rerank_top_k: int = Field(
-        default=5, description="Number of chunks after re-ranking")
+        default=10,
+        description="Number of results to return after re-ranking"
+    )
+
+    # Legacy field for backwards compatibility
+    top_k: int = Field(
+        default=10,
+        description="(Deprecated) Use rerank_top_k instead"
+    )
 
     # Rate Limiting
     rate_limit_per_minute: int = Field(

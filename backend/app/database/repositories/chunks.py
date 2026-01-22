@@ -19,7 +19,7 @@ Why is this the most complex repository?
 4. Performance Critical: This is called millions of times in production
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 import json
 from typing import Any
 from uuid import UUID, uuid4
@@ -134,7 +134,7 @@ class ChunkRepository:
             )
 
             # Prepare chunks with generated IDs and timestamps
-            now = datetime.utcnow()
+            now = datetime.now(UTC)
             prepared_chunks = []
 
             for chunk in chunks:
@@ -607,7 +607,7 @@ class ChunkRepository:
 
             update_data = {
                 "embedding": embedding,
-                "updated_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
             }
 
             result = (
