@@ -86,14 +86,14 @@ def test_user_id():
 
     In production, this would come from Clerk JWT token.
     For testing, we create a user in the database with Clerk-style ID.
-    
+
     NOTE: Uses service role key to bypass RLS.
-    
+
     IMPORTANT: users.id is TEXT type for Clerk compatibility (e.g., "user_2bXYZ123").
     """
     # Generate Clerk-style user ID
     user_id = f"user_test_{uuid4().hex[:12]}"  # e.g., "user_test_a3b5c7d9e1f2"
-    
+
     # Create user record in database
     supabase = SupabaseClient.get_client()
     try:
@@ -102,30 +102,32 @@ def test_user_id():
             "id": user_id,  # TEXT field for Clerk user ID
             "email": f"test_{user_id}@example.com",
         }).execute()
-        
+
         # Verify the user was actually created
         if not result.data or len(result.data) == 0:
             raise ValueError(f"User creation returned empty data: {result}")
-        
+
         created_user = result.data[0]
         print(f"\n✅ Created test user:")
         print(f"   ID: {created_user['id']}")
         print(f"   Email: {created_user['email']}")
-        
+
     except Exception as e:
         print(f"\n❌ Failed to create test user: {e}")
         print(f"   Error type: {type(e).__name__}")
         print(f"   Error details: {str(e)}")
         print(f"   Attempted user_id: {user_id}")
         raise
-    
+
     yield user_id
-    
+
     # Cleanup after test
     try:
-        delete_result = supabase.table("users").delete().eq("id", user_id).execute()
+        delete_result = supabase.table(
+            "users").delete().eq("id", user_id).execute()
         print(f"\n🧹 Cleaned up test user: {user_id}")
-        print(f"   Deleted rows: {len(delete_result.data) if delete_result.data else 0}")
+        print(
+            f"   Deleted rows: {len(delete_result.data) if delete_result.data else 0}")
     except Exception as e:
         print(f"\n⚠️  Failed to cleanup test user: {e}")
 
@@ -213,7 +215,7 @@ async def test_ingest_real_document(pipeline, test_user_id, progress_tracker):
 
     # Fetch chunks from database
     chunk_repo = ChunkRepository(SupabaseClient.get_client())
-    chunks = await chunk_repo.get_by_document_id(
+    chunks = chunk_repo.get_by_document_id(
         document_id=document.id,
         user_id=test_user_id,  # Already a string
     )

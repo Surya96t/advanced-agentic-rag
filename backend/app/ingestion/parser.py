@@ -501,13 +501,13 @@ class DocumentParser:
                 suffix=extension,
                 delete=False,
             ) as temp_file:
+                temp_path = Path(temp_file.name)  # Capture path immediately
                 temp_file.write(file_bytes)
-                temp_path = Path(temp_file.name)
 
             # Parse the temp file
             result = self.parse(temp_path)
 
-            # Clean up temp file
+            # Clean up temp file after successful parsing
             temp_path.unlink()
 
             return result

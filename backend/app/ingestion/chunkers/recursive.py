@@ -183,8 +183,8 @@ class RecursiveChunker(BaseChunker):
         - Testing: Easier to mock and test
         """
         if not text.strip():
-            logger.warning("Empty text provided for chunking")
-            return []
+            logger.error("Empty text provided for chunking")
+            raise ValueError("Empty text provided for chunking")
 
         logger.debug(
             "Starting recursive chunking",
@@ -266,7 +266,7 @@ class RecursiveChunker(BaseChunker):
         for debugging and analytics.
         """
         for separator in self.separators:
-            if separator and separator in chunk:
+            if separator in chunk:
                 return separator
         return None
 
@@ -292,9 +292,11 @@ class RecursiveChunker(BaseChunker):
         for chunk in chunks:
             separator = self.detect_separator_used(chunk.content)
             if separator is not None:
-                chunk.metadata["separator_used"] = (
-                    repr(separator) if separator else "character"
-                )
+                # Empty string separator means character-level splitting
+                if separator == "":
+                    chunk.metadata["separator_used"] = "character"
+                else:
+                    chunk.metadata["separator_used"] = repr(separator)
             else:
                 chunk.metadata["separator_used"] = "unknown"
 

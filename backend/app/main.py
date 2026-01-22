@@ -4,6 +4,7 @@ FastAPI application initialization and configuration.
 This is the main entry point for the Integration Forge backend API.
 """
 
+from app.api.v1 import ingest
 import time
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator
@@ -306,7 +307,6 @@ async def root() -> dict[str, str]:
 
 
 # Register API routers
-from app.api.v1 import ingest
 
 app.include_router(ingest.router)
 

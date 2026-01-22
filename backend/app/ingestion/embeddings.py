@@ -91,6 +91,9 @@ class EmbeddingClient:
             max_retries: Maximum retry attempts for failed requests
             retry_delay: Initial delay between retries (doubles each time)
 
+        Raises:
+            ValueError: If max_retries < 1 or other invalid parameters
+
         Learning Note:
         Why these defaults?
         - model: text-embedding-3-small is cost-effective and fast
@@ -99,6 +102,16 @@ class EmbeddingClient:
         - max_retries: 3 gives ~7 seconds total (1s + 2s + 4s)
         - retry_delay: 1s is respectful to API, doubles for backoff
         """
+        # Validate parameters
+        if max_retries < 1:
+            raise ValueError(f"max_retries must be >= 1, got {max_retries}")
+        if dimensions < 1:
+            raise ValueError(f"dimensions must be >= 1, got {dimensions}")
+        if batch_size < 1:
+            raise ValueError(f"batch_size must be >= 1, got {batch_size}")
+        if retry_delay <= 0:
+            raise ValueError(f"retry_delay must be > 0, got {retry_delay}")
+
         self.model = model
         self.dimensions = dimensions
         self.batch_size = batch_size
@@ -363,11 +376,16 @@ class EmbeddingClient:
                 self._failed_requests += 1
 
                 # Don't retry auth or input errors
-                if "401" in str(e) or "400" in str(e):
+                # Check status code via structured attributes (not string matching)
+                status_code = getattr(e, "status_code", None) or getattr(
+                    e, "status", None)
+
+                if status_code in (400, 401):
                     logger.error(
                         "Non-retryable OpenAI error",
                         error=str(e),
                         error_type=type(e).__name__,
+                        status_code=status_code,
                     )
                     raise
 
@@ -378,6 +396,7 @@ class EmbeddingClient:
                     max_retries=self.max_retries,
                     wait_time=wait_time,
                     error=str(e),
+                    status_code=status_code,
                 )
 
                 if attempt < self.max_retries - 1:
@@ -398,12 +417,18 @@ class EmbeddingClient:
                 raise
 
         # All retries exhausted
+        if last_error is None:
+            # Safety check: should never happen with max_retries >= 1
+            raise RuntimeError(
+                "Retry loop exited without capturing an error. This indicates a bug."
+            )
+
         logger.error(
             "All retries exhausted",
             max_retries=self.max_retries,
             last_error=str(last_error),
         )
-        raise last_error  # type: ignore[misc]
+        raise last_error
 
     def validate_dimensions(self, vector: list[float]) -> None:
         """

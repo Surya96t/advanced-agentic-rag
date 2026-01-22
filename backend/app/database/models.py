@@ -361,7 +361,7 @@ class DocumentChunk(TimestampMixin):
                     "semantic_density": 0.82,
                     "context_prefix": "[Doc: LangGraph Quick Start | Section: Introduction]"
                 },
-                "embedding": [0.123, -0.456, 0.789, "... (3072 dimensions)"],
+                "embedding": [0.123, -0.456, 0.789, "... (1536 dimensions)"],
                 "parent_chunk_id": None,
                 "chunk_type": "parent",
                 "created_at": "2026-01-19T10:07:00Z",

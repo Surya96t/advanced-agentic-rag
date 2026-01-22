@@ -36,6 +36,7 @@ from fastapi import (
     File,
     HTTPException,
     Query,
+    Request,
     UploadFile,
     status,
 )
@@ -48,6 +49,7 @@ from app.ingestion.embeddings import get_embedding_client
 from app.ingestion.pipeline import IngestionPipeline
 from app.schemas.document import (
     DocumentResponse,
+    MAX_FILE_SIZE_BYTES,
     get_file_extension_error_message,
     get_file_size_error_message,
     validate_file_extension,
@@ -181,6 +183,7 @@ async def ingest_document(
             examples=["user_2bXYZ123"],
         ),
     ],
+    request: Request,
     pipeline: IngestionPipeline = Depends(get_pipeline),
 ) -> DocumentResponse:
     """
@@ -263,10 +266,130 @@ async def ingest_document(
             details={"filename": file.filename},
         )
 
-    # Read file content to validate size
+    # ========================================================================
+    # STEP 2: Validate file size BEFORE reading into memory
+    # ========================================================================
+    # Security Note: Check file size before reading to prevent OOM attacks
+    # Try multiple methods to get file size without loading full content
+
+    file_size: int | None = None
+
+    # Method 1: Check file.size attribute (FastAPI/Starlette provides this)
+    if hasattr(file, 'size') and file.size is not None:
+        file_size = file.size
+        logger.debug(
+            "File size from file.size attribute",
+            filename=file.filename,
+            size_bytes=file_size,
+        )
+
+    # Method 2: Check Content-Length header
+    elif 'content-length' in request.headers:
+        try:
+            file_size = int(request.headers['content-length'])
+            logger.debug(
+                "File size from Content-Length header",
+                filename=file.filename,
+                size_bytes=file_size,
+            )
+        except (ValueError, TypeError) as e:
+            logger.warning(
+                "Invalid Content-Length header",
+                filename=file.filename,
+                error=str(e),
+            )
+
+    # Method 3: If size is available, validate before reading
+    if file_size is not None:
+        if not validate_file_size(file_size):
+            logger.warning(
+                "File size exceeds limit (pre-read check)",
+                filename=file.filename,
+                size_bytes=file_size,
+                user_id=user_id,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=get_file_size_error_message(),
+            )
+
+    # ========================================================================
+    # STEP 3: Read file content with streaming validation
+    # ========================================================================
+    # If size wasn't available, read in chunks and validate as we go
+
     try:
-        file_content = await file.read()
-        file_size = len(file_content)
+        if file_size is not None:
+            # Size already validated, safe to read
+            file_content = await file.read()
+            actual_size = len(file_content)
+
+            # Double-check actual size matches reported size
+            if actual_size != file_size:
+                logger.warning(
+                    "Actual file size differs from reported size",
+                    filename=file.filename,
+                    reported_size=file_size,
+                    actual_size=actual_size,
+                )
+
+            # Validate actual size (defense in depth)
+            if not validate_file_size(actual_size):
+                logger.warning(
+                    "File size exceeds limit (post-read check)",
+                    filename=file.filename,
+                    size_bytes=actual_size,
+                    user_id=user_id,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail=get_file_size_error_message(),
+                )
+        else:
+            # Size unknown, read in chunks with limit enforcement
+            logger.debug(
+                "Streaming file read (size unknown)",
+                filename=file.filename,
+            )
+
+            chunks = []
+            total_size = 0
+            chunk_size = 1024 * 1024  # 1MB chunks
+
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+
+                total_size += len(chunk)
+
+                # Check if we've exceeded the limit
+                if total_size > MAX_FILE_SIZE_BYTES:
+                    logger.warning(
+                        "File size exceeds limit (streaming check)",
+                        filename=file.filename,
+                        size_bytes=total_size,
+                        user_id=user_id,
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                        detail=get_file_size_error_message(),
+                    )
+
+                chunks.append(chunk)
+
+            file_content = b''.join(chunks)
+            actual_size = len(file_content)
+
+            logger.debug(
+                "Streaming read completed",
+                filename=file.filename,
+                size_bytes=actual_size,
+            )
+
+    except HTTPException:
+        # Re-raise HTTP exceptions (file too large)
+        raise
     except Exception as e:
         logger.error(
             "Failed to read uploaded file",
@@ -279,28 +402,15 @@ async def ingest_document(
             detail="Failed to read uploaded file",
         )
 
-    # Validate file size
-    if not validate_file_size(file_size):
-        logger.warning(
-            "File size exceeds limit",
-            filename=file.filename,
-            size_bytes=file_size,
-            user_id=user_id,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=get_file_size_error_message(),
-        )
-
     logger.info(
         "File validation passed",
         filename=file.filename,
-        size_bytes=file_size,
+        size_bytes=len(file_content),
         user_id=user_id,
     )
 
     # ========================================================================
-    # STEP 2: Process document with pipeline
+    # STEP 4: Process document with pipeline
     # ========================================================================
 
     try:
@@ -324,7 +434,8 @@ async def ingest_document(
         # Convert to response schema
         return DocumentResponse(
             id=document.id,
-            source_id=document.source_id or UUID("00000000-0000-0000-0000-000000000000"),  # Default if None
+            source_id=document.source_id or UUID(
+                "00000000-0000-0000-0000-000000000000"),  # Default if None
             title=document.title,
             status=document.status,
             token_count=document.chunk_count * 500,  # Rough estimate: 500 tokens per chunk
@@ -343,7 +454,7 @@ async def ingest_document(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Document ingestion failed: {str(e)}",
+            detail=f"Document ingestion failed. Please try again or contact support.",
         )
 
 

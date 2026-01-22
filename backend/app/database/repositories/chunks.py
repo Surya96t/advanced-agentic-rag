@@ -84,7 +84,7 @@ class ChunkRepository:
         self.db = db
         self.table_name = "document_chunks"
 
-    async def create_batch(
+    def create_batch(
         self,
         chunks: list[dict[str, Any]],
     ) -> list[DocumentChunk]:
@@ -197,7 +197,7 @@ class ChunkRepository:
                 details={"error": str(e)},
             )
 
-    async def get_by_id(self, chunk_id: UUID, user_id: str) -> DocumentChunk | None:
+    def get_by_id(self, chunk_id: UUID, user_id: str) -> DocumentChunk | None:
         """
         Get chunk by ID.
 
@@ -256,7 +256,7 @@ class ChunkRepository:
                 details={"error": str(e)},
             )
 
-    async def get_by_document_id(
+    def get_by_document_id(
         self,
         document_id: UUID,
         user_id: str,
@@ -333,7 +333,7 @@ class ChunkRepository:
                 details={"error": str(e)},
             )
 
-    async def get_parent_chunk(
+    def get_parent_chunk(
         self,
         child_chunk_id: UUID,
         user_id: str,
@@ -365,7 +365,7 @@ class ChunkRepository:
         """
         try:
             # First, get the child chunk to find parent_chunk_id
-            child = await self.get_by_id(child_chunk_id, user_id)
+            child = self.get_by_id(child_chunk_id, user_id)
             if not child or not child.parent_chunk_id:
                 logger.debug(
                     "Child chunk has no parent",
@@ -374,8 +374,11 @@ class ChunkRepository:
                 return None
 
             # Now get the parent chunk
-            return await self.get_by_id(child.parent_chunk_id, user_id)
+            return self.get_by_id(child.parent_chunk_id, user_id)
 
+        except DatabaseError:
+            # Re-raise existing DatabaseError without wrapping
+            raise
         except Exception as e:
             logger.error(
                 "Failed to get parent chunk",
@@ -388,7 +391,7 @@ class ChunkRepository:
                 details={"error": str(e)},
             )
 
-    async def get_children_chunks(
+    def get_children_chunks(
         self,
         parent_chunk_id: UUID,
         user_id: str,
@@ -421,8 +424,14 @@ class ChunkRepository:
                 .execute()
             )
 
-            chunks = [DocumentChunk(**chunk)
-                      for chunk in result.data] if result.data else []
+            # Parse chunks and convert string embeddings to lists
+            chunks = []
+            if result.data:
+                for chunk_data in result.data:
+                    # Parse embedding from string format
+                    chunk_data["embedding"] = _parse_embedding(
+                        chunk_data.get("embedding"))
+                    chunks.append(DocumentChunk(**chunk_data))
 
             logger.debug(
                 "Children chunks retrieved",
@@ -444,7 +453,7 @@ class ChunkRepository:
                 details={"error": str(e)},
             )
 
-    async def vector_search(
+    def vector_search(
         self,
         query_embedding: list[float],
         user_id: str,
@@ -520,6 +529,9 @@ class ChunkRepository:
 
             chunks_with_scores = []
             for chunk_data in result.data:
+                # Parse embedding from string format
+                chunk_data["embedding"] = _parse_embedding(
+                    chunk_data.get("embedding"))
                 chunk = DocumentChunk(**chunk_data)
                 if chunk.embedding:
                     # Cosine distance calculation
@@ -566,7 +578,7 @@ class ChunkRepository:
                 details={"error": str(e)},
             )
 
-    async def update_embedding(
+    def update_embedding(
         self,
         chunk_id: UUID,
         embedding: list[float],
@@ -616,7 +628,12 @@ class ChunkRepository:
                 chunk_id=str(chunk_id),
             )
 
-            return DocumentChunk(**result.data[0])
+            # Parse embedding from string format
+            chunk_data = result.data[0]
+            chunk_data["embedding"] = _parse_embedding(
+                chunk_data.get("embedding"))
+
+            return DocumentChunk(**chunk_data)
 
         except NotFoundError:
             raise
@@ -632,7 +649,7 @@ class ChunkRepository:
                 details={"error": str(e)},
             )
 
-    async def delete_by_document_id(
+    def delete_by_document_id(
         self,
         document_id: UUID,
         user_id: str,

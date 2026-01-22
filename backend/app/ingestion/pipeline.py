@@ -31,9 +31,9 @@ Pipeline Flow:
 
 Error Handling:
 - Parse failure → mark document as failed
-- Embedding failure → retry 3x, then fail
-- Storage failure → rollback document record
-- Partial success → store what we can, mark status
+- Embedding failure → retried automatically by EmbeddingClient (3x with exponential backoff), then fail
+- Storage failure → fail immediately and mark document as failed
+- Any failure → document status set to FAILED with error message
 """
 
 import hashlib
@@ -249,7 +249,7 @@ class IngestionPipeline:
             # Step 1: Check for duplicates (5%)
             emit_progress("deduplication", 5, "Checking for duplicates")
             content_hash = self._compute_hash(file_bytes)
-            existing_doc = await self.doc_repo.get_by_hash(
+            existing_doc = self.doc_repo.get_by_hash(
                 file_hash=content_hash,
                 user_id=str(user_id),
             )
@@ -276,6 +276,7 @@ class IngestionPipeline:
                 source_id=source_id,
                 filename=filename,
                 content_hash=content_hash,
+                file_size_bytes=len(file_bytes),
                 metadata=metadata or {},
                 parsed_doc=parsed_doc,
             )
@@ -322,6 +323,7 @@ class IngestionPipeline:
             emit_progress("finalizing", 95, "Finalizing document")
             document = await self._finalize_document(
                 document_id=document.id,
+                user_id=user_id,
                 chunk_count=len(chunks),
                 status=DocumentStatus.COMPLETED,
             )
@@ -353,6 +355,7 @@ class IngestionPipeline:
                 try:
                     await self._finalize_document(
                         document_id=document.id,  # type: ignore
+                        user_id=user_id,
                         chunk_count=0,
                         status=DocumentStatus.FAILED,
                         error_message=str(e),
@@ -548,7 +551,7 @@ class IngestionPipeline:
                 chunk_dicts.append(chunk_dict)
 
             # Batch insert (repository handles ID generation and timestamps)
-            await self.chunk_repo.create_batch(chunk_dicts)
+            self.chunk_repo.create_batch(chunk_dicts)
 
             logger.debug(
                 "Chunks stored",
@@ -570,6 +573,7 @@ class IngestionPipeline:
         source_id: UUID | None,
         filename: str,
         content_hash: str,
+        file_size_bytes: int,
         metadata: dict[str, Any],
         parsed_doc: ParsedDocument,
     ) -> Document:
@@ -581,6 +585,7 @@ class IngestionPipeline:
             source_id: Optional source ID
             filename: Name of file
             content_hash: Hash of file content
+            file_size_bytes: Size of original file in bytes
             metadata: User-provided metadata
             parsed_doc: Parsed document with extracted metadata
 
@@ -604,13 +609,13 @@ class IngestionPipeline:
                 title=metadata.get("title", filename),
                 content_hash=content_hash,
                 file_type=parsed_doc.metadata.get("file_type", "unknown"),
-                file_size=len(parsed_doc.content),
+                file_size=file_size_bytes,
                 metadata=full_metadata,
                 status=DocumentStatus.PROCESSING,
                 chunk_count=0,
             )
 
-            created_doc = await self.doc_repo.create(document)
+            created_doc = self.doc_repo.create(document)
 
             logger.debug(
                 "Document record created",
@@ -630,6 +635,7 @@ class IngestionPipeline:
     async def _finalize_document(
         self,
         document_id: UUID,
+        user_id: str,
         chunk_count: int,
         status: DocumentStatus,
         error_message: str | None = None,
@@ -639,6 +645,7 @@ class IngestionPipeline:
 
         Args:
             document_id: ID of document to update
+            user_id: Clerk user ID of the document owner
             chunk_count: Number of chunks created
             status: Final status (COMPLETED or FAILED)
             error_message: Optional error message if failed
@@ -656,9 +663,20 @@ class IngestionPipeline:
             }
 
             if error_message:
-                updates["metadata"] = {"error": error_message}
+                # Fetch current document to preserve existing metadata
+                current_doc = self.doc_repo.get_by_id(document_id, user_id)
+                if current_doc and current_doc.metadata:
+                    # Merge error into existing metadata
+                    merged_metadata = {
+                        **current_doc.metadata,
+                        "error": error_message,
+                    }
+                    updates["metadata"] = merged_metadata
+                else:
+                    # No existing metadata, create new
+                    updates["metadata"] = {"error": error_message}
 
-            updated_doc = await self.doc_repo.update(document_id, updates)
+            updated_doc = self.doc_repo.update(document_id, updates)
 
             logger.debug(
                 "Document finalized",

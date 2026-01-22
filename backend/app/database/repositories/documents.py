@@ -60,7 +60,7 @@ class DocumentRepository:
         self.db = db
         self.table_name = "documents"
 
-    async def create(self, document: Document) -> Document:
+    def create(self, document: Document) -> Document:
         """
         Create a new document record.
 
@@ -148,7 +148,7 @@ class DocumentRepository:
                 details={"error": str(e)},
             )
 
-    async def get_by_id(self, document_id: UUID, user_id: str) -> Document | None:
+    def get_by_id(self, document_id: UUID, user_id: str) -> Document | None:
         """
         Get document by ID.
 
@@ -209,7 +209,7 @@ class DocumentRepository:
                 details={"error": str(e)},
             )
 
-    async def get_by_hash(self, file_hash: str, user_id: str) -> Document | None:
+    def get_by_hash(self, file_hash: str, user_id: str) -> Document | None:
         """
         Get document by content hash (for deduplication).
 
@@ -265,7 +265,7 @@ class DocumentRepository:
                 details={"error": str(e)},
             )
 
-    async def list(
+    def list(
         self,
         user_id: str,
         source_id: UUID | None = None,
@@ -357,7 +357,7 @@ class DocumentRepository:
                 details={"error": str(e)},
             )
 
-    async def update(
+    def update(
         self,
         document_id: UUID,
         updates: dict[str, Any],
@@ -467,7 +467,7 @@ class DocumentRepository:
                 details={"error": str(e)},
             )
 
-    async def update_status(
+    def update_status(
         self,
         document_id: UUID,
         status: DocumentStatus,
@@ -549,7 +549,7 @@ class DocumentRepository:
                 details={"error": str(e)},
             )
 
-    async def delete(self, document_id: UUID, user_id: str) -> bool:
+    def delete(self, document_id: UUID, user_id: str) -> bool:
         """
         Delete a document.
 

@@ -34,6 +34,7 @@
 ## ✅ PHASE 2 COMPLETE!
 
 All 10 tasks completed successfully. The document ingestion system is fully functional:
+
 - ✅ Parse documents (Markdown, PDF, Text)
 - ✅ Chunk text intelligently
 - ✅ Generate embeddings
@@ -50,6 +51,7 @@ All 10 tasks completed successfully. The document ingestion system is fully func
 **File:** `app/api/v1/ingest.py`
 
 **Requirements:**
+
 - FastAPI endpoint for document upload (`POST /api/v1/ingest`)
 - Accept multipart/form-data (file upload)
 - Extract user_id from Clerk JWT token (auth middleware)
@@ -58,6 +60,7 @@ All 10 tasks completed successfully. The document ingestion system is fully func
 - Support SSE streaming for progress updates (optional)
 
 **Dependencies:**
+
 - Clerk JWT validation (`app/core/auth.py`)
 - Rate limiting per user
 - File size validation

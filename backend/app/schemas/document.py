@@ -215,13 +215,13 @@ class DocumentUploadResponse(BaseModel):
     Response schema after successful document upload.
 
     Returns:
-    - document: The created document record
-    - upload_url: Presigned URL for file upload (if using client-side upload)
+    - document: The created document record with status=PENDING
     - message: Success message
 
     Learning Note:
     We return the document immediately with status=PENDING.
     The frontend can poll the status endpoint to check processing progress.
+    Processing happens asynchronously in the background after the response is sent.
     """
     document: DocumentResponse = Field(
         description="The created document record"

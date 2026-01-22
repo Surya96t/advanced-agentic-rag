@@ -77,6 +77,7 @@ Built the complete document ingestion system from document upload to vector stor
 ### 🧪 Testing & Verification
 
 **Integration Tests (`tests/test_ingestion_pipeline_integration.py`):**
+
 - ✅ 3/3 tests passing
 - ✅ Full pipeline tested with real documents
 - ✅ Embeddings generated and validated (1536 dimensions)
@@ -86,6 +87,7 @@ Built the complete document ingestion system from document upload to vector stor
 - ✅ Clerk-style user IDs working in production
 
 **Test Coverage:**
+
 - Document parsing: Markdown files from Convex docs
 - Chunking: 11-12 chunks per document
 - Embeddings: OpenAI API integration verified

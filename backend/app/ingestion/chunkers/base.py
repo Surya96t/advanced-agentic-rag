@@ -393,7 +393,7 @@ class BaseChunker(ABC):
             avg_chars=int(avg_length),
             min_chars=min_length,
             max_chars=max_length,
-            approx_tokens=self.count_tokens(str(total_length)),
+            approx_tokens=total_length // 4,  # Use same heuristic as count_tokens
         )
 
 
