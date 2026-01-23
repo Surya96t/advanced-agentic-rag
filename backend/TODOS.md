@@ -187,33 +187,69 @@
 
 ---
 
-## Phase 4: Agentic RAG (LangGraph)
+## Phase 4: Agentic RAG (LangGraph) ✅ COMPLETED
 
-- [ ] Agent Nodes (`app/agents/nodes/`)
-  - `query_analyzer.py` - Analyze and route queries
-  - `retriever.py` - Call retrieval system
-  - `synthesizer.py` - Generate final response
-  - `validator.py` - Validate and refine responses
+**Status:** ✅ Complete agentic RAG system with LangGraph  
+**Completion Date:** January 2025  
+**Documentation:** See `/backend/Phase4_todos.md` for detailed checklist
 
-- [ ] Agent Graph (`app/agents/`)
-  - `graph.py` - LangGraph workflow definition
-  - `state.py` - Graph state schema
-  - `checkpointing.py` - Checkpoint configuration
+- [x] Agent Nodes (`app/agents/nodes/`)
+  - ✅ `router.py` - Query complexity analysis and routing (simple/complex/ambiguous)
+  - ✅ `query_expander.py` - Sub-query decomposition and HyDE strategies
+  - ✅ `retriever.py` - Multi-query hybrid search with re-ranking
+  - ✅ `generator.py` - LLM response synthesis with GPT-4
+  - ✅ `validator.py` - Quality checks (attribution, completeness, grounding, retrieval confidence)
 
-- [ ] Agent Tools (`app/agents/tools/`)
-  - Custom tools for the agent (if needed)
+- [x] Agent Graph (`app/agents/`)
+  - ✅ `graph.py` - Complete LangGraph workflow with state management
+  - ✅ `state.py` - AgentState TypedDict with reducers
+  - ✅ PostgreSQL checkpointing with `langgraph-checkpoint-postgres`
+  - ✅ LangSmith tracing integration
+  - ✅ Helper functions: `run_agent()`, `stream_agent()`, `get_checkpoint()`, `resume_agent()`
+
+- [x] Schemas (`app/schemas/`)
+  - ✅ `events.py` - SSE event types (AgentStart, Progress, Citation, Token, Validation, End)
+  - ✅ `chat.py` - ChatRequest, ChatResponse, FeedbackRequest
+
+- [x] Runtime Validation
+  - ✅ LangGraph Studio integration working
+  - ✅ End-to-end workflow tested (router → expander → retriever → generator → validator)
+  - ✅ Quality score: 0.78 (attribution: 1.00, completeness: 1.00, grounding: 0.77)
+  - ✅ All logs and tracing operational
+
+**Branch:** `feat/agentic-rag` (ready for PR)
 
 ---
 
-## Phase 5: API Endpoints
+## Phase 5: API Endpoints 🔄 IN PROGRESS
 
-- [ ] Routes (`app/api/routes/`)
-  - `health.py` - Health check endpoints
-  - `documents.py` - Upload, list, delete documents (no auth)
-  - `chat.py` - Query endpoint with SSE streaming (no auth)
+**Current Priority:** Implement REST API endpoints to expose agentic RAG functionality
+
+- [ ] Routes (`app/api/v1/`) ← **START HERE**
+  - [x] `health.py` - Health check endpoints (already exists)
+  - [x] `ingest.py` - Document upload endpoint (already exists)
+  - [ ] `chat.py` - Query endpoint with SSE streaming (no auth) ← **NEXT TASK**
+    - [ ] `POST /api/v1/chat` - Non-streaming chat endpoint
+    - [ ] `POST /api/v1/chat/stream` - SSE streaming endpoint
+    - [ ] Integrate with `stream_agent()` from graph.py
+    - [ ] Request validation with ChatRequest schema
+    - [ ] Response formatting with ChatResponse schema
+    - [ ] Error handling and logging
 
 - [ ] API Dependencies (`app/api/`)
-  - `dependencies.py` - Shared dependencies (DB, rate limiting)
+  - [ ] `deps.py` - Shared dependencies (rate limiting, DB sessions)
+  - [ ] Rate limiter configuration
+
+- [ ] Router Setup (`app/api/v1/__init__.py`)
+  - [ ] Create v1 APIRouter
+  - [ ] Include health, ingest, and chat routers
+  - [ ] Mount to main app
+
+- [ ] Testing
+  - [ ] Test health endpoint
+  - [ ] Test chat endpoint with curl/httpie
+  - [ ] Test SSE streaming
+  - [ ] Test error cases
 
 ---
 

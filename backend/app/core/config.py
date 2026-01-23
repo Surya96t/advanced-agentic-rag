@@ -5,6 +5,7 @@ This module manages all environment variables and application settings.
 It provides type-safe configuration with automatic validation.
 """
 
+import os
 from functools import lru_cache
 from typing import Literal
 
@@ -78,13 +79,21 @@ class Settings(BaseSettings):
 
     # LangSmith Configuration (Optional - for observability)
     langsmith_api_key: str | None = Field(
-        default=None, description="LangSmith API key", repr=False)
+        default=None,
+        description="LangSmith API key",
+        repr=False,
+        alias="LANGCHAIN_API_KEY"
+    )
     langsmith_project: str = Field(
-        default="integration-forge",
-        description="LangSmith project name"
+        default="integration-forge-rag",
+        description="LangSmith project name",
+        alias="LANGCHAIN_PROJECT"
     )
     langsmith_tracing: bool = Field(
-        default=True, description="Enable LangSmith tracing")
+        default=True,
+        description="Enable LangSmith tracing",
+        alias="LANGCHAIN_TRACING_V2"
+    )
 
     # Cohere Configuration (for re-ranking)
     cohere_api_key: str | None = Field(
@@ -219,6 +228,47 @@ class Settings(BaseSettings):
         """Check if running in development environment."""
         return self.environment == "development"
 
+    @property
+    def supabase_connection_string(self) -> str:
+        """
+        Build PostgreSQL connection string for Supabase.
+
+        Used by LangGraph checkpointer for persistent state storage.
+
+        Returns:
+            PostgreSQL connection string in format:
+            postgresql://postgres:[password]@[host]:5432/postgres
+        """
+        # Extract components from Supabase URL
+        # Format: https://[project-ref].supabase.co
+        # PostgreSQL: [project-ref].pooler.supabase.com:5432
+
+        project_ref = self.supabase_url.replace(
+            "https://", "").replace(".supabase.co", "")
+
+        # Use service role key as password (base64 encoded JWT)
+        # Note: For direct PostgreSQL access, you may need database password
+        # This is a simplified version - update with actual DB credentials if needed
+        return f"postgresql://postgres.{project_ref}:5432/postgres"
+
+
+# Set up LangSmith environment variables (auto-configured)
+
+
+def configure_langsmith(settings: Settings) -> None:
+    """
+    Configure LangSmith environment variables for observability.
+
+    This function is called automatically when settings are loaded.
+    """
+    if settings.langsmith_tracing:
+        os.environ["LANGCHAIN_TRACING_V2"] = "true"
+
+        if settings.langsmith_api_key:
+            os.environ["LANGCHAIN_API_KEY"] = settings.langsmith_api_key
+
+        os.environ["LANGCHAIN_PROJECT"] = settings.langsmith_project
+
 
 @lru_cache
 def get_settings() -> Settings:
@@ -226,11 +276,14 @@ def get_settings() -> Settings:
     Get cached settings instance.
 
     Uses lru_cache to ensure settings are loaded only once.
+    Also configures LangSmith environment variables.
 
     Returns:
         Settings: Application settings instance
     """
-    return Settings()
+    settings_instance = Settings()
+    configure_langsmith(settings_instance)
+    return settings_instance
 
 
 # Export settings instance for easy import
