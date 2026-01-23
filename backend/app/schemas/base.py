@@ -5,11 +5,17 @@ This module defines common models and base classes that are reused
 throughout the application for consistent data validation.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Generic, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+# Helper function for UTC timestamps
+def utc_now() -> datetime:
+    """Return current UTC time (timezone-aware)."""
+    return datetime.now(UTC)
 
 
 class BaseSchema(BaseModel):
@@ -41,11 +47,11 @@ class TimestampSchema(BaseSchema):
     """Schema with timezone-aware created_at and updated_at timestamps."""
 
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=utc_now,
         description="Timestamp when the record was created"
     )
     updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+        default_factory=utc_now,
         description="Timestamp when the record was last updated"
     )
 
@@ -146,7 +152,7 @@ class ErrorResponse(BaseSchema):
         description="Additional error details"
     )
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=utc_now,
         description="When the error occurred"
     )
 
@@ -222,7 +228,7 @@ class HealthCheckResponse(BaseSchema):
     status: str = Field(..., description="Service status (healthy/unhealthy)")
     version: str = Field(..., description="Application version")
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=utc_now,
         description="Health check timestamp"
     )
     services: dict[str, bool] = Field(
