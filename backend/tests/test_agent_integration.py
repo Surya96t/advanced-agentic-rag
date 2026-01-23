@@ -16,7 +16,7 @@ from typing import Dict, List
 
 import pytest
 
-from app.agents.graph import graph, run_agent, stream_agent
+from app.agents.graph import get_graph, run_agent, stream_agent
 from app.schemas.chat import ChatResponse
 from app.schemas.events import SSEEventType
 

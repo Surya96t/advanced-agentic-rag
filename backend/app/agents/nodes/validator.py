@@ -94,13 +94,14 @@ def check_code_completeness(response: str) -> tuple[bool, float]:
     code_blocks = re.findall(r'```.*?```', response, re.DOTALL)
     for block in code_blocks:
         # Count braces
-        open_braces = block.count('{') + block.count('[') + block.count('(')
-        close_braces = block.count('}') + block.count(']') + block.count(')')
-
-        if open_braces != close_braces:
-            issues.append("unbalanced_braces")
-            logger.debug(
-                f"Unbalanced braces detected: {open_braces} open, {close_braces} close")
+        brace_pairs = [('{', '}'), ('[', ']'), ('(', ')')]
+        for open_char, close_char in brace_pairs:
+            if block.count(open_char) != block.count(close_char):
+                issues.append("unbalanced_braces")
+                logger.debug(
+                    f"Unbalanced '{open_char}{close_char}' detected: "
+                    f"{block.count(open_char)} open, {block.count(close_char)} close")
+                break  # One issue is enough
 
     # Check for truncation indicators
     truncation_patterns = [
@@ -256,10 +257,11 @@ def validator_node(state: AgentState) -> Command[Literal["query_expander", "__en
     4. Retrieval confidence (15% weight)
 
     Decision Logic:
-    - quality_score >= 0.7 AND retry_count < 2: PASS → END
-    - quality_score < 0.7 AND retry_count < 2: RETRY → query_expander
-    - retry_count >= 2: MAX RETRIES → END (with disclaimer)
-    - quality_score 0.6-0.7: OPTIONAL → request human feedback (if enabled)
+    - quality_score >= 0.7: PASS → END (regardless of retry_count)
+    - quality_score < 0.7 AND retry_count >= 2: MAX RETRIES → END (with disclaimer)
+    - quality_score 0.6-0.7 AND retry_count < 2: BORDERLINE → retry via query_expander
+      (optional human feedback via interrupt() when enabled)
+    - quality_score < 0.6 AND retry_count < 2: FAIL → retry via query_expander
 
     Args:
         state: Current agent state with generated_response, retrieved_chunks, retry_count

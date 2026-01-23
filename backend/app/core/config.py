@@ -8,6 +8,7 @@ It provides type-safe configuration with automatic validation.
 import os
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import quote_plus, urlparse
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -50,6 +51,12 @@ class Settings(BaseSettings):
         description="Supabase service role key (for backend operations)",
         repr=False,
         alias="SUPABASE_SERVICE_ROLE_KEY"  # Use service role key for admin operations
+    )
+    supabase_db_password: str = Field(
+        ...,
+        description="Supabase database password (for direct PostgreSQL connection)",
+        repr=False,
+        alias="SUPABASE_DB_PASSWORD"
     )
 
     # Database Settings
@@ -218,6 +225,25 @@ class Settings(BaseSettings):
                 )
         return self
 
+    @model_validator(mode="after")
+    def validate_langsmith_config(self) -> "Settings":
+        """
+        Validate LangSmith configuration and disable tracing if API key is missing.
+
+        This prevents errors when LangSmith tracing is enabled but no API key is provided.
+        Automatically disables tracing in this case and logs a warning.
+
+        Returns:
+            Settings: Self with corrected langsmith_tracing value
+        """
+        if self.langsmith_tracing and not self.langsmith_api_key:
+            # Disable tracing if API key is missing
+            # Use object.__setattr__ because Settings is frozen after validation
+            object.__setattr__(self, "langsmith_tracing", False)
+            # Note: We can't log here because logger isn't initialized yet
+            # The warning will be logged when configure_langsmith() is called
+        return self
+
     @property
     def is_production(self) -> bool:
         """Check if running in production environment."""
@@ -238,18 +264,39 @@ class Settings(BaseSettings):
         Returns:
             PostgreSQL connection string in format:
             postgresql://postgres:[password]@[host]:5432/postgres
+
+        Example:
+            >>> settings.supabase_url = "https://abc123.supabase.co"
+            >>> settings.supabase_connection_string
+            'postgresql://postgres:****@abc123.pooler.supabase.com:5432/postgres'
         """
-        # Extract components from Supabase URL
+        # Parse Supabase URL to extract hostname
         # Format: https://[project-ref].supabase.co
-        # PostgreSQL: [project-ref].pooler.supabase.com:5432
+        parsed = urlparse(self.supabase_url)
+        hostname = parsed.netloc or parsed.path.rstrip('/')
 
-        project_ref = self.supabase_url.replace(
-            "https://", "").replace(".supabase.co", "")
+        # Extract project reference by removing .supabase.co suffix
+        if hostname.endswith('.supabase.co'):
+            project_ref = hostname[:-len('.supabase.co')]
+        else:
+            # Fallback: use hostname as-is (for custom domains or local dev)
+            project_ref = hostname.rstrip('/').lower()
 
-        # Use service role key as password (base64 encoded JWT)
-        # Note: For direct PostgreSQL access, you may need database password
-        # This is a simplified version - update with actual DB credentials if needed
-        return f"postgresql://postgres.{project_ref}:5432/postgres"
+        # Build PostgreSQL connection string
+        # Host: [project-ref].pooler.supabase.com (use pooler for connection pooling)
+        # User: postgres (default Supabase PostgreSQL user)
+        # Database: postgres (default database)
+        # Port: 5432 (default PostgreSQL port)
+        host = f"{project_ref}.pooler.supabase.com"
+        username = "postgres"
+        password = self.supabase_db_password
+        database = "postgres"
+        port = 5432
+
+        # URL-encode password in case it contains special characters
+        encoded_password = quote_plus(password)
+
+        return f"postgresql://{username}:{encoded_password}@{host}:{port}/{database}"
 
 
 # Set up LangSmith environment variables (auto-configured)
@@ -260,14 +307,27 @@ def configure_langsmith(settings: Settings) -> None:
     Configure LangSmith environment variables for observability.
 
     This function is called automatically when settings are loaded.
+    Logs a warning if tracing was requested but disabled due to missing API key.
     """
+    # Capture original environment value before modifying
+    original_tracing = os.getenv("LANGCHAIN_TRACING_V2", "")
+
     if settings.langsmith_tracing:
         os.environ["LANGCHAIN_TRACING_V2"] = "true"
 
         if settings.langsmith_api_key:
             os.environ["LANGCHAIN_API_KEY"] = settings.langsmith_api_key
+        else:
+            # This should not happen due to validator, but handle defensively
+            print("WARNING: LangSmith tracing enabled but API key is missing")
 
         os.environ["LANGCHAIN_PROJECT"] = settings.langsmith_project
+    else:
+        # Tracing is disabled (possibly auto-disabled by validator)
+        os.environ["LANGCHAIN_TRACING_V2"] = "false"
+        # Check if it was auto-disabled (user requested but validator disabled it)
+        if original_tracing.lower() == "true" and not settings.langsmith_api_key:
+            print("INFO: LangSmith tracing disabled (API key not provided)")
 
 
 @lru_cache

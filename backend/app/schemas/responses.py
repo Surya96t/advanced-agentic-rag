@@ -64,7 +64,7 @@ class ErrorResponse(BaseModel):
         error: Error type/class name
         message: Human-readable error message
         status_code: HTTP status code
-        details: Optional error details (validation errors, stack trace, etc.)
+        details: Optional error details (validation errors, etc.)
         request_id: Optional request ID for debugging
     """
     error: str = Field(

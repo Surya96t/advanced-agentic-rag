@@ -78,7 +78,7 @@ def analyze_query_complexity(query: str) -> Literal["simple", "complex", "ambigu
 
     # Check for boolean operators
     has_boolean_operators = bool(
-        re.search(r'\b(and|or|with|plus|along with)\b', query_lower)
+        re.search(r'\b(and|or|plus|along with)\b', query_lower)
     )
 
     # Complex if:

@@ -5,60 +5,59 @@ description = "Production-grade advanced RAG backend with LangGraph, multi-stage
 requires-python = ">=3.12"
 dependencies = [
     # FastAPI and server
-    "fastapi",
-    "uvicorn[standard]",
-    "python-multipart",
-    "starlette",
+    "fastapi==0.128.0",
+    "uvicorn[standard]==0.40.0",
+    "python-multipart==0.0.21",
     # LangChain ecosystem
-    "langchain",
-    "langchain-core",
-    "langchain-openai",
-    "langchain-text-splitters",
-    "langgraph",
-    "langgraph-checkpoint",
-    "langgraph-checkpoint-postgres",
-    "langsmith",
-    "langgraph-cli[inmem]",
+    "langchain==1.2.6",
+    "langchain-core==1.2.7",
+    "langchain-openai==1.1.7",
+    "langchain-text-splitters==1.1.0",
+    "langgraph==1.0.7",
+    "langgraph-checkpoint==4.0.0",
+    "langgraph-checkpoint-postgres==3.0.3",
+    "langsmith==0.6.4",
+    "langgraph-cli[inmem]==0.4.11",
     # Vector store and embeddings
-    "supabase",
-    "postgrest",
-    "psycopg[binary]",
+    "supabase==2.27.2",
+    "postgrest==2.27.2",
+    "psycopg[binary]==3.3.2",
     # Authentication
-    "pyjwt",
-    "cryptography",
+    "pyjwt==2.10.1",
+    "cryptography==46.0.3",
     # OpenAI
-    "openai",
-    "tiktoken",
+    "openai==2.15.0",
+    "tiktoken==0.12.0",
     # Re-ranking
-    "flashrank",
-    "cohere",
+    "flashrank==0.2.10",
+    "cohere==5.20.1",
     # Text processing
-    "pypdf",
-    "python-magic",
-    "chardet",
+    "pypdf==6.6.0",
+    "python-magic==0.4.27",
+    "chardet==5.2.0",
     # Environment and config
-    "pydantic",
-    "pydantic-settings",
-    "python-dotenv",
+    "pydantic==2.12.5",
+    "pydantic-settings==2.12.0",
+    "python-dotenv==1.2.1",
     # HTTP client
-    "httpx",
+    "httpx==0.28.1",
     # Utilities
-    "tenacity",
-    "structlog",
+    "tenacity==9.1.2",
+    "structlog==25.5.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     # Testing
-    "pytest",
-    "pytest-asyncio",
-    "pytest-cov",
-    "pytest-mock",
+    "pytest==9.0.2",
+    "pytest-asyncio==1.3.0",
+    "pytest-cov==7.0.0",
+    "pytest-mock==3.15.1",
     
     # Code quality
-    "ruff",
-    "mypy",
-    "black",
+    "ruff==0.14.14",
+    "mypy==1.19.1",
+    "black==26.1.0",
 ]
 
 [build-system]
@@ -91,11 +90,11 @@ python_functions = ["test_*"]
 
 [dependency-groups]
 dev = [
-    "black",
-    "mypy",
-    "pytest",
-    "pytest-asyncio",
-    "pytest-cov",
-    "pytest-mock",
-    "ruff",
+    "black==26.1.0",
+    "mypy==1.19.1",
+    "pytest==9.0.2",
+    "pytest-asyncio==1.3.0",
+    "pytest-cov==7.0.0",
+    "pytest-mock==3.15.1",
+    "ruff==0.14.14",
 ]

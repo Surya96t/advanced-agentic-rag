@@ -111,6 +111,8 @@ async def get_checkpointer():
 
     Note:
         Import is done lazily to avoid blocking Studio graph loading.
+        This returns the context manager itself, which must be used with
+        `async with` by the caller.
     """
     # Lazy import to avoid module-level import issues with Studio
     from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
@@ -118,11 +120,12 @@ async def get_checkpointer():
     logger.info("Initializing PostgreSQL checkpointer")
 
     try:
-        checkpointer = await AsyncPostgresSaver.from_conn_string(
+        # from_conn_string returns an async context manager
+        checkpointer = AsyncPostgresSaver.from_conn_string(
             conn_string=settings.supabase_connection_string
         )
 
-        logger.info("Checkpointer initialized successfully")
+        logger.info("Checkpointer context manager created successfully")
         return checkpointer
 
     except Exception as e:
@@ -130,16 +133,118 @@ async def get_checkpointer():
         raise
 
 
-# Build and compile graph
-logger.info("Compiling LangGraph with checkpointing")
+# ============================================================================
+# Graph Compilation
+# ============================================================================
+
+# Module-level graph for LangGraph Studio (no checkpointing)
+# This allows Studio to visualize the graph structure
+logger.info("Compiling graph for LangGraph Studio (no checkpointing)")
 _builder = build_graph()
-
-# Note: Checkpointer initialization is async, so we'll handle it differently
-# For now, compile without checkpointer (will add in async context)
 graph = _builder.compile()
-
 logger.info(
-    "✅ LangGraph compiled successfully (checkpointer deferred to runtime)")
+    "✅ Studio graph compiled (use get_graph() for production with checkpointing)")
+
+# Cache for runtime graph with checkpointer
+_compiled_graph = None
+_checkpointer_cm = None
+
+
+async def get_graph():
+    """
+    Get or create the compiled LangGraph with checkpointer for production use.
+
+    This function defers checkpointer initialization to runtime to properly wire in
+    the async PostgreSQL checkpointer. The compiled graph is cached after
+    first initialization.
+
+    Returns:
+        Compiled StateGraph with checkpointing enabled
+
+    Raises:
+        Exception: If checkpointer initialization or graph compilation fails
+
+    Note:
+        - For LangGraph Studio: use the module-level `graph` variable
+        - For production runtime: use this `get_graph()` function
+
+        The checkpointer uses an async context manager that stays open for 
+        the lifetime of the application.
+    """
+    global _compiled_graph, _checkpointer_cm
+
+    # Return cached graph if already compiled
+    if _compiled_graph is not None:
+        return _compiled_graph
+
+    logger.info(
+        "Compiling LangGraph with checkpointing (first-time production initialization)")
+
+    try:
+        # Get checkpointer context manager
+        _checkpointer_cm = await get_checkpointer()
+
+        # Enter the context manager to get the actual checkpointer instance
+        checkpointer_instance = await _checkpointer_cm.__aenter__()
+
+        # Build and compile graph with checkpointer
+        builder = build_graph()
+        _compiled_graph = builder.compile(checkpointer=checkpointer_instance)
+
+        logger.info(
+            "✅ LangGraph compiled successfully with checkpointing enabled")
+        return _compiled_graph
+
+    except Exception as e:
+        logger.error(f"Failed to compile graph with checkpointer: {e}")
+        # Clean up if context manager was entered
+        if _checkpointer_cm is not None:
+            try:
+                await _checkpointer_cm.__aexit__(None, None, None)
+            except Exception:
+                pass
+        raise
+
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+
+def validate_thread_id(thread_id: str | UUID | None) -> UUID:
+    """
+    Validate and convert thread_id to UUID.
+
+    Args:
+        thread_id: Thread ID as string, UUID, or None
+
+    Returns:
+        Valid UUID instance
+
+    Raises:
+        ValueError: If thread_id string is not a valid UUID format
+
+    Example:
+        >>> validate_thread_id("123e4567-e89b-12d3-a456-426614174000")
+        UUID('123e4567-e89b-12d3-a456-426614174000')
+        >>> validate_thread_id(None)
+        UUID('newly-generated-uuid')
+        >>> validate_thread_id("invalid")
+        ValueError: Invalid thread_id format: 'invalid'. Must be a valid UUID.
+    """
+    if thread_id is None:
+        return uuid4()
+
+    if isinstance(thread_id, UUID):
+        return thread_id
+
+    # Validate string is a valid UUID
+    try:
+        return UUID(str(thread_id))
+    except (ValueError, AttributeError) as e:
+        raise ValueError(
+            f"Invalid thread_id format: '{thread_id}'. Must be a valid UUID string."
+        ) from e
 
 
 # ============================================================================
@@ -171,11 +276,16 @@ async def run_agent(
         >>> print(response.content)
         "To integrate Clerk with Prisma..."
     """
-    # Generate thread_id if not provided
-    if thread_id is None:
-        thread_id = uuid4()
-    else:
-        thread_id = UUID(str(thread_id))
+    # Validate and convert thread_id
+    try:
+        thread_id = validate_thread_id(thread_id)
+    except ValueError as e:
+        logger.error(f"Invalid thread_id provided: {e}")
+        return ChatResponse(
+            content=f"Invalid thread_id: {str(e)}",
+            sources=[],
+            metadata={"error": str(e)}
+        )
 
     logger.info(f"Running agent workflow for query: {query[:100]}...")
     logger.debug(f"Thread ID: {thread_id}, User ID: {user_id}")
@@ -192,6 +302,9 @@ async def run_agent(
     }
 
     try:
+        # Get compiled graph with checkpointer
+        graph = await get_graph()
+
         # Invoke graph (blocks until completion)
         final_state = await graph.ainvoke(initial_state, config=config)
 
@@ -265,11 +378,21 @@ async def stream_agent(
         agent_complete: {"node": "router", ...}
         ...
     """
-    # Generate thread_id if not provided
-    if thread_id is None:
-        thread_id = uuid4()
-    else:
-        thread_id = UUID(str(thread_id))
+    # Validate and convert thread_id
+    try:
+        thread_id = validate_thread_id(thread_id)
+    except ValueError as e:
+        logger.error(f"Invalid thread_id provided: {e}")
+        # Yield error event for streaming
+        yield {
+            "event": SSEEventType.END,
+            "data": json.dumps(EndEvent(
+                thread_id="invalid",
+                success=False,
+                error=str(e),
+            ).model_dump())
+        }
+        return
 
     logger.info(f"Streaming agent workflow for query: {query[:100]}...")
     logger.debug(f"Thread ID: {thread_id}, User ID: {user_id}")
@@ -289,6 +412,9 @@ async def stream_agent(
     current_node: str | None = None
 
     try:
+        # Get compiled graph with checkpointer
+        graph = await get_graph()
+
         # Stream with multiple modes for rich event data
         async for event in graph.astream(
             initial_state,
@@ -300,8 +426,13 @@ async def stream_agent(
 
             # Mode 1: Updates (state changes after each node)
             if "updates" in event:
-                node_name = list(event["updates"].keys())[0]
-                node_update = event["updates"][node_name]
+                # Safely extract first update (skip if empty)
+                updates = event["updates"]
+                if not updates:
+                    continue  # Skip empty updates
+
+                node_name = next(iter(updates.keys()))
+                node_update = updates[node_name]
 
                 # Emit agent_start if new node
                 if node_name != current_node:
@@ -328,14 +459,28 @@ async def stream_agent(
                 # Citation events from retriever
                 if node_name == "retriever" and "sources" in node_update:
                     for source in node_update["sources"]:
+                        # Safely extract required fields from source
+                        chunk_id = source.get("chunk_id")
+                        document_id = source.get("document_id")
+
+                        # Skip sources missing required fields
+                        if not chunk_id or not document_id:
+                            logger.warning(
+                                f"Skipping citation with missing required fields: "
+                                f"chunk_id={chunk_id}, document_id={document_id}"
+                            )
+                            continue
+
+                        # Emit citation event with safe field access
                         yield {
                             "event": SSEEventType.CITATION,
                             "data": json.dumps(CitationEvent(
-                                chunk_id=source["chunk_id"],
-                                document_id=source["document_id"],
-                                document_title=source["document_title"],
-                                score=source["score"],
-                                source=source["source"],
+                                chunk_id=chunk_id,
+                                document_id=document_id,
+                                document_title=source.get(
+                                    "document_title", "Unknown Document"),
+                                score=source.get("score", 0.0),
+                                source=source.get("source", ""),
                             ).model_dump())
                         }
 
@@ -448,19 +593,29 @@ async def get_checkpoint(thread_id: str | UUID) -> dict | None:
         >>> checkpoint["state"]["retry_count"]
         1
     """
-    thread_id = str(thread_id)
-    logger.info(f"Fetching checkpoint for thread {thread_id}")
+    # Validate thread_id
+    try:
+        thread_id_uuid = validate_thread_id(thread_id)
+        thread_id_str = str(thread_id_uuid)
+    except ValueError as e:
+        logger.error(f"Invalid thread_id provided: {e}")
+        return None
+
+    logger.info(f"Fetching checkpoint for thread {thread_id_str}")
 
     try:
+        # Get compiled graph with checkpointer
+        graph = await get_graph()
+
         # Get checkpoint from graph
-        config = {"configurable": {"thread_id": thread_id}}
+        config = {"configurable": {"thread_id": thread_id_str}}
         state_snapshot = await graph.aget_state(config)
 
         if state_snapshot:
-            logger.info(f"Checkpoint found for thread {thread_id}")
+            logger.info(f"Checkpoint found for thread {thread_id_str}")
             return state_snapshot.values
         else:
-            logger.info(f"No checkpoint found for thread {thread_id}")
+            logger.info(f"No checkpoint found for thread {thread_id_str}")
             return None
 
     except Exception as e:
@@ -490,17 +645,31 @@ async def resume_agent(
         >>> response = await resume_agent("thread_123")
         >>> print(response.content)
     """
-    thread_id = str(thread_id)
-    logger.info(f"Resuming agent workflow for thread {thread_id}")
+    # Validate thread_id
+    try:
+        thread_id_uuid = validate_thread_id(thread_id)
+        thread_id_str = str(thread_id_uuid)
+    except ValueError as e:
+        logger.error(f"Invalid thread_id provided: {e}")
+        return ChatResponse(
+            content=f"Invalid thread_id: {str(e)}",
+            sources=[],
+            metadata={"error": str(e)}
+        )
+
+    logger.info(f"Resuming agent workflow for thread {thread_id_str}")
 
     config = {
         "configurable": {
-            "thread_id": thread_id,
+            "thread_id": thread_id_str,
             "user_id": user_id,
         }
     }
 
     try:
+        # Get compiled graph with checkpointer
+        graph = await get_graph()
+
         # Resume from checkpoint by passing None as input
         # (LangGraph will use last checkpoint state)
         final_state = await graph.ainvoke(None, config=config)
@@ -511,13 +680,13 @@ async def resume_agent(
                 "generated_response", "No response generated."),
             sources=final_state.get("sources", []),
             metadata={
-                "thread_id": thread_id,
+                "thread_id": thread_id_str,
                 "resumed": True,
                 **final_state.get("metadata", {}),
             }
         )
 
-        logger.info(f"Resumed workflow complete for thread {thread_id}")
+        logger.info(f"Resumed workflow complete for thread {thread_id_str}")
         return response
 
     except Exception as e:
@@ -525,7 +694,7 @@ async def resume_agent(
         return ChatResponse(
             content=f"Failed to resume: {str(e)}",
             sources=[],
-            metadata={"thread_id": thread_id, "error": str(e)}
+            metadata={"thread_id": thread_id_str, "error": str(e)}
         )
 
 
@@ -534,7 +703,8 @@ async def resume_agent(
 # ============================================================================
 
 __all__ = [
-    "graph",
+    "graph",  # For LangGraph Studio (no checkpointing)
+    "get_graph",  # For production runtime (with checkpointing)
     "run_agent",
     "stream_agent",
     "get_checkpoint",

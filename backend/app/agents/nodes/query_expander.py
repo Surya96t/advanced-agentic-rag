@@ -178,7 +178,10 @@ async def query_expander_node(state: AgentState) -> dict:
         >>> result["expanded_queries"]
         ["How does Clerk work?", "How does Prisma connect?", "Auth + ORM patterns?"]
     """
-    query = state["original_query"]
+    query = state.get("original_query")
+    if not query:
+        logger.error("Missing original_query in state")
+        return {"expanded_queries": []}
     complexity = state.get("query_complexity", "simple")
 
     logger.info(f"Query expander node: Processing {complexity} query")

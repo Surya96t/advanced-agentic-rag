@@ -74,6 +74,41 @@ class AgentCompleteEvent(BaseSchema):
     )
 
 
+class AgentErrorEvent(BaseSchema):
+    """Event emitted when an agent node encounters an error."""
+
+    agent: str = Field(...,
+                       description="Name of the agent node that encountered the error")
+    error: str = Field(..., description="Error message or description")
+    error_code: str | None = Field(
+        None, description="Optional error code for categorization")
+    recoverable: bool = Field(
+        default=False, description="Whether the error is recoverable")
+    timestamp: datetime = Field(
+        default_factory=utc_now, description="Event timestamp (UTC)")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "agent": "retriever",
+                    "error": "Database connection timeout",
+                    "error_code": "DB_TIMEOUT",
+                    "recoverable": True,
+                    "timestamp": "2026-01-22T10:30:05Z"
+                },
+                {
+                    "agent": "generator",
+                    "error": "OpenAI API rate limit exceeded",
+                    "error_code": "RATE_LIMIT",
+                    "recoverable": False,
+                    "timestamp": "2026-01-22T10:32:15Z"
+                }
+            ]
+        }
+    )
+
+
 class CitationEvent(BaseSchema):
     """Event emitted when a document chunk is retrieved."""
 

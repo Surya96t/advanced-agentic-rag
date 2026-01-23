@@ -8,6 +8,7 @@ and applies re-ranking for optimal chunk selection.
 from langgraph.types import RunnableConfig
 
 from app.agents.state import AgentState
+from app.core.config import settings
 from app.database.client import SupabaseClient
 from app.ingestion.embeddings import EmbeddingClient
 from app.retrieval.hybrid_search import HybridSearcher
@@ -83,19 +84,41 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
     # Extract user_id from config (provided by graph invoke/stream call)
     user_id = config.get("configurable", {}).get("user_id", "")
 
-    # Fallback to test user if empty (for LangGraph Studio testing)
-    # In production, this should come from authenticated context
+    # Validate user_id based on environment
     if not user_id or user_id == "anonymous":
-        user_id = "test_user_integration_123"  # Default test user for dev/testing
+        # SECURITY: In production, user_id is REQUIRED
+        # Fail fast rather than using a fallback that could leak data
+        if settings.environment == "production":
+            logger.error(
+                "user_id is required in production but was not provided")
+            raise ValueError(
+                "user_id is required for retrieval in production environment. "
+                "Ensure authentication middleware is properly configured."
+            )
+
+        # Development/Testing: Allow fallback to test user
+        # This enables LangGraph Studio and local testing
+        user_id = "test_user_integration_123"
         logger.warning(
-            f"No user_id provided in config, using test user: {user_id}"
+            f"No user_id provided in {settings.environment} environment, "
+            f"using test user: {user_id}. "
+            f"This is only allowed in non-production environments."
         )
 
     # Get queries to search
     # If expanded_queries exist, use them, otherwise use original_query
     queries = state.get("expanded_queries", [])
     if not queries:
-        queries = [state["original_query"]]
+        # Defensive: ensure original_query exists and is not empty
+        original_query = state.get("original_query", "").strip()
+        if not original_query:
+            logger.error(
+                "No queries available: both expanded_queries and original_query are missing or empty")
+            raise ValueError(
+                "Cannot perform retrieval: no query provided. "
+                "State must contain either 'expanded_queries' or 'original_query'."
+            )
+        queries = [original_query]
 
     logger.info(f"Searching {len(queries)} queries for user {user_id}")
 
@@ -104,12 +127,15 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
     # TODO: Fix FlashRank model download issue
     # For now, we'll skip reranking and rely on hybrid search scores
     # reranker = get_reranker()
-    reranker = None
+    reranker = None  # TEMPORARY: Disabled until FlashRank model download is fixed
 
     # Search configuration
+    # TEMPORARY: Using min_similarity=0.3 to filter low-quality results
+    # since reranker is disabled. When FlashRank is re-enabled, set back to 0.0
     search_config = SearchConfig(
         top_k=10,  # Get 10 results per query
-        min_similarity=0.0,  # No filtering (reranker will handle quality)
+        # Temporary threshold to avoid poor matches (normally 0.0 with reranker)
+        min_similarity=0.3,
         hybrid_alpha=0.5,  # Balanced vector + text
     )
 
@@ -156,7 +182,13 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
 
     # Step 3: Re-rank using FlashRank
     # Use original query for re-ranking (most representative)
-    original_query = state["original_query"]
+    # Defensive: retrieve original_query safely (should always exist after validation above)
+    original_query = state.get("original_query", "")
+    if not original_query:
+        # This shouldn't happen after validation above, but handle defensively
+        logger.warning(
+            "original_query missing during re-ranking, using first expanded query as fallback")
+        original_query = queries[0] if queries else ""
 
     # Skip reranking if reranker is not available
     if reranker is None:

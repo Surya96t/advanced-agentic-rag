@@ -7,6 +7,7 @@ using GPT-4, with support for token-by-token streaming.
 
 import time
 
+import tiktoken
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
@@ -90,6 +91,81 @@ def format_context(chunks: list[SearchResult]) -> str:
     return "\n".join(context_parts)
 
 
+def count_tokens(text: str, model: str = "gpt-4") -> int:
+    """
+    Count tokens in text using tiktoken.
+
+    Args:
+        text: Text to count tokens for
+        model: Model name to get the correct encoding
+
+    Returns:
+        Number of tokens
+
+    Example:
+        >>> count_tokens("Hello world")
+        2
+    """
+    try:
+        # Get the encoding for the model
+        # For gpt-4 and gpt-3.5-turbo models, use cl100k_base encoding
+        if "gpt-4" in model or "gpt-3.5" in model:
+            encoding = tiktoken.get_encoding("cl100k_base")
+        else:
+            # Fallback to cl100k_base for unknown models
+            encoding = tiktoken.get_encoding("cl100k_base")
+
+        return len(encoding.encode(text))
+    except Exception as e:
+        logger.warning(
+            f"Failed to count tokens with tiktoken: {e}, using word count approximation"
+        )
+        # Fallback: rough approximation (1 token ≈ 0.75 words)
+        return int(len(text.split()) * 1.33)
+
+
+def count_chat_tokens(messages: list, model: str = "gpt-4") -> int:
+    """
+    Count tokens for chat messages including ChatML formatting overhead.
+
+    ChatML format adds extra tokens for role tags and message structure:
+    - Each message adds ~4 tokens for formatting (<|im_start|>role, <|im_end|>)
+    - Total overhead = num_messages * 4 + 3 (for prompt priming)
+
+    Args:
+        messages: List of message objects (SystemMessage, HumanMessage, etc.)
+        model: Model name to get the correct encoding
+
+    Returns:
+        Total token count including ChatML overhead
+
+    Example:
+        >>> messages = [SystemMessage(content="You are helpful"), HumanMessage(content="Hi")]
+        >>> count_chat_tokens(messages)
+        15  # content tokens + ChatML overhead
+    """
+    try:
+        total_tokens = 0
+
+        # Count tokens for each message content
+        for message in messages:
+            # Add content tokens
+            total_tokens += count_tokens(message.content, model)
+            # Add per-message ChatML overhead (~4 tokens per message)
+            # Format: <|im_start|>role\ncontent<|im_end|>
+            total_tokens += 4
+
+        # Add tokens for prompt priming (varies by model, use conservative estimate)
+        total_tokens += 3
+
+        return total_tokens
+    except Exception as e:
+        logger.warning(
+            f"Failed to count chat tokens: {e}, falling back to simple count")
+        # Fallback: sum content tokens + conservative overhead
+        return sum(count_tokens(msg.content, model) for msg in messages) + (len(messages) * 4) + 3
+
+
 async def generator_node(state: AgentState) -> dict:
     """
     Generator node that synthesizes response from retrieved context.
@@ -151,31 +227,38 @@ async def generator_node(state: AgentState) -> dict:
     try:
         # Stream the response
         # Note: LangGraph automatically handles streaming when stream_mode="messages"
-        # We just collect the full response here
+        # We collect the full response here, then count tokens accurately after streaming
         full_response = ""
-        token_count = 0
 
         async for chunk in llm.astream(messages):
             if chunk.content:
                 full_response += chunk.content
-                token_count += 1
+
+        # Calculate accurate token counts using tiktoken after streaming completes
+        # Use chat-aware token counting to account for ChatML formatting overhead
+        prompt_tokens = count_chat_tokens(
+            messages, model=settings.openai_model)
+
+        # Compute completion tokens (generated response)
+        completion_tokens = count_tokens(
+            full_response, model=settings.openai_model)
+        total_tokens = prompt_tokens + completion_tokens
 
         end_time = time.time()
         latency_ms = int((end_time - start_time) * 1000)
 
         logger.info(
             "Generation complete",
-            tokens=token_count,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
             latency_ms=latency_ms,
             response_length=len(full_response)
         )
 
-        # Estimate cost (rough approximation)
+        # Calculate cost based on actual token counts
         # GPT-4: ~$0.03/1K prompt tokens, ~$0.06/1K completion tokens
-        # This is a rough estimate; actual costs depend on model pricing
-        prompt_tokens = len(SYSTEM_PROMPT.split()) + \
-            len(query.split()) + len(context.split())
-        completion_tokens = token_count
+        # Adjust these rates based on your actual model pricing
         estimated_cost = (prompt_tokens * 0.00003) + \
             (completion_tokens * 0.00006)
 
@@ -200,7 +283,7 @@ async def generator_node(state: AgentState) -> dict:
 
         # Return error response
         return {
-            "generated_response": f"I encountered an error while generating the response: {str(e)}. Please try again.",
+            "generated_response": f"I encountered an error while generating the response. Please try again.",
             "metadata": {
                 "generation": {
                     "error": str(e),

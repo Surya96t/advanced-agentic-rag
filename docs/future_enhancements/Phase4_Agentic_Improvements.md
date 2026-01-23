@@ -434,8 +434,9 @@ async def adaptive_expander_node(state: AgentState) -> dict:
 
     # LLM decides strategy and executes it
     result = await llm.ainvoke(prompt)
+    parsed_result = parse_json(result.content)
 
-    return {"expanded_queries": result["queries"]}
+    return {"expanded_queries": parsed_result["queries"]}
 ```
 
 ---

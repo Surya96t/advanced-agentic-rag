@@ -11,8 +11,8 @@ Usage:
 from app.utils.logger import get_logger
 from app.ingestion.pipeline import IngestionPipeline
 from app.ingestion.embeddings import EmbeddingClient
-from app.database.repositories.chunks import ChunkRepository
 from app.database.repositories.documents import DocumentRepository
+from app.database.repositories.chunks import ChunkRepository
 from app.database.client import SupabaseClient
 from app.core.config import settings
 import asyncio
@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 # Add parent directory to path for imports
+# This must be done BEFORE importing from app.* modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
