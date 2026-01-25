@@ -366,6 +366,7 @@
 ### Files Changed
 
 **New Files:**
+
 - `migrations/005_add_delete_document_function.sql`
 - `migrations/apply_005.sh`
 - `tests/test_atomic_deletion.py`
@@ -374,6 +375,7 @@
 - `docs/PRIVACY_SAFE_LOGGING.md`
 
 **Modified Files:**
+
 - `app/database/repositories/documents.py` (added `delete_with_chunks()`)
 - `app/api/v1/documents.py` (updated DELETE endpoint)
 - `app/api/v1/chat.py` (privacy-safe logging)
@@ -388,7 +390,7 @@
 ✅ **Atomic Deletion Tests:** 6/6 passing (5 active + 1 skipped)  
 ✅ **Privacy-Safe Logging:** SHA-256 hash verified in logs  
 ✅ **SQL Migration:** Applied successfully to Supabase  
-✅ **Syntax Validation:** All Python files parse correctly  
+✅ **Syntax Validation:** All Python files parse correctly
 
 ### Next Steps
 

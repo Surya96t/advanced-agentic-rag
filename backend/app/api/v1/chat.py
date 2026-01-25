@@ -37,21 +37,21 @@ router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 def get_message_hash(message: str) -> str:
     """
     Generate a privacy-safe hash of the user message for logging.
-    
+
     Uses SHA-256 to create a deterministic hash that:
     - Allows correlation of identical messages in logs
     - Protects user privacy (PII not exposed)
     - Cannot be reversed to recover original text
-    
+
     In development: Returns first 16 chars of hash for readability
     In production: Returns full 64-char hash for maximum uniqueness
-    
+
     Args:
         message: The user's message text
-        
+
     Returns:
         Hexadecimal hash string (16 or 64 chars)
-    
+
     Learning Note:
     Why hash instead of truncate?
     - Truncation can leak PII (names, emails, addresses)
@@ -62,7 +62,7 @@ def get_message_hash(message: str) -> str:
     # Create SHA-256 hash of the full message
     hash_obj = hashlib.sha256(message.encode('utf-8'))
     full_hash = hash_obj.hexdigest()
-    
+
     # In development, use shorter hash for readability
     # In production, use full hash for uniqueness
     if settings.environment == "development":

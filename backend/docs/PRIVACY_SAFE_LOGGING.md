@@ -24,6 +24,7 @@ logger.info(
 ```
 
 **Security Risks:**
+
 - ❌ Exposes Personally Identifiable Information (PII) in logs
 - ❌ Violates GDPR, CCPA, and privacy regulations
 - ❌ Log aggregation services see sensitive user data
@@ -31,6 +32,7 @@ logger.info(
 - ❌ Security audits, debugging, or monitoring expose user messages
 
 **Examples of PII that could be logged:**
+
 - Email addresses: "What's the status of order for john.doe@example.com?"
 - Phone numbers: "Call me at 555-123-4567"
 - SSNs: "My SSN is 123-45-6789"
@@ -57,7 +59,7 @@ from app.core.config import settings
 def get_message_hash(message: str) -> str:
     """
     Generate a privacy-safe hash of the user message for logging.
-    
+
     Uses SHA-256 to create a deterministic hash that:
     - Allows correlation of identical messages in logs
     - Protects user privacy (PII not exposed)
@@ -65,7 +67,7 @@ def get_message_hash(message: str) -> str:
     """
     hash_obj = hashlib.sha256(message.encode('utf-8'))
     full_hash = hash_obj.hexdigest()
-    
+
     # Development: 16 chars (more readable)
     # Production: 64 chars (maximum uniqueness)
     if settings.environment == "development":
@@ -92,6 +94,7 @@ logger.info(
 ### Hash Function: SHA-256
 
 **Why SHA-256?**
+
 - ✅ One-way function (cannot reverse)
 - ✅ Deterministic (same input = same output)
 - ✅ Collision-resistant (different inputs = different outputs)
@@ -99,6 +102,7 @@ logger.info(
 - ✅ Industry standard for privacy hashing
 
 **Hash Length:**
+
 - **Development:** 16 characters (64 bits) - More readable in logs
 - **Production:** 64 characters (256 bits) - Maximum uniqueness
 
@@ -121,23 +125,27 @@ Prod Hash: 2f04f12bd6074d236fefad1df74d485673bbb4d8837ca4b961e3893985ded212
 ## Benefits
 
 ### 1. **Privacy Compliance**
+
 - ✅ GDPR Article 4(5): "Data that can no longer identify a data subject is not personal data"
 - ✅ CCPA compliant: No personal information stored in logs
 - ✅ HIPAA safe: Medical queries don't expose PHI
 
 ### 2. **Security**
+
 - ✅ Log aggregation services (Datadog, Splunk, etc.) don't see PII
 - ✅ Log backups don't contain sensitive data
 - ✅ Security audits don't expose user messages
 - ✅ Internal debugging doesn't require PII access
 
 ### 3. **Debugging Capability**
+
 - ✅ Can correlate identical queries (same hash)
 - ✅ Can track request patterns without seeing content
 - ✅ Can identify high-traffic queries (frequent hash)
 - ✅ Can debug edge cases by hash without exposing PII
 
 ### 4. **Audit Trail**
+
 - ✅ Logs show when users made requests (with hashes)
 - ✅ Can prove a specific query was made (hash match)
 - ✅ Cannot expose what users actually asked (privacy preserved)
@@ -212,11 +220,13 @@ Different messages have different hash: True ✓
 ### Scenario: User reports an error with their query
 
 **Without hash (old way):**
+
 1. ❌ Ask user to share their exact query (they may refuse for privacy)
 2. ❌ Or search logs for user_id (exposes all their queries)
 3. ❌ Privacy violation + poor UX
 
 **With hash (new way):**
+
 1. ✅ User tells you: "My request at 12:00 PM failed"
 2. ✅ Search logs for: `user_id=X AND timestamp=12:00`
 3. ✅ Find hash: `2f04f12bd6074d23`
@@ -257,17 +267,21 @@ Different messages have different hash: True ✓
 ### GDPR Compliance
 
 **Article 4(5) - Pseudonymization:**
+
 > "Processing of personal data in such a manner that the personal data can no longer be attributed to a specific data subject without the use of additional information"
 
 ✅ **Our Implementation:**
+
 - SHA-256 is one-way (no additional information can reverse it)
 - Hash alone cannot identify a user
 - Compliant with pseudonymization requirements
 
 **Article 25 - Privacy by Design:**
+
 > "The controller shall implement appropriate technical and organisational measures... for ensuring that, by default, only personal data which are necessary for each specific purpose of the processing are processed"
 
 ✅ **Our Implementation:**
+
 - Only store hash (necessary for debugging)
 - Original message not stored in logs
 - Minimal data collection by design
@@ -277,14 +291,17 @@ Different messages have different hash: True ✓
 ## Summary
 
 **Changed:**
+
 - ✅ `message_preview: request.message[:100]` → `message_hash: get_message_hash(request.message)`
 
 **Added:**
+
 - ✅ `get_message_hash()` helper function
 - ✅ SHA-256 hashing with environment-based length
 - ✅ Privacy-safe logging throughout chat endpoint
 
 **Benefits:**
+
 - ✅ GDPR/CCPA compliant
 - ✅ PII protected
 - ✅ Debugging still possible
@@ -292,9 +309,11 @@ Different messages have different hash: True ✓
 - ✅ Zero performance impact
 
 **Files Modified:**
+
 - `backend/app/api/v1/chat.py`
 
 **Testing:**
+
 - ✅ Hash determinism verified
 - ✅ Correlation tested
 - ✅ No syntax errors
@@ -305,6 +324,7 @@ Different messages have different hash: True ✓
 ## Recommendation
 
 **This pattern should be applied to ALL user-generated content logging:**
+
 - Chat messages ✅ (done)
 - Document titles (should be hashed if sensitive)
 - Search queries (should be hashed)
