@@ -8,6 +8,7 @@ Phase 5: Uses hardcoded user_id for testing without authentication
 Phase 6: Will add JWT authentication
 """
 
+import hashlib
 import json
 from typing import AsyncIterator
 from uuid import UUID, uuid4
@@ -17,6 +18,7 @@ from fastapi.responses import StreamingResponse
 
 from app.agents.graph import run_agent, stream_agent
 from app.api.deps import UserID
+from app.core.config import settings
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.schemas.events import SSEEventType
 from app.utils.logger import get_logger
@@ -25,6 +27,48 @@ logger = get_logger(__name__)
 
 # Create router
 router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
+
+
+# ============================================================================
+# Privacy-Safe Logging Helper
+# ============================================================================
+
+
+def get_message_hash(message: str) -> str:
+    """
+    Generate a privacy-safe hash of the user message for logging.
+    
+    Uses SHA-256 to create a deterministic hash that:
+    - Allows correlation of identical messages in logs
+    - Protects user privacy (PII not exposed)
+    - Cannot be reversed to recover original text
+    
+    In development: Returns first 16 chars of hash for readability
+    In production: Returns full 64-char hash for maximum uniqueness
+    
+    Args:
+        message: The user's message text
+        
+    Returns:
+        Hexadecimal hash string (16 or 64 chars)
+    
+    Learning Note:
+    Why hash instead of truncate?
+    - Truncation can leak PII (names, emails, addresses)
+    - Hash is one-way (cannot recover original)
+    - Deterministic (same message = same hash = correlation)
+    - GDPR/privacy compliant (no personal data stored)
+    """
+    # Create SHA-256 hash of the full message
+    hash_obj = hashlib.sha256(message.encode('utf-8'))
+    full_hash = hash_obj.hexdigest()
+    
+    # In development, use shorter hash for readability
+    # In production, use full hash for uniqueness
+    if settings.environment == "development":
+        return full_hash[:16]  # First 16 chars (64 bits)
+    else:
+        return full_hash  # Full 64 chars (256 bits)
 
 
 # ============================================================================
@@ -135,7 +179,7 @@ async def chat(
         "Chat request received",
         extra={
             "user_id": user_id,
-            "message_preview": request.message[:100],
+            "message_hash": get_message_hash(request.message),
             "stream": request.stream,
             "thread_id": str(request.thread_id) if request.thread_id else "new",
         }

@@ -15,7 +15,6 @@ from pydantic import BaseModel, Field
 from app.api.deps import UserID
 from app.database.client import get_db
 from app.database.repositories.documents import DocumentRepository
-from app.database.repositories.chunks import ChunkRepository
 from app.database.models import Document
 from app.utils.logger import get_logger
 
@@ -171,7 +170,6 @@ def delete_document(
         # Get Supabase client and repositories
         supabase = get_db()
         doc_repo = DocumentRepository(supabase)
-        chunk_repo = ChunkRepository(supabase)
 
         # Verify document exists and get it
         document = doc_repo.get(document_id)
@@ -200,33 +198,27 @@ def delete_document(
                 detail="You don't have permission to delete this document"
             )
 
-        # Delete chunks first (foreign key constraint)
-        logger.debug(
-            "Deleting document chunks",
-            extra={"document_id": str(document_id)}
-        )
-        chunks_deleted = chunk_repo.delete_by_document(document_id)
-
-        # Delete document
-        logger.debug(
-            "Deleting document record",
-            extra={"document_id": str(document_id)}
-        )
-        doc_repo.delete(document_id)
+        # Atomic deletion using PostgreSQL RPC (see migration 005)
+        # - Wraps both chunk and document deletion in a single transaction
+        # - Automatic rollback if either operation fails
+        # - No orphaned chunks or partial deletions possible
+        # - RLS policies enforced at database layer
+        result = doc_repo.delete_with_chunks(document_id, user_id)
 
         logger.info(
-            "Document deleted successfully",
+            "Document deleted successfully (atomic)",
             extra={
                 "document_id": str(document_id),
                 "user_id": user_id,
-                "chunks_deleted": chunks_deleted
+                "chunks_deleted": result.get("chunks_deleted", 0),
+                "title": result.get("title", "unknown")
             }
         )
 
         return DocumentDeleteResponse(
             deleted=True,
             document_id=document_id,
-            chunks_deleted=chunks_deleted
+            chunks_deleted=result.get("chunks_deleted", 0)
         )
 
     except HTTPException:

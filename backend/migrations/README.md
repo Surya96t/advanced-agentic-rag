@@ -6,11 +6,13 @@ This folder contains SQL migration files for the Integration Forge database.
 
 ## 📋 Migration Files
 
-| Migration                          | Status            | Description                                              |
-| ---------------------------------- | ----------------- | -------------------------------------------------------- |
-| **001_initial_setup.sql**          | ✅ **APPLIED**    | Initial schema setup (extensions, tables, RLS, indexes)  |
-| **002_update_document_schema.sql** | ⚠️ **SUPERSEDED** | Added document fields + UUID conversion (see note below) |
-| **003_revert_user_id_to_text.sql** | ✅ **APPLIED**    | Reverted user_id to TEXT for Clerk compatibility         |
+| Migration                                | Status            | Description                                              |
+| ---------------------------------------- | ----------------- | -------------------------------------------------------- |
+| **001_initial_setup.sql**                | ✅ **APPLIED**    | Initial schema setup (extensions, tables, RLS, indexes)  |
+| **002_update_document_schema.sql**       | ⚠️ **SUPERSEDED** | Added document fields + UUID conversion (see note below) |
+| **003_revert_user_id_to_text.sql**       | ✅ **APPLIED**    | Reverted user_id to TEXT for Clerk compatibility         |
+| **004_add_text_search.sql**              | ✅ **APPLIED**    | Added full-text search (tsvector, GIN index, RPC)        |
+| **005_add_delete_document_function.sql** | ⏳ **PENDING**    | Atomic document deletion with PostgreSQL RPC             |
 
 ### ⚠️ Important Notes
 

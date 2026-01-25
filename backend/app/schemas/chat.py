@@ -59,7 +59,8 @@ class ChatRequest(BaseSchema):
 class ChatResponse(BaseSchema):
     """Response schema for chat endpoint (non-streaming)."""
 
-    thread_id: UUID | None = Field(None, description="Thread ID for this conversation")
+    thread_id: UUID | None = Field(
+        None, description="Thread ID for this conversation")
     content: str = Field(..., description="Generated answer")
     sources: list[SearchResult] = Field(
         default_factory=list,
@@ -76,7 +77,7 @@ class ChatResponse(BaseSchema):
         description="Execution metadata (timing, costs, retries, etc.)"
     )
     validation_passed: bool | None = Field(None,
-                                            description="Whether quality validation passed")
+                                           description="Whether quality validation passed")
 
     model_config = ConfigDict(
         json_schema_extra={

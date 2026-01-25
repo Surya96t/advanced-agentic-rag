@@ -619,3 +619,115 @@ class DocumentRepository:
                 message="Failed to delete document",
                 details={"error": str(e)},
             )
+
+    def delete_with_chunks(self, document_id: UUID, user_id: str) -> dict[str, Any]:
+        """
+        Atomically delete a document and all its chunks using PostgreSQL RPC.
+
+        This method calls a stored procedure that wraps both deletes in a
+        single transaction, ensuring ACID compliance (all-or-nothing behavior).
+
+        Transaction Behavior:
+        - Chunks and document are deleted in a single database transaction
+        - If either operation fails, both are rolled back
+        - No orphaned chunks or partial deletions possible
+        - RLS policies are enforced (only owner can delete)
+
+        Why RPC instead of client-side deletion?
+        - Supabase Python client doesn't support explicit transactions
+        - PostgreSQL stored procedures provide implicit transaction blocks
+        - Single round-trip to database (better performance)
+        - Consistent with Supabase's own internal functions
+
+        Args:
+            document_id: Document UUID
+            user_id: User ID for logging and RLS enforcement
+
+        Returns:
+            dict with deletion results:
+            {
+                "deleted": bool,
+                "document_id": UUID,
+                "chunks_deleted": int,
+                "user_id": str,
+                "title": str
+            }
+
+        Raises:
+            DatabaseError: If deletion fails or document not found
+            NotFoundError: If document doesn't exist or user doesn't own it
+
+        Learning Note:
+        RLS enforcement in RPC functions:
+        - Function runs with SECURITY INVOKER (caller's permissions)
+        - RLS policies automatically filter queries by auth.uid()
+        - User can only delete their own documents
+        - Attempting to delete another user's document returns deleted=false
+
+        Usage:
+            # Atomic deletion with automatic rollback on error
+            result = doc_repo.delete_with_chunks(doc_id, user_id)
+            print(f"Deleted {result['chunks_deleted']} chunks")
+        """
+        try:
+            logger.info(
+                "Atomically deleting document and chunks via RPC",
+                document_id=str(document_id),
+                user_id=user_id,
+            )
+
+            # Call PostgreSQL stored procedure for atomic deletion
+            # See migration 005_add_delete_document_function.sql
+            result = self.db.rpc(
+                "delete_document_with_chunks",
+                {"doc_id": str(document_id)}
+            ).execute()
+
+            if not result.data:
+                raise DatabaseError(
+                    message="RPC call returned no data",
+                    details={"document_id": str(document_id)},
+                )
+
+            deletion_result = result.data
+
+            # Check if deletion was successful
+            if not deletion_result.get("deleted", False):
+                error_msg = deletion_result.get(
+                    "error",
+                    "Document not found or access denied"
+                )
+                logger.warning(
+                    "Document deletion failed",
+                    document_id=str(document_id),
+                    user_id=user_id,
+                    error=error_msg,
+                )
+                raise NotFoundError(
+                    message=error_msg,
+                    details={"document_id": str(document_id)},
+                )
+
+            logger.info(
+                "Document and chunks deleted successfully",
+                document_id=str(document_id),
+                chunks_deleted=deletion_result.get("chunks_deleted", 0),
+                title=deletion_result.get("title", "unknown"),
+            )
+
+            return deletion_result
+
+        except NotFoundError:
+            raise
+        except Exception as e:
+            logger.error(
+                "Failed to delete document with chunks",
+                error=str(e),
+                document_id=str(document_id),
+                user_id=user_id,
+                exc_info=True,
+            )
+            raise DatabaseError(
+                message="Failed to delete document atomically",
+                details={"error": str(e)},
+            )
