@@ -108,6 +108,50 @@ class Settings(BaseSettings):
     cohere_model: str = Field(
         default="rerank-english-v3.0", description="Cohere rerank model")
 
+    # Clerk Authentication Configuration
+    clerk_secret_key: str = Field(
+        ..., description="Clerk secret key for JWT validation", repr=False)
+    clerk_publishable_key: str = Field(
+        ..., description="Clerk publishable key")
+    clerk_issuer_url: str = Field(
+        ..., description="Clerk issuer URL (e.g., https://your-app.clerk.accounts.dev)")
+    clerk_jwks_cache_ttl: int = Field(
+        default=3600, description="JWKS cache TTL in seconds (default: 1 hour)")
+    auth_enabled: bool = Field(
+        default=True, description="Enable JWT authentication (disable for testing)")
+
+    # Redis Configuration
+    redis_host: str = Field(
+        default="localhost", description="Redis server hostname")
+    redis_port: int = Field(
+        default=6379, ge=1, le=65535, description="Redis server port")
+    redis_db: int = Field(
+        default=0, ge=0, le=15, description="Redis database number (0-15)")
+    redis_password: str | None = Field(
+        default=None, description="Redis password (optional)", repr=False)
+    redis_ssl: bool = Field(
+        default=False, description="Use SSL/TLS for Redis connection")
+    redis_connection_pool_size: int = Field(
+        default=10, ge=1, le=100, description="Redis connection pool size")
+
+    # Rate Limiting Configuration
+    rate_limit_enabled: bool = Field(
+        default=True, description="Enable rate limiting (disable for load testing)")
+    rate_limit_default_requests: int = Field(
+        default=100, ge=1, description="Default requests per hour")
+    rate_limit_default_window: int = Field(
+        default=3600, ge=60, description="Rate limit window in seconds")
+    rate_limit_burst_multiplier: float = Field(
+        default=1.5, ge=1.0, le=3.0, description="Burst allowance multiplier")
+
+    # Per-Endpoint Rate Limits (requests per hour)
+    rate_limit_ingest: int = Field(
+        default=20, ge=1, description="Ingestion endpoint rate limit")
+    rate_limit_chat: int = Field(
+        default=100, ge=1, description="Chat endpoint rate limit")
+    rate_limit_documents: int = Field(
+        default=200, ge=1, description="Document listing rate limit")
+
     # RAG Configuration - Chunking
     chunk_size: int = Field(
         default=1000, description="Default chunk size for text splitting")
@@ -169,9 +213,11 @@ class Settings(BaseSettings):
         description="(Deprecated) Use rerank_top_k instead"
     )
 
-    # Rate Limiting
+    # Legacy rate limiting field for backwards compatibility
     rate_limit_per_minute: int = Field(
-        default=60, description="API rate limit per minute")
+        default=60,
+        description="(Deprecated) Use rate_limit_default_requests and rate_limit_default_window instead"
+    )
 
     # Logging
     log_level: str = Field(default="INFO", description="Logging level")
@@ -253,6 +299,32 @@ class Settings(BaseSettings):
     def is_development(self) -> bool:
         """Check if running in development environment."""
         return self.environment == "development"
+
+    @property
+    def redis_url(self) -> str:
+        """
+        Build Redis connection URL with URL-encoded password.
+
+        Returns:
+            Redis connection URL in format:
+            redis://[:password@]host:port/db  (no SSL)
+            rediss://[:password@]host:port/db (with SSL)
+
+        Example:
+            >>> settings.redis_host = "localhost"
+            >>> settings.redis_port = 6379
+            >>> settings.redis_db = 0
+            >>> settings.redis_url
+            'redis://localhost:6379/0'
+        """
+        protocol = "rediss" if self.redis_ssl else "redis"
+        # URL-encode password to handle special characters safely
+        if self.redis_password:
+            encoded_password = quote_plus(self.redis_password)
+            auth = f":{encoded_password}@"
+        else:
+            auth = ""
+        return f"{protocol}://{auth}{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
     @property
     def supabase_connection_string(self) -> str:

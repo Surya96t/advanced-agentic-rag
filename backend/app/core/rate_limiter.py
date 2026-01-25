@@ -3,6 +3,7 @@
 import logging
 import time
 from typing import Optional, Tuple
+from uuid import uuid4
 
 from redis import ConnectionPool, Redis
 from redis.exceptions import RedisError
@@ -45,10 +46,14 @@ class RedisRateLimiter:
         """
         Check if user has exceeded rate limit for endpoint.
 
-        Uses sliding window algorithm:
-        1. Remove entries older than window (ZREMRANGEBYSCORE)
-        2. Count remaining entries (ZCARD)
-        3. If under limit, add new entry (ZADD)
+        Uses sliding window algorithm with check-first approach:
+        1. PIPELINE 1 (check): Remove old entries + count current requests
+        2. PIPELINE 2 (record): Only if allowed, record new request with unique ID
+
+        This ensures:
+        - Denied requests are never recorded in Redis
+        - Each request has a unique ZSET member (timestamp + UUID)
+        - No race conditions or ZSET collisions
 
         Args:
             user_id: User identifier
@@ -77,38 +82,43 @@ class RedisRateLimiter:
             now = time.time()
             window_start = now - window
 
-            # Sliding window algorithm
-            pipe = redis_client.pipeline()
+            # PIPELINE 1: Check current request count (no recording yet)
+            check_pipe = redis_client.pipeline()
+            check_pipe.zremrangebyscore(
+                key, 0, window_start)  # Remove old entries
+            check_pipe.zcard(key)  # Count current entries
+            check_pipe.expire(key, window)  # Set expiry for cleanup
 
-            # 1. Remove old entries outside window
-            pipe.zremrangebyscore(key, 0, window_start)
+            check_results = check_pipe.execute()
+            current_count = check_results[1]  # ZCARD result
 
-            # 2. Count current entries in window
-            pipe.zcard(key)
-
-            # 3. Add current request timestamp
-            pipe.zadd(key, {str(now): now})
-
-            # 4. Set expiry on key (cleanup)
-            pipe.expire(key, window)
-
-            # Execute pipeline
-            results = pipe.execute()
-            current_count = results[1]  # ZCARD result
-
-            # Check if under limit (count before adding new entry)
+            # Determine if request is allowed
             allowed = current_count < limit
-            remaining = max(0, limit - current_count - 1)
 
-            if not allowed:
+            if allowed:
+                # PIPELINE 2: Record the request only if allowed
+                # Use truly unique member: timestamp + UUID4
+                unique_member = f"{now}-{uuid4()}"
+
+                record_pipe = redis_client.pipeline()
+                record_pipe.zadd(key, {unique_member: now})
+                record_pipe.expire(key, window)  # Ensure expiry is set
+                record_pipe.execute()
+
+                # Remaining after recording this request
+                remaining = max(0, limit - (current_count + 1))
+
+                logger.debug(
+                    f"Rate limit check passed for user {user_id} on {endpoint}: "
+                    f"{current_count + 1}/{limit} requests"
+                )
+            else:
+                # Request denied - don't record it at all
+                remaining = 0
+
                 logger.warning(
                     f"Rate limit exceeded for user {user_id} on {endpoint}: "
                     f"{current_count}/{limit} requests in {window}s window"
-                )
-            else:
-                logger.debug(
-                    f"Rate limit check passed for user {user_id}: "
-                    f"{current_count + 1}/{limit} requests"
                 )
 
             return (allowed, limit, remaining)

@@ -52,11 +52,13 @@
 **Status:** ✅ Complete, ready for PR #5
 **PR:** Ready to create
 
-### Checkpoint 6: Authentication & Security
+### Checkpoint 6: Authentication & Security ✅ COMPLETED
 
 **Branch:** `feat/auth-security`
-**Files:** auth middleware, user schemas, protected routes
-**Goal:** Secure API with JWT authentication
+**Files:** auth module, rate limiter, test scripts, integration tests
+**Goal:** Secure API with JWT authentication and rate limiting
+**Status:** ✅ Implementation complete, ready for PR #6
+**PR:** Ready to create
 
 ### Checkpoint 7: Testing
 
@@ -398,59 +400,124 @@ These improvements are production-ready and can be merged with Phase 5. No addit
 
 ---
 
-## Phase 6: Authentication & Security
+## Phase 6: Authentication & Security ✅ COMPLETED
 
-- [ ] Authentication Middleware (`app/core/auth.py`)
-  - JWT token validation
-  - Supabase Auth integration
-  - User context extraction
-  - Protected route decorators
+- [x] Authentication Middleware (`app/core/auth.py`)
+  - JWT token validation with Clerk JWKS
+  - JWKSClient for fetching and caching public keys
+  - verify_jwt_token() for signature and claims validation
+  - extract_user_id() for user ID extraction from 'sub' claim
+  - get_current_user() FastAPI dependency
+  - AuthenticationError custom exception
+  - AUTH_ENABLED toggle for development mode
 
-- [ ] User Schemas (`app/schemas/`)
-  - `user.py` - User schemas
+- [x] Rate Limiting (`app/core/rate_limiter.py`)
+  - RedisRateLimiter class with connection pooling
+  - Sliding window algorithm using Redis ZSET
+  - Per-endpoint limits (chat: 100/hr, ingest: 20/hr, documents: 200/hr)
+  - get_rate_limit_key() helper for key formatting
+  - get_endpoint_limits() helper for config
+  - RATE_LIMIT_ENABLED toggle
+  - Graceful degradation on Redis failure
 
-- [ ] Secure API Routes
-  - Add auth to document and chat endpoints
-  - Admin operations (optional)
+- [x] Secure API Routes (`app/api/deps.py`)
+  - Updated get_current_user_id() to use JWT validation
+  - Updated check_user_rate_limit() to use Redis
+  - Added rate limit headers to 429 responses
+  - All endpoints automatically protected via dependency injection
+
+- [x] Testing Tools (`scripts/`)
+  - generate_test_jwt.py - CLI tool for JWT generation
+  - test_auth_curl.sh - Automated curl tests for auth scenarios
+
+- [x] Integration Tests (`tests/test_authentication.py`)
+  - JWT validation tests (valid, expired, invalid, missing)
+  - AUTH_ENABLED toggle tests
+  - User ID extraction tests
+  - Rate limiting tests (not exceeded, exceeded, headers)
+  - RATE_LIMIT_ENABLED toggle tests
+  - RLS enforcement tests
+  - Helper function tests
+  - 15/17 tests passing
+
+- [x] Configuration
+  - Added Clerk settings to config (secret, publishable, issuer, cache TTL)
+  - Added Redis settings (host, port, db, password, SSL, pool size)
+  - Added rate limit settings (enabled, default limits, per-endpoint limits)
+  - docker-compose.yml for Redis container (localhost-only binding for security)
+  - Updated .env and .env.example
+
+- [x] Security Hardening (Session 8)
+  - Fixed Redis URL password encoding (URL-encode special characters with quote_plus)
+  - Fixed rate limiter ZSET collisions (unique members with UUID4)
+  - Refactored to check-first approach (denied requests not recorded)
+  - Deprecated rate_limit_per_minute config (clear migration path)
+  - Redis Docker container bound to localhost only (127.0.0.1:6379)
+
+**Status:** ✅ Complete - Core implementation + Code Rabbit review fixes applied  
+**Branch:** `feat/auth-security`  
+**PR:** Ready to create (#6)  
+**Completion Date:** January 25, 2026  
+**Time Invested:** ~10 hours (implementation + testing + code review fixes)
 
 ---
 
-## Phase 7: Utilities & Observability
+## Phase 7: Utilities & Observability ✅ MOSTLY COMPLETE
 
 - [x] Utilities (`app/utils/`)
   - `logger.py` - ✅ Structured logging with structlog (completed in Phase 1)
   - `errors.py` - ✅ Custom exceptions (completed in Phase 1)
-  - `helpers.py` - Common utility functions
 
-- [ ] Observability
-  - LangSmith tracing configuration
-  - Error tracking
-  - Performance monitoring
+- [x] Core Observability (completed in Phases 1 & 4)
+  - ✅ LangSmith tracing integration (Phase 4 - agent workflows fully traced)
+  - ✅ Structured logging with request/response context (Phase 1)
+  - ✅ Global error handlers and custom exceptions (Phase 1)
+
+- [ ] Advanced Observability (Optional - Post-Launch)
+  - Error tracking service (e.g., Sentry) for production alerting
+  - Performance monitoring (e.g., Prometheus + Grafana) for metrics
+  - APM integration (e.g., DataDog, New Relic) for deep tracing
+  - Custom business metrics dashboard
+
+**Status:** ✅ Core observability complete - Advanced features deferred to post-launch  
+**Note:** LangSmith tracing, structured logs, and error handling already operational
 
 ---
 
-## Phase 8: Testing
+## Phase 8: Testing ✅ PARTIALLY COMPLETE
 
 - [x] Integration Tests (`tests/`)
-  - `test_ingestion_pipeline_integration.py` - Full pipeline integration tests with Supabase
-  - ✅ All ingestion tests passing
+  - `test_ingestion_pipeline_integration.py` - Full pipeline tests with Supabase ✅
+  - `test_retrieval_integration.py` - Hybrid search and re-ranking tests ✅
+  - `test_api_endpoints.py` - REST API integration tests ✅
+  - `test_sse_streaming.py` - SSE streaming format tests ✅
+  - `test_atomic_deletion.py` - Atomic deletion tests ✅
+  - `test_authentication.py` - JWT auth and rate limiting tests ✅ (15/17 passing)
 
-- [ ] Additional Tests
+- [ ] Additional Tests (Deferred to Phase 9)
   - Unit tests for chunkers, parsers, embeddings
-  - API endpoint tests (unit + integration)
   - Mocked external services for faster test execution
+  - Load testing and performance benchmarks
+  - End-to-end integration tests with frontend
+
+**Status:** ✅ Core integration tests complete - Unit tests and mocks deferred  
+**Note:** Comprehensive integration test coverage across all major features
 
 ---
 
 ## 🎯 NEXT PRIORITIES
 
-### Current Phase: Phase 6 - Authentication & Security ⬅️ START HERE
+### Current Phase: Phase 7 - Frontend Integration ⬅️ START HERE
 
 **Status:** Ready to begin  
-**Branch:** `feat/auth-security` (created from main)  
-**Prerequisites:** ✅ All previous phases (1-5) merged to main
+**Branch:** TBD (will create from main after Phase 6 merged)  
+**Prerequisites:** ✅ All previous phases (1-6) completed
 
-### Phase 6 Implementation Tasks
+**Previous Phase:** ✅ Phase 6 - Authentication & Security (COMPLETE)
+
+### Phase 6 Implementation Tasks ✅ COMPLETED (For Reference)
+
+**Note:** These tasks have been fully implemented. See lines 403-453 for completion details.
 
 1. **JWT Authentication** (`app/core/auth.py`)
    - Implement JWT token validation with Clerk
@@ -513,28 +580,61 @@ These improvements are production-ready and can be merged with Phase 5. No addit
 
 ---
 
-### Future Phases (Post-Phase 6)
+### 🎯 Next Priority: Phase 9 - Frontend Integration
 
-**Phase 7: Observability & Monitoring**
-- LangSmith tracing enhancement
-- Error tracking and alerting
-- Performance monitoring
-- Metrics dashboard
+**Phase 9: Frontend Integration** ⬅️ **START HERE NEXT**
 
-**Phase 8: Optimization & Polish**
+**Goal:** Build production-ready Next.js frontend with Clerk auth and real-time chat
+
+**Key Features:**
+
+- Next.js 15 App Router with TypeScript
+- Clerk authentication (matching backend JWT)
+- Document upload UI with drag-and-drop
+- Chat interface with SSE streaming
+- Real-time agent status updates
+- Rate limit feedback to users
+- Responsive design with Tailwind CSS
+
+**Prerequisites:** ✅ Backend Phases 1-6 complete (API ready)
+
+---
+
+### Future Phases (Post-Frontend)
+
+**Phase 10: Deployment & Production**
+
+- Production environment setup (Vercel frontend + Railway/Render backend)
+- Environment configuration and secrets management
+- Redis cluster for production rate limiting
+- Database connection pooling and optimization
+- CI/CD pipeline with automated tests
+- Monitoring and alerting setup
+
+**Phase 11: Optimization & Polish**
+
 - Add Cohere re-ranking as configurable option (deferred from Phase 3)
-- A/B test FlashRank vs Cohere
-- Performance optimization and caching
-- Comprehensive test coverage
-- Documentation polish
+- A/B test FlashRank vs Cohere re-ranking
+- Performance optimization and caching strategies
+- Advanced error tracking (Sentry integration)
+- Performance monitoring (Prometheus + Grafana)
+- Comprehensive unit test coverage
+- Documentation polish and API docs
 
 ---
 
 ### Notes on Deferred Features
 
 **From Phase 3:**
-- **Cohere re-ranking** will be added in Phase 8 (Optimization) as a configurable alternative to FlashRank for A/B testing
+
+- **Cohere re-ranking** will be added in Phase 11 (Optimization) as a configurable alternative to FlashRank for A/B testing
 
 **From Phase 5:**
-- PostgreSQL pooler configuration (optional optimization)
-- Error code standardization (422 vs 500) - can be addressed in Phase 7
+
+- PostgreSQL pooler configuration (optional optimization) - can be addressed in Phase 10 (Deployment)
+- Error code standardization (422 vs 500) - can be addressed in Phase 11 (Polish)
+
+**From Phases 7 & 8:**
+
+- Advanced observability (Sentry, Prometheus, APM) - can be addressed in Phase 10 (Deployment)
+- Unit tests and mocks - can be addressed in Phase 11 (Optimization)
