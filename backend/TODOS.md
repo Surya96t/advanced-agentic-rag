@@ -444,47 +444,97 @@ These improvements are production-ready and can be merged with Phase 5. No addit
 
 ## 🎯 NEXT PRIORITIES
 
-### Recommended Next Steps (in order):
+### Current Phase: Phase 6 - Authentication & Security ⬅️ START HERE
 
-1. **Phase 4: LLM Generation & Response** ⬅️ RECOMMENDED NEXT
-   - Implement LLM integration with OpenAI GPT-4
-   - Build prompt templates for integration code synthesis
-   - Add streaming responses via SSE
-   - Context window management and token counting
-   - Source attribution in generated responses
-   - **Why first:** Core generation logic needed to complete the RAG pipeline (retrieval is done)
+**Status:** Ready to begin  
+**Branch:** `feat/auth-security` (created from main)  
+**Prerequisites:** ✅ All previous phases (1-5) merged to main
 
-2. **Phase 5: API Endpoints (Chat)**
-   - Build `/api/v1/chat` endpoint with SSE streaming
-   - Integrate retrieval + generation pipeline
-   - Add request/response validation
-   - Add rate limiting
-   - **Why second:** Need generation working to make chat endpoint functional
+### Phase 6 Implementation Tasks
 
-3. **Phase 6: Agentic RAG (LangGraph)**
-   - Build agent nodes (query router, retriever, generator, validator)
-   - Create LangGraph workflow with state management
-   - Add checkpointing for long-running queries
-   - **Integrate query expansion here** (deferred from Phase 3)
-   - **Why third:** Build agentic workflows on top of working retrieval + generation
+1. **JWT Authentication** (`app/core/auth.py`)
+   - Implement JWT token validation with Clerk
+   - Extract user_id from JWT claims
+   - Verify token signature and expiry
+   - Create FastAPI dependency for protected routes
+   - **Dependencies:** `python-jose[cryptography]`
 
-4. **Phase 7: Authentication & Security**
-   - Add Clerk JWT validation middleware
-   - Protect all endpoints with auth
-   - Enforce RLS at API layer
-   - **Why fourth:** Productionize the working system
+2. **Update API Dependencies** (`app/api/deps.py`)
+   - Replace hardcoded `get_current_user_id()` with JWT extraction
+   - Implement `check_user_rate_limit()` with Redis backend
+   - Add `Depends(verify_jwt_token)` to all protected endpoints
+   - Type-safe user context extraction
 
-5. **Phase 8: Optimization & Polish**
-   - Add LangSmith tracing for observability
-   - **Add Cohere re-ranking as configurable option** (deferred from Phase 3)
-   - A/B test FlashRank vs Cohere
-   - Performance optimization and caching
-   - Comprehensive test coverage
-   - **Why last:** Optimize and harden the complete system
+3. **Rate Limiting** (`app/core/rate_limiter.py`)
+   - Redis client initialization and connection pooling
+   - Token bucket or sliding window algorithm
+   - Per-user rate limits (e.g., 100 requests/hour)
+   - Return 429 Too Many Requests when exceeded
+   - **Dependencies:** `redis`
+
+4. **Protect All Endpoints**
+   - Add authentication to `/api/v1/ingest` (document upload)
+   - Add authentication to `/api/v1/documents` (list, delete)
+   - Add authentication to `/api/v1/chat` (chat endpoint)
+   - Ensure RLS policies enforced via authenticated user context
+   - Remove hardcoded user_id from all endpoints
+
+5. **Integration Tests** (`tests/test_auth.py`, `tests/test_rate_limit.py`)
+   - Test JWT validation (valid, expired, invalid signature)
+   - Test rate limiting enforcement (within limit, exceeded)
+   - Test authenticated access to all endpoints
+   - Test RLS policy enforcement with different users
+   - Test 401 Unauthorized responses for missing/invalid tokens
+   - Test 429 Too Many Requests for rate limit violations
+   - **Dependencies:** `httpx` for testing authenticated requests
+
+6. **Manual Testing**
+   - Generate test JWT tokens from Clerk dashboard
+   - Verify protected endpoints require authentication
+   - Test rate limiting with rapid requests
+   - Verify different users see only their own documents
+   - Test token expiry and refresh flows
+
+### Key Files to Review
+
+- `app/api/deps.py` - Current hardcoded user_id to replace
+- `app/core/rate_limiter.py` - Placeholder implementation to complete
+- `/docs/06_API_Contract.md` - JWT auth specifications
+- `app/api/v1/chat.py`, `app/api/v1/documents.py`, `app/api/v1/ingest.py` - Endpoints to protect
+
+### Success Criteria
+
+- ✅ All endpoints require valid JWT authentication
+- ✅ Rate limiting prevents abuse (429 responses)
+- ✅ RLS policies enforced (users see only their data)
+- ✅ All integration tests passing
+- ✅ No PII in logs (maintained from Phase 5)
+- ✅ Clean separation of auth concerns
+
+---
+
+### Future Phases (Post-Phase 6)
+
+**Phase 7: Observability & Monitoring**
+- LangSmith tracing enhancement
+- Error tracking and alerting
+- Performance monitoring
+- Metrics dashboard
+
+**Phase 8: Optimization & Polish**
+- Add Cohere re-ranking as configurable option (deferred from Phase 3)
+- A/B test FlashRank vs Cohere
+- Performance optimization and caching
+- Comprehensive test coverage
+- Documentation polish
+
+---
 
 ### Notes on Deferred Features
 
 **From Phase 3:**
-
-- **Query expansion with LLM** will be added in Phase 6 (Agentic RAG) where the agent can intelligently decide when to expand queries
 - **Cohere re-ranking** will be added in Phase 8 (Optimization) as a configurable alternative to FlashRank for A/B testing
+
+**From Phase 5:**
+- PostgreSQL pooler configuration (optional optimization)
+- Error code standardization (422 vs 500) - can be addressed in Phase 7
