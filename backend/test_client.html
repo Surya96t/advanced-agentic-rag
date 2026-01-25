@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Integration Forge - SSE Test Client</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 8px;
+            font-weight: 700;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 1rem;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .input-section {
+            margin-bottom: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        textarea {
+            width: 100%;
+            min-height: 100px;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            resize: vertical;
+            transition: border-color 0.3s;
+        }
+        
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 28px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .btn-secondary {
+            background: #6b7280;
+        }
+        
+        .btn-secondary:hover:not(:disabled) {
+            box-shadow: 0 4px 12px rgba(107, 114, 128, 0.4);
+        }
+        
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .status.idle {
+            background: #e5e7eb;
+            color: #6b7280;
+        }
+        
+        .status.idle .status-dot {
+            background: #9ca3af;
+            animation: none;
+        }
+        
+        .status.streaming {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        
+        .status.streaming .status-dot {
+            background: #3b82f6;
+        }
+        
+        .status.complete {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        
+        .status.complete .status-dot {
+            background: #10b981;
+            animation: none;
+        }
+        
+        .status.error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .status.error .status-dot {
+            background: #ef4444;
+            animation: none;
+        }
+        
+        .answer-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #f6f8fb 0%, #e9ecef 100%);
+            border-radius: 12px;
+            border-left: 4px solid #667eea;
+            display: none;
+        }
+        
+        .answer-section.visible {
+            display: block;
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .answer-title {
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: #374151;
+            font-size: 16px;
+        }
+        
+        .answer-content {
+            line-height: 1.8;
+            color: #4b5563;
+            white-space: pre-wrap;
+            font-size: 15px;
+        }
+        
+        .events-container {
+            margin-top: 20px;
+        }
+        
+        .events-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .events-header h3 {
+            color: #374151;
+            font-size: 18px;
+        }
+        
+        .event-count {
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        
+        .events {
+            max-height: 500px;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+        
+        .events::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .events::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        
+        .events::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 4px;
+        }
+        
+        .event {
+            padding: 16px;
+            margin-bottom: 12px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            background: #f8f9fa;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            animation: fadeIn 0.3s ease-out;
+        }
+        
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateX(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        .event.agent_start {
+            border-left-color: #10b981;
+            background: #ecfdf5;
+        }
+        
+        .event.agent_complete {
+            border-left-color: #8b5cf6;
+            background: #f5f3ff;
+        }
+        
+        .event.token {
+            border-left-color: #6366f1;
+            background: #eef2ff;
+        }
+        
+        .event.citation {
+            border-left-color: #f59e0b;
+            background: #fffbeb;
+        }
+        
+        .event.validation {
+            border-left-color: #ec4899;
+            background: #fdf2f8;
+        }
+        
+        .event.progress {
+            border-left-color: #3b82f6;
+            background: #eff6ff;
+        }
+        
+        .event.end {
+            border-left-color: #ef4444;
+            background: #fef2f2;
+        }
+        
+        .event.agent_error {
+            border-left-color: #dc2626;
+            background: #fee2e2;
+        }
+        
+        .event-type {
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+        }
+        
+        .event-data {
+            color: #374151;
+            overflow-x: auto;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .stat {
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #9ca3af;
+        }
+        
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Integration Forge</h1>
+            <p>Agentic RAG Chat - SSE Streaming Test Client</p>
+        </div>
+        
+        <div class="content">
+            <div class="input-section">
+                <div class="form-group">
+                    <label for="message">Your Question:</label>
+                    <textarea 
+                        id="message" 
+                        placeholder="Ask anything... e.g., 'How do I use Convex mutations?'"
+                    >How do I use Convex mutations?</textarea>
+                </div>
+                
+                <div class="button-group">
+                    <button id="sendBtn" onclick="sendMessage()">
+                        💬 Send Message
+                    </button>
+                    <button class="btn-secondary" onclick="clearAll()">
+                        🗑️ Clear All
+                    </button>
+                </div>
+            </div>
+
+            <div class="status-bar">
+                <div id="statusIndicator" class="status idle">
+                    <span class="status-dot"></span>
+                    <span id="statusText">Ready</span>
+                </div>
+                <div class="event-count">
+                    <span id="eventCount">0</span> events
+                </div>
+            </div>
+
+            <div id="answerSection" class="answer-section">
+                <div class="answer-title">📝 Answer:</div>
+                <div id="answerContent" class="answer-content"></div>
+            </div>
+
+            <div class="events-container">
+                <div class="events-header">
+                    <h3>📡 Event Stream</h3>
+                </div>
+                <div id="events" class="events">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">💭</div>
+                        <p>No events yet. Send a message to start streaming!</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-value" id="totalEvents">0</div>
+                    <div class="stat-label">Total Events</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="tokenCount">0</div>
+                    <div class="stat-label">Tokens</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="citationCount">0</div>
+                    <div class="stat-label">Citations</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="duration">0s</div>
+                    <div class="stat-label">Duration</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let answer = "";
+        let eventCount = 0;
+        let tokenCount = 0;
+        let citationCount = 0;
+        let startTime = null;
+        let durationInterval = null;
+
+        function updateStatus(status, text) {
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            
+            indicator.className = `status ${status}`;
+            statusText.textContent = text;
+        }
+
+        function updateStats() {
+            document.getElementById('totalEvents').textContent = eventCount;
+            document.getElementById('tokenCount').textContent = tokenCount;
+            document.getElementById('citationCount').textContent = citationCount;
+            document.getElementById('eventCount').textContent = eventCount;
+        }
+
+        function updateDuration() {
+            if (startTime) {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                document.getElementById('duration').textContent = `${elapsed}s`;
+            }
+        }
+
+        function sendMessage() {
+            const message = document.getElementById('message').value.trim();
+            if (!message) {
+                alert('Please enter a message');
+                return;
+            }
+
+            // Reset state
+            answer = "";
+            eventCount = 0;
+            tokenCount = 0;
+            citationCount = 0;
+            startTime = Date.now();
+            
+            document.getElementById('answerContent').textContent = "";
+            document.getElementById('answerSection').classList.remove('visible');
+            document.getElementById('events').innerHTML = "";
+            
+            // Update UI
+            document.getElementById('sendBtn').disabled = true;
+            updateStatus('streaming', 'Streaming...');
+            updateStats();
+
+            // Start duration counter
+            durationInterval = setInterval(updateDuration, 1000);
+
+            // Use fetch with streaming for POST requests (EventSource only supports GET)
+            fetch('http://localhost:8000/api/v1/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    message: message,
+                    stream: true
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                
+                function readStream() {
+                    reader.read().then(({ done, value }) => {
+                        if (done) {
+                            clearInterval(durationInterval);
+                            document.getElementById('sendBtn').disabled = false;
+                            updateStatus('complete', 'Complete ✓');
+                            updateDuration();
+                            return;
+                        }
+                        
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+                        
+                        let currentEvent = null;
+                        
+                        for (const line of lines) {
+                            if (line.startsWith('event:')) {
+                                currentEvent = line.substring(6).trim();
+                            } else if (line.startsWith('data:')) {
+                                const data = line.substring(5).trim();
+                                
+                                if (currentEvent && data) {
+                                    handleEvent(currentEvent, data);
+                                    currentEvent = null;
+                                }
+                            }
+                        }
+                        
+                        readStream();
+                    });
+                }
+                
+                readStream();
+            })
+            .catch(error => {
+                console.error('Stream error:', error);
+                clearInterval(durationInterval);
+                addEvent('agent_error', { error: error.message });
+                document.getElementById('sendBtn').disabled = false;
+                updateStatus('error', 'Error ✗');
+            });
+        }
+
+        function handleEvent(eventType, data) {
+            try {
+                const eventData = JSON.parse(data);
+                addEvent(eventType, eventData);
+                
+                // Accumulate answer tokens
+                if (eventType === 'token' && eventData.content) {
+                    answer += eventData.content;
+                    document.getElementById('answerContent').textContent = answer;
+                    document.getElementById('answerSection').classList.add('visible');
+                    tokenCount++;
+                }
+                
+                // Count citations
+                if (eventType === 'citation') {
+                    citationCount++;
+                }
+                
+                eventCount++;
+                updateStats();
+            } catch (e) {
+                console.error('Failed to parse event data:', e, data);
+            }
+        }
+
+        function addEvent(type, data) {
+            const eventsDiv = document.getElementById('events');
+            
+            // Remove empty state if present
+            const emptyState = eventsDiv.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+            
+            const eventDiv = document.createElement('div');
+            eventDiv.className = `event ${type}`;
+            
+            const typeSpan = document.createElement('div');
+            typeSpan.className = 'event-type';
+            typeSpan.textContent = type;
+            
+            const dataDiv = document.createElement('div');
+            dataDiv.className = 'event-data';
+            dataDiv.textContent = JSON.stringify(data, null, 2);
+            
+            eventDiv.appendChild(typeSpan);
+            eventDiv.appendChild(dataDiv);
+            
+            // Add to top of list
+            eventsDiv.insertBefore(eventDiv, eventsDiv.firstChild);
+        }
+
+        function clearAll() {
+            answer = "";
+            eventCount = 0;
+            tokenCount = 0;
+            citationCount = 0;
+            
+            document.getElementById('events').innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">💭</div>
+                    <p>No events yet. Send a message to start streaming!</p>
+                </div>
+            `;
+            document.getElementById('answerContent').textContent = '';
+            document.getElementById('answerSection').classList.remove('visible');
+            document.getElementById('duration').textContent = '0s';
+            
+            updateStatus('idle', 'Ready');
+            updateStats();
+        }
+
+        // Allow Enter to send (Shift+Enter for new line)
+        document.getElementById('message').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
