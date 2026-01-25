@@ -1,60 +1,195 @@
-"""
-Rate limiting logic.
+"""Redis-based rate limiting with sliding window algorithm."""
 
-Phase 5: Placeholder implementation - no enforcement
-Phase 6: Will implement Redis-based sliding window rate limiter
-"""
+import logging
+import time
+from typing import Optional, Tuple
 
-from app.utils.logger import get_logger
+from redis import ConnectionPool, Redis
+from redis.exceptions import RedisError
 
-logger = get_logger(__name__)
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
-def check_rate_limit(user_id: str) -> bool:
+class RedisRateLimiter:
     """
-    Check if user has exceeded rate limit.
+    Redis-based rate limiter using sliding window algorithm.
 
-    Phase 5: Always returns True (no enforcement).
-             This is a placeholder to allow testing without rate limiting.
-             Logs debug messages to verify the function is being called.
+    Uses Redis sorted sets (ZSET) to track request timestamps:
+    - Score = timestamp (for range queries)
+    - Member = unique request ID (timestamp + random)
+    - Automatically removes old entries outside the window
+    """
 
-    Phase 6: Will implement Redis-based sliding window rate limiter with:
-             - 100 requests per hour per user
-             - Burst allowance for short spikes
-             - Configurable limits per endpoint
-             - Rate limit headers (X-RateLimit-Limit, X-RateLimit-Remaining)
+    def __init__(self):
+        """Initialize Redis connection pool."""
+        self._pool: Optional[ConnectionPool] = None
+        self._redis: Optional[Redis] = None
 
-    Args:
-        user_id: User identifier to check rate limit for
+    def _get_redis(self) -> Redis:
+        """Get or create Redis client with connection pooling."""
+        if self._redis is None:
+            self._pool = ConnectionPool.from_url(
+                settings.redis_url,
+                max_connections=settings.redis_connection_pool_size,
+                decode_responses=True,
+            )
+            self._redis = Redis(connection_pool=self._pool)
+            logger.info("Redis rate limiter initialized")
+        return self._redis
+
+    def check_rate_limit(
+        self, user_id: str, endpoint: str = "default"
+    ) -> Tuple[bool, int, int]:
+        """
+        Check if user has exceeded rate limit for endpoint.
+
+        Uses sliding window algorithm:
+        1. Remove entries older than window (ZREMRANGEBYSCORE)
+        2. Count remaining entries (ZCARD)
+        3. If under limit, add new entry (ZADD)
+
+        Args:
+            user_id: User identifier
+            endpoint: API endpoint name (for per-endpoint limits)
+
+        Returns:
+            Tuple of (allowed, limit, remaining):
+            - allowed: True if request is allowed, False if rate limited
+            - limit: Total requests allowed in window
+            - remaining: Requests remaining in current window
+
+        Raises:
+            No exceptions - degrades gracefully if Redis fails
+        """
+        # If rate limiting is disabled, allow all requests
+        if not settings.rate_limit_enabled:
+            logger.debug(f"Rate limiting disabled for user {user_id}")
+            return (True, 0, 0)
+
+        try:
+            redis_client = self._get_redis()
+            key = get_rate_limit_key(user_id, endpoint)
+            limit, window = get_endpoint_limits(endpoint)
+
+            # Current timestamp
+            now = time.time()
+            window_start = now - window
+
+            # Sliding window algorithm
+            pipe = redis_client.pipeline()
+
+            # 1. Remove old entries outside window
+            pipe.zremrangebyscore(key, 0, window_start)
+
+            # 2. Count current entries in window
+            pipe.zcard(key)
+
+            # 3. Add current request timestamp
+            pipe.zadd(key, {str(now): now})
+
+            # 4. Set expiry on key (cleanup)
+            pipe.expire(key, window)
+
+            # Execute pipeline
+            results = pipe.execute()
+            current_count = results[1]  # ZCARD result
+
+            # Check if under limit (count before adding new entry)
+            allowed = current_count < limit
+            remaining = max(0, limit - current_count - 1)
+
+            if not allowed:
+                logger.warning(
+                    f"Rate limit exceeded for user {user_id} on {endpoint}: "
+                    f"{current_count}/{limit} requests in {window}s window"
+                )
+            else:
+                logger.debug(
+                    f"Rate limit check passed for user {user_id}: "
+                    f"{current_count + 1}/{limit} requests"
+                )
+
+            return (allowed, limit, remaining)
+
+        except RedisError as e:
+            # Graceful degradation: allow request if Redis fails
+            logger.error(f"Redis error during rate limit check: {e}")
+            logger.warning(
+                "Rate limiter failing open - allowing request despite Redis error"
+            )
+            return (True, 0, 0)
+        except Exception as e:
+            # Unexpected errors also fail open
+            logger.error(f"Unexpected error in rate limiter: {e}")
+            return (True, 0, 0)
+
+    def close(self):
+        """Close Redis connection pool."""
+        if self._pool:
+            self._pool.disconnect()
+            logger.info("Redis rate limiter connection pool closed")
+
+
+# Singleton instance
+_rate_limiter: Optional[RedisRateLimiter] = None
+
+
+def get_rate_limiter() -> RedisRateLimiter:
+    """
+    Get singleton rate limiter instance.
 
     Returns:
-        True if within limits (or enforcement disabled), False if exceeded
-
-    Example (Phase 6):
-        ```python
-        if not check_rate_limit(user_id):
-            raise HTTPException(
-                status_code=429,
-                detail="Rate limit exceeded. Try again later.",
-                headers={
-                    "X-RateLimit-Limit": "100",
-                    "X-RateLimit-Remaining": "0",
-                    "Retry-After": "3600"
-                }
-            )
-        ```
+        RedisRateLimiter: The global rate limiter instance.
     """
-    logger.debug(
-        "Rate limit check",
-        extra={"user_id": user_id, "enforcement": "disabled", "phase": 5}
-    )
-    return True
+    global _rate_limiter
+    if _rate_limiter is None:
+        _rate_limiter = RedisRateLimiter()
+    return _rate_limiter
 
-    # TODO: Phase 6 implementation
-    # from redis import Redis
-    # redis_client = Redis.from_url(settings.redis_url)
-    # key = f"rate_limit:{user_id}"
-    # current = redis_client.incr(key)
-    # if current == 1:
-    #     redis_client.expire(key, 3600)  # 1 hour window
-    # return current <= 100  # 100 requests per hour
+
+def get_rate_limit_key(user_id: str, endpoint: str) -> str:
+    """
+    Format Redis key for rate limiting.
+
+    Args:
+        user_id: User identifier
+        endpoint: API endpoint name
+
+    Returns:
+        str: Redis key in format "ratelimit:{user_id}:{endpoint}"
+    """
+    return f"ratelimit:{user_id}:{endpoint}"
+
+
+def get_endpoint_limits(endpoint: str) -> Tuple[int, int]:
+    """
+    Get rate limit configuration for endpoint.
+
+    Args:
+        endpoint: API endpoint name
+
+    Returns:
+        Tuple of (limit, window):
+        - limit: Maximum requests allowed
+        - window: Time window in seconds
+
+    Example endpoint limits:
+        - chat endpoints: 100 requests per hour
+        - document upload: 20 requests per hour
+        - document listing: 200 requests per hour
+        - default: 100 requests per hour
+    """
+    # Map endpoint names to settings
+    endpoint_map = {
+        "ingest": settings.rate_limit_ingest,
+        "chat": settings.rate_limit_chat,
+        "documents": settings.rate_limit_documents,
+    }
+
+    # Get endpoint-specific limit or use default
+    limit = endpoint_map.get(endpoint, settings.rate_limit_default_requests)
+    window = settings.rate_limit_default_window
+
+    return (limit, window)
