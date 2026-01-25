@@ -59,14 +59,14 @@ class ChatRequest(BaseSchema):
 class ChatResponse(BaseSchema):
     """Response schema for chat endpoint (non-streaming)."""
 
-    thread_id: UUID = Field(..., description="Thread ID for this conversation")
-    response: str = Field(..., description="Generated answer")
+    thread_id: UUID | None = Field(None, description="Thread ID for this conversation")
+    content: str = Field(..., description="Generated answer")
     sources: list[SearchResult] = Field(
         default_factory=list,
         description="Retrieved chunks used for generation"
     )
-    quality_score: float = Field(
-        ...,
+    quality_score: float | None = Field(
+        None,
         ge=0.0,
         le=1.0,
         description="Validation quality score"
@@ -75,8 +75,8 @@ class ChatResponse(BaseSchema):
         default_factory=dict,
         description="Execution metadata (timing, costs, retries, etc.)"
     )
-    validation_passed: bool = Field(...,
-                                    description="Whether quality validation passed")
+    validation_passed: bool | None = Field(None,
+                                            description="Whether quality validation passed")
 
     model_config = ConfigDict(
         json_schema_extra={
