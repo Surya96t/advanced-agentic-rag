@@ -432,18 +432,18 @@ async def stream_agent(
             # chunk can be either:
             # - ("updates", {node_name: node_update}) for node state changes
             # - ("custom", custom_data) for custom events from nodes
-            
+
             mode, data = chunk
-            
+
             if mode == "updates":
                 # Handle node state updates
                 if not data:
                     continue
-                
+
                 # Extract node name and update
                 node_name = next(iter(data.keys()))
                 node_update = data[node_name]
-                
+
                 # Emit agent_start if new node
                 if node_name != current_node:
                     if current_node:
@@ -455,7 +455,7 @@ async def stream_agent(
                                 result={},
                             ).model_dump_json()
                         }
-                    
+
                     # Start new node
                     current_node = node_name
                     yield {
@@ -465,32 +465,34 @@ async def stream_agent(
                             message=f"Executing {node_name} node",
                         ).model_dump_json()
                     }
-                
+
                 # Process specific update types
                 # Citation events from retriever
                 if node_name == "retriever" and "sources" in node_update:
                     for source in node_update["sources"]:
                         chunk_id = source.get("chunk_id")
                         document_id = source.get("document_id")
-                        
+
                         if not chunk_id or not document_id:
                             logger.warning(
                                 f"Skipping citation with missing required fields: "
                                 f"chunk_id={chunk_id}, document_id={document_id}"
                             )
                             continue
-                        
+
                         yield {
                             "event": SSEEventType.CITATION.value,
                             "data": CitationEvent(
                                 chunk_id=chunk_id,
-                                document_title=source.get("document_title", "Unknown Document"),
+                                document_title=source.get(
+                                    "document_title", "Unknown Document"),
                                 score=source.get("score", 0.0),
                                 source=source.get("source", "unknown"),
-                                preview=source.get("content", "")[:200] if source.get("content") else None,
+                                preview=source.get("content", "")[
+                                    :200] if source.get("content") else None,
                             ).model_dump_json()
                         }
-                
+
                 # Validation events
                 if node_name == "validator" and "validation_result" in node_update:
                     validation = node_update["validation_result"]
@@ -502,12 +504,12 @@ async def stream_agent(
                             issues=validation.get("issues", []),
                         ).model_dump_json()
                     }
-            
+
             elif mode == "custom":
                 # Handle custom events from nodes (e.g., token streaming)
                 if isinstance(data, dict):
                     event_type = data.get("type")
-                    
+
                     # Token streaming events from generator
                     if event_type == "token":
                         yield {

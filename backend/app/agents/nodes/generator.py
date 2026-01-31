@@ -244,7 +244,7 @@ async def generator_node(state: AgentState) -> dict:
             if chunk.content:
                 token = chunk.content
                 full_response += token
-                
+
                 # Emit token event for real-time streaming (if writer available)
                 if writer:
                     writer({

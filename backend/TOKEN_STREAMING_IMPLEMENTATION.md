@@ -9,6 +9,7 @@ Implemented **true token-by-token streaming** for the LLM generator node. Previo
 ### 1. Generator Node (`backend/app/agents/nodes/generator.py`)
 
 **Key Changes:**
+
 - Added `get_stream_writer()` from `langgraph.config` to emit custom events
 - Modified token streaming loop to emit each token via `writer()` as it arrives
 - Writer emits custom events with structure: `{"type": "token", "token": <token_text>, "model": <model_name>}`
@@ -16,6 +17,7 @@ Implemented **true token-by-token streaming** for the LLM generator node. Previo
 - Gracefully handles non-streaming mode (when `writer` is `None`)
 
 **Code Flow:**
+
 ```python
 from langgraph.config import get_stream_writer
 
@@ -26,13 +28,13 @@ async def generator_node(state: AgentState) -> dict:
         writer = get_stream_writer()
     except Exception:
         pass  # No writer available (non-streaming mode)
-    
+
     # Stream tokens from LLM
     async for chunk in llm.astream(messages):
         if chunk.content:
             token = chunk.content
             full_response += token
-            
+
             # Emit token event for real-time streaming
             if writer:
                 writer({
@@ -45,12 +47,14 @@ async def generator_node(state: AgentState) -> dict:
 ### 2. Graph Streaming (`backend/app/agents/graph.py`)
 
 **Key Changes:**
+
 - Updated `stream_agent()` to use **combined streaming modes**: `stream_mode=["updates", "custom"]`
 - Changed from `astream_events()` to `astream()` with dual modes for better performance
 - Added handler for `("custom", data)` events from nodes
 - Parses custom events and emits SSE `TokenEvent` for each token
 
 **Code Flow:**
+
 ```python
 async for chunk in graph.astream(
     initial_state,
@@ -58,11 +62,11 @@ async for chunk in graph.astream(
     stream_mode=["updates", "custom"],  # Dual mode streaming
 ):
     mode, data = chunk
-    
+
     if mode == "updates":
         # Handle node state updates (existing logic)
         ...
-    
+
     elif mode == "custom":
         # Handle custom events from nodes (NEW)
         if isinstance(data, dict) and data.get("type") == "token":
@@ -80,6 +84,7 @@ async for chunk in graph.astream(
 ### LangGraph Custom Streaming
 
 LangGraph supports **custom streaming** via `get_stream_writer()`:
+
 - Nodes can emit arbitrary data during execution
 - Use `stream_mode="custom"` or combine with other modes (`["updates", "custom"]`)
 - Writer is automatically injected when streaming is enabled
@@ -92,7 +97,7 @@ Reference: [LangGraph Custom Streaming Docs](https://docs.langchain.com/oss/pyth
 1. **Frontend** → POST `/api/v1/chat` with `stream=true`
 2. **API** → Calls `stream_agent(query)`
 3. **Graph** → Executes nodes with `stream_mode=["updates", "custom"]`
-4. **Generator Node** → 
+4. **Generator Node** →
    - Calls `llm.astream(messages)` to stream from OpenAI
    - For each token received, calls `writer({"type": "token", "token": <token>})`
 5. **Graph** → Catches custom events and yields them
@@ -123,6 +128,7 @@ uv run python scripts/test_token_streaming.py
 ```
 
 **Expected Output:**
+
 ```
 ================================================================================
 TOKEN-BY-TOKEN STREAMING TEST
@@ -167,6 +173,7 @@ cd backend
 ```
 
 **Expected Output:**
+
 ```
 [EVENT] token
 [DATA] {"token": "To", "model": "gpt-4o-mini"}
@@ -182,6 +189,7 @@ cd backend
 ### 3. Via Frontend
 
 Start the backend and frontend, then:
+
 1. Navigate to chat interface
 2. Send a message
 3. **Observe:** Response appears word-by-word as tokens stream (like ChatGPT)
@@ -189,11 +197,13 @@ Start the backend and frontend, then:
 ## Performance Impact
 
 ### Before (Full Response Streaming)
+
 - **Time to First Token:** ~10-11s (entire response ready)
 - **User Experience:** Long wait, then entire response appears
 - **Perceived Latency:** Very high (no feedback until complete)
 
 ### After (Token-by-Token Streaming)
+
 - **Time to First Token:** ~2-3s (just router + retriever + LLM first token)
 - **User Experience:** Immediate progressive feedback
 - **Perceived Latency:** Much lower (feels instant)
@@ -203,11 +213,13 @@ Start the backend and frontend, then:
 ## Backward Compatibility
 
 ✅ **Non-Streaming Mode Still Works:**
+
 - When `stream=false`, `get_stream_writer()` returns `None`
 - Generator node accumulates full response as before
 - Token counting and metadata remain accurate
 
 ✅ **All Other Nodes Unchanged:**
+
 - Router, retriever, validator nodes work exactly as before
 - Only generator node modified for token emission
 
@@ -216,10 +228,12 @@ Start the backend and frontend, then:
 ### Current SSE Handler (Needs Update)
 
 If frontend already handles `token` events:
+
 - ✅ Should work immediately (events now arrive incrementally)
 - Verify token accumulation logic handles partial responses
 
 If frontend only expects one complete response:
+
 - ⚠️ Update to accumulate tokens:
 
 ```typescript
@@ -258,6 +272,7 @@ LOG_LEVEL="DEBUG"
 ### Check Token Events
 
 Look for logs:
+
 ```
 ⏱️  GENERATOR NODE: Starting LLM response generation
   ↳ LLM generation took 5.234s
