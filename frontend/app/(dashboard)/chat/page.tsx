@@ -7,6 +7,7 @@
 
 import { MessageList } from '@/components/chat/message-list'
 import { MessageInput } from '@/components/chat/message-input'
+import { ChatEmptyState } from '@/components/chat/chat-empty-state'
 import { RateLimitBanner } from '@/components/rate-limit-banner'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -17,6 +18,8 @@ import { useRateLimitStore } from '@/stores/rate-limit-store'
 export default function ChatPage() {
   const { messages, isLoading, currentAgent, sendMessage, cancelStream } = useChat()
   const { isRateLimited } = useRateLimitStore()
+
+  const hasMessages = messages.length > 0
 
   return (
     <>
@@ -35,12 +38,16 @@ export default function ChatPage() {
 
           {/* Chat Container */}
           <Card className="flex-1 flex flex-col overflow-hidden">
-            {/* Message List */}
-            <MessageList 
-              messages={messages} 
-              currentAgent={currentAgent}
-              isLoading={isLoading}
-            />
+            {/* Message List or Empty State */}
+            {hasMessages ? (
+              <MessageList 
+                messages={messages} 
+                currentAgent={currentAgent}
+                isLoading={isLoading}
+              />
+            ) : (
+              <ChatEmptyState />
+            )}
 
             {/* Message Input */}
             <div className="border-t p-4">

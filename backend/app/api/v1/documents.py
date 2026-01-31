@@ -172,7 +172,7 @@ def delete_document(
         doc_repo = DocumentRepository(supabase)
 
         # Verify document exists and get it
-        document = doc_repo.get(document_id)
+        document = doc_repo.get_by_id(document_id, user_id)
         if not document:
             logger.warning(
                 "Document not found",
