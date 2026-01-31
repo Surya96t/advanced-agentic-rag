@@ -31,6 +31,51 @@ export function TeamSwitcher({
   const { isMobile } = useSidebar()
   const [activeTeam, setActiveTeam] = React.useState(teams[0])
 
+  // Keyboard shortcut handler for team switching
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Check if Meta (Mac) or Ctrl (PC) is pressed
+      if (!(event.metaKey || event.ctrlKey)) {
+        return
+      }
+
+      // Ignore if user is typing in an input or textarea
+      const activeElement = document.activeElement
+      if (
+        activeElement &&
+        (activeElement.tagName === "INPUT" ||
+          activeElement.tagName === "TEXTAREA")
+      ) {
+        return
+      }
+
+      // Check if a digit key (1-9) was pressed
+      const key = event.key
+      if (key >= "1" && key <= "9") {
+        const index = parseInt(key, 10) - 1
+
+        // Check if the index is within the teams array
+        if (index >= 0 && index < teams.length) {
+          event.preventDefault()
+          setActiveTeam(teams[index])
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+
+    // Cleanup listener on unmount
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [teams])
+
+  React.useEffect(() => {
+    if (teams.length > 0 && (!activeTeam || !teams.some(t => t.name === activeTeam.name))) {
+      setActiveTeam(teams[0])
+    }
+  }, [teams, activeTeam])
+
   if (!activeTeam) {
     return null
   }
@@ -57,7 +102,7 @@ export function TeamSwitcher({
           <DropdownMenuContent
             className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
             align="start"
-            side={isMobile ? "bottom" : "right"}
+            side={isMobile === true ? "bottom" : "right"}
             sideOffset={4}
           >
             <DropdownMenuLabel className="text-muted-foreground text-xs">
