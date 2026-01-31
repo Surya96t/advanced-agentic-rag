@@ -12,21 +12,7 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        {/* Upload Card */}
-        <Link
-          href="/upload"
-          className="group relative overflow-hidden rounded-lg border p-6 transition-colors hover:bg-muted/50"
-        >
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-            <Upload className="h-6 w-6 text-primary" />
-          </div>
-          <h3 className="mb-2 text-xl font-semibold">Upload Documents</h3>
-          <p className="text-sm text-muted-foreground">
-            Upload PDF, Markdown, or text files to build your knowledge base
-          </p>
-        </Link>
-
+      <div className="grid gap-6 md:grid-cols-2">
         {/* Documents Card */}
         <Link
           href="/documents"
@@ -35,9 +21,9 @@ export default function DashboardPage() {
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
             <FileText className="h-6 w-6 text-primary" />
           </div>
-          <h3 className="mb-2 text-xl font-semibold">Manage Documents</h3>
+          <h3 className="mb-2 text-xl font-semibold">Documents</h3>
           <p className="text-sm text-muted-foreground">
-            View, search, and manage your uploaded documentation
+            Upload, view, search, and manage your API documentation
           </p>
         </Link>
 
@@ -66,7 +52,7 @@ export default function DashboardPage() {
         </ol>
         <div className="mt-6">
           <Button asChild>
-            <Link href="/upload">
+            <Link href="/documents">
               <Upload className="mr-2 h-4 w-4" />
               Get Started
             </Link>
