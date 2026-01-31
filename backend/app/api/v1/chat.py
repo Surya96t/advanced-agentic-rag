@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
 from app.agents.graph import run_agent, stream_agent
-from app.api.deps import UserID, check_user_rate_limit
+from app.api.deps import UserID, RateLimitInfo
 from app.core.config import settings
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.schemas.events import SSEEventType
@@ -245,11 +245,11 @@ async def sse_generator(
     "",
     summary="Chat with the agentic RAG system",
     description="Send a message and get an AI-generated response using agentic retrieval-augmented generation",
-    dependencies=[Depends(check_user_rate_limit)],
 )
 async def chat(
     chat_request: ChatRequest,
     user_id: UserID,
+    rate_limit_info: RateLimitInfo,
     request: Request,
 ):
     """
@@ -294,6 +294,9 @@ async def chat(
     # Generate thread_id if not provided
     thread_id = chat_request.thread_id or uuid4()
 
+    # Unpack rate limit info for headers
+    limit, remaining, reset_time = rate_limit_info
+
     try:
         if chat_request.stream:
             # === STREAMING MODE (SSE) ===
@@ -314,6 +317,9 @@ async def chat(
                     "Cache-Control": "no-cache",
                     "Connection": "keep-alive",
                     "X-Accel-Buffering": "no",  # Disable nginx buffering
+                    "X-RateLimit-Limit": str(limit),
+                    "X-RateLimit-Remaining": str(remaining),
+                    "X-RateLimit-Reset": str(reset_time),
                 }
             )
 
@@ -325,7 +331,7 @@ async def chat(
             )
 
             # Run agent and wait for completion
-            response = await run_agent(
+            result = await run_agent(
                 query=chat_request.message,
                 thread_id=thread_id,
                 user_id=user_id,
@@ -336,11 +342,20 @@ async def chat(
                 extra={
                     "user_id": user_id,
                     "thread_id": str(thread_id),
-                    "response_length": len(response.content) if hasattr(response, 'content') else 0,
+                    "response_length": len(result.content) if hasattr(result, 'content') else 0,
                 }
             )
 
-            return response
+            # Return JSONResponse with rate limit headers
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                content=result.model_dump() if hasattr(result, 'model_dump') else result,
+                headers={
+                    "X-RateLimit-Limit": str(limit),
+                    "X-RateLimit-Remaining": str(remaining),
+                    "X-RateLimit-Reset": str(reset_time),
+                }
+            )
 
     except ValueError as e:
         # Validation errors

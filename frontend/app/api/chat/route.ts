@@ -103,14 +103,23 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Return SSE stream
-    return new Response(stream, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
+    // Forward rate limit headers from backend
+    const headers = new Headers({
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
     })
+    
+    const rateLimitHeaders = ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset']
+    rateLimitHeaders.forEach(headerName => {
+      const value = response.headers.get(headerName)
+      if (value) {
+        headers.set(headerName, value)
+      }
+    })
+
+    // Return SSE stream with rate limit headers
+    return new Response(stream, { headers })
   } catch (error) {
     console.error('Chat error:', error)
     return NextResponse.json(

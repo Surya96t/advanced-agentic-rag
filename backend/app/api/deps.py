@@ -45,7 +45,7 @@ async def get_current_user_id(user_id: Annotated[str, Depends(get_current_user)]
 
 async def check_user_rate_limit(
     user_id: Annotated[str, Depends(get_current_user_id)]
-) -> None:
+) -> tuple[int, int, int]:
     """
     Check if current user has exceeded rate limit using Redis sliding window.
 
@@ -57,6 +57,9 @@ async def check_user_rate_limit(
     Args:
         user_id: Current user's ID (injected via dependency)
 
+    Returns:
+        Tuple of (limit, remaining, reset_time) for adding to response headers
+
     Raises:
         HTTPException: 429 Too Many Requests if limit exceeded
 
@@ -65,10 +68,11 @@ async def check_user_rate_limit(
         @router.post("/chat")
         def chat(
             request: ChatRequest,
-            _: RateLimitCheck,  # Underscore = we don't use the return value
+            rate_limit_info: RateLimitInfo,
             user_id: UserID
         ):
             # Rate limit checked automatically before endpoint executes
+            # rate_limit_info contains (limit, remaining, reset) for headers
             return chat_service.process(request, user_id)
         ```
     """
@@ -80,10 +84,10 @@ async def check_user_rate_limit(
     allowed, limit, remaining = limiter.check_rate_limit(
         user_id, endpoint="default")
 
-    if not allowed:
-        # Calculate reset time (window end)
-        reset_time = int(time.time()) + 3600  # 1 hour from now
+    # Calculate reset time (window end)
+    reset_time = int(time.time()) + 3600  # 1 hour from now
 
+    if not allowed:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Rate limit exceeded. Please try again later.",
@@ -94,6 +98,10 @@ async def check_user_rate_limit(
                 "Retry-After": "3600",
             }
         )
+    
+    # Return rate limit info for successful requests
+    # If rate limiting is disabled (limit=0), return (0, 0, 0) to signal frontend to skip
+    return (limit, remaining, reset_time)
 
 
 # ============================================================================
@@ -106,8 +114,8 @@ async def check_user_rate_limit(
 UserID = Annotated[str, Depends(get_current_user_id)]
 """Type alias for user ID dependency injection."""
 
-RateLimitCheck = Annotated[None, Depends(check_user_rate_limit)]
-"""Type alias for rate limit check dependency injection."""
+RateLimitInfo = Annotated[tuple[int, int, int], Depends(check_user_rate_limit)]
+"""Type alias for rate limit info (limit, remaining, reset) dependency injection."""
 
 DatabaseClient = Annotated[SupabaseClient, Depends(get_db)]
 """Type alias for Supabase client dependency injection."""
