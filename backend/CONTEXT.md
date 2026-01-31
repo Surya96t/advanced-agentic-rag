@@ -9,7 +9,7 @@
 ```
 Continuing Integration Forge development - Starting Frontend Phase.
 
-DATE: January 26, 2026 (or your current date)
+DATE: January 25, 2026 (or your current date)
 LAST SESSION: January 25, 2026 (Session 8 - Phase 6 Complete + Code Review Fixes)
 CURRENT BRANCH: main (after merging PR #6: feat/auth-security)
 
@@ -43,7 +43,7 @@ PHASE 7 PLAN:
 Build production-ready Next.js frontend that integrates with the backend API.
 
 Key Features to Implement:
-1. **Next.js 15 Setup**
+1. **Next.js 16.1+ Setup**
    - App Router with TypeScript
    - Tailwind CSS for styling
    - Project structure: app/, components/, lib/, types/
@@ -110,7 +110,7 @@ RECOMMENDED TECH STACK:
 - React Query for API calls (optional)
 
 NEXT STEPS:
-1. Create new Next.js 15 project in /frontend directory
+1. Create new Next.js 16 project in /frontend directory
 2. Install dependencies (@clerk/nextjs, tailwindcss, etc.)
 3. Configure Clerk with backend-compatible settings
 4. Build authentication flow (sign-in, sign-up, protected routes)
@@ -123,10 +123,10 @@ FILES TO REFERENCE:
 - backend/docs/06_API_Contract.md - Full API specification
 - backend/test_client.html - Example SSE streaming client
 - backend/scripts/test_auth_curl.sh - Example authenticated API calls
-- backend/TODOS.md - Updated roadmap with Phase 7 details
+- backend/backend_todos.md - Updated roadmap with Phase 7 details
 
 Check backend/CONTEXT.md for complete session history.
-Check backend/TODOS.md for detailed Phase 7 requirements.
+Check backend/backend_todos.md for detailed Phase 7 requirements.
 
 Ready to build the frontend! 🚀
 ```

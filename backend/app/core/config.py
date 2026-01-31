@@ -58,6 +58,10 @@ class Settings(BaseSettings):
         repr=False,
         alias="SUPABASE_DB_PASSWORD"
     )
+    supabase_pooler_region: str = Field(
+        default="aws-1-us-east-1",
+        description="Supabase pooler region (e.g., aws-1-us-east-1, aws-0-us-west-1)"
+    )
 
     # Database Settings
     db_pool_size: int = Field(
@@ -70,7 +74,7 @@ class Settings(BaseSettings):
     # OpenAI Configuration
     openai_api_key: str = Field(..., description="OpenAI API key", repr=False)
     openai_model: str = Field(
-        default="gpt-4o", description="OpenAI model for chat")
+        default="gpt-4o-mini", description="OpenAI model for chat")
     openai_embedding_model: str = Field(
         default="text-embedding-3-small",
         description="OpenAI model for embeddings (1536 dimensions)"
@@ -332,17 +336,18 @@ class Settings(BaseSettings):
         Build PostgreSQL connection string for Supabase.
 
         Used by LangGraph checkpointer for persistent state storage.
+        Uses direct database connection (no pooler) for development reliability.
 
         Returns:
             PostgreSQL connection string in format:
-            postgresql://postgres:[password]@[host]:5432/postgres
+            postgresql://postgres.[project-ref]:[password]@[region].pooler.supabase.com:5432/postgres
 
         Example:
             >>> settings.supabase_url = "https://abc123.supabase.co"
             >>> settings.supabase_connection_string
-            'postgresql://postgres:****@abc123.pooler.supabase.com:5432/postgres'
+            'postgresql://postgres.abc123:****@aws-0-us-west-1.pooler.supabase.com:5432/postgres'
         """
-        # Parse Supabase URL to extract hostname
+        # Parse Supabase URL to extract project reference
         # Format: https://[project-ref].supabase.co
         parsed = urlparse(self.supabase_url)
         hostname = parsed.netloc or parsed.path.rstrip('/')
@@ -354,16 +359,25 @@ class Settings(BaseSettings):
             # Fallback: use hostname as-is (for custom domains or local dev)
             project_ref = hostname.rstrip('/').lower()
 
-        # Build PostgreSQL connection string
-        # Host: [project-ref].pooler.supabase.com (use pooler for connection pooling)
-        # User: postgres (default Supabase PostgreSQL user)
-        # Database: postgres (default database)
-        # Port: 5432 (default PostgreSQL port)
-        host = f"{project_ref}.pooler.supabase.com"
-        username = "postgres"
+        # Build PostgreSQL connection string using Transaction Pooler
+        # Transaction pooler is ideal for serverless/short-lived connections
+        #
+        # Connection details:
+        # - User: postgres.{project-ref} (qualified username)
+        # - Host: aws-1-us-east-1.pooler.supabase.com (regional transaction pooler)
+        # - Port: 6543 (transaction pooler port, NOT 5432)
+        # - Database: postgres (default database)
+        #
+        # CRITICAL: Use SESSION POOLER (port 5432) instead of Transaction Pooler (port 6543)
+        # Transaction pooler does NOT support prepared statements, causing "prepared statement already exists" errors
+        # Session pooler maintains connection state and supports prepared statements
+        username = f"postgres.{project_ref}"
+        # Session pooler endpoint (supports prepared statements)
+        # Region is configurable via SUPABASE_POOLER_REGION env var
+        host = f"{self.supabase_pooler_region}.pooler.supabase.com"
         password = self.supabase_db_password
         database = "postgres"
-        port = 5432
+        port = 5432  # SESSION POOLER port (was 6543 for transaction pooler)
 
         # URL-encode password in case it contains special characters
         encoded_password = quote_plus(password)

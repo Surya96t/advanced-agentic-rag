@@ -40,7 +40,7 @@
 
 ### **Documentation**
 
-- ❌ **DO NOT create documentation files** (README, docs, architecture diagrams, etc.) unless explicitly asked
+- ❌ **DO NOT create documentation files** (README, docs, architecture diagrams, implementation plans, summaries, guides etc.) unless explicitly asked
 - ✅ **DO add inline code comments** for complex logic
 - ✅ **DO add docstrings** to functions and classes
 - ✅ **DO add JSDoc/TSDoc** for TypeScript code

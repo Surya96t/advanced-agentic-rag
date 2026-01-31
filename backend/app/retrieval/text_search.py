@@ -116,6 +116,8 @@ class TextSearcher:
         try:
             # Call stored procedure for text search
             # Uses the search_chunks_by_text() function from migration 004
+            import time
+            start_db = time.time()
             logger.debug("Executing text search query")
 
             result = self.db.rpc(
@@ -127,6 +129,8 @@ class TextSearcher:
                     "ranking_function": config.text_rank_function,
                 }
             ).execute()
+            db_time = time.time() - start_db
+            logger.info(f"Text search database query took {db_time:.2f}s")
 
             # Parse results
             if not result.data:

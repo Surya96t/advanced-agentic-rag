@@ -4,24 +4,31 @@ Chat/query endpoint with SSE streaming.
 This module provides the chat endpoint that integrates with the agentic RAG system
 from Phase 4, supporting both streaming (SSE) and non-streaming responses.
 
-Phase 5: Uses hardcoded user_id for testing without authentication
-Phase 6: Will add JWT authentication
+Phase 6 Production Enhancements:
+- Rate limiting on streaming endpoint
+- Token validation and XSS protection
+- Client disconnect detection
+- Stream observability metrics
 """
 
+import asyncio
 import hashlib
 import json
+import time
 from typing import AsyncIterator
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
 from app.agents.graph import run_agent, stream_agent
-from app.api.deps import UserID
+from app.api.deps import UserID, check_user_rate_limit
 from app.core.config import settings
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.schemas.events import SSEEventType
 from app.utils.logger import get_logger
+from app.utils.metrics import StreamMetrics
+from app.utils.stream_validator import TokenValidator, validate_citation_content
 
 logger = get_logger(__name__)
 
@@ -80,6 +87,7 @@ async def sse_generator(
     query: str,
     thread_id: UUID | None,
     user_id: str,
+    request: Request,
 ) -> AsyncIterator[str]:
     """
     Generate Server-Sent Events (SSE) from the agent stream.
@@ -90,23 +98,109 @@ async def sse_generator(
 
         (blank line separator)
 
+    Features:
+    - Token validation and sanitization
+    - Citation content validation
+    - Client disconnect detection
+    - Stream observability metrics
+
     Args:
         query: User's question
         thread_id: Thread ID for conversation
         user_id: User identifier
+        request: FastAPI request object (for disconnect detection)
 
     Yields:
         Formatted SSE strings
     """
+    # Initialize metrics
+    metrics = StreamMetrics(
+        user_id=user_id,
+        thread_id=str(thread_id) if thread_id else "unknown",
+    )
+    start_time = time.time()
+    metrics.record_connection_success((time.time() - start_time) * 1000)
+
+    # Initialize validator
+    validator = TokenValidator()
+
     try:
         async for event in stream_agent(query, thread_id, user_id):
+            # Check for client disconnect
+            if await request.is_disconnected():
+                logger.info(
+                    "Client disconnected, stopping stream",
+                    extra={"user_id": user_id, "thread_id": str(thread_id)}
+                )
+                metrics.record_disconnect()
+                break
+
             # Event structure: {"event": "event_type", "data": "json_string"}
             event_type = event.get("event", "unknown")
-            event_data = event.get("data", "{}")
+            event_data_str = event.get("data", "{}")
+
+            # Parse event data for validation
+            try:
+                event_data = json.loads(event_data_str)
+            except json.JSONDecodeError:
+                logger.warning(
+                    "Failed to parse event data",
+                    extra={"user_id": user_id, "event_type": event_type}
+                )
+                continue
+
+            # Validate based on event type
+            if event_type == SSEEventType.TOKEN.value:
+                token = event_data.get("token", "")
+                is_valid, error_msg = validator.validate_token(token, user_id)
+                if not is_valid:
+                    logger.warning(
+                        "Invalid token blocked",
+                        extra={"user_id": user_id, "error": error_msg}
+                    )
+                    metrics.record_error(f"Invalid token: {error_msg}")
+                    continue
+                metrics.record_token(token)
+
+            elif event_type == SSEEventType.CITATION.value:
+                chunk_id = event_data.get("chunk_id", "")
+                doc_title = event_data.get("document_title", "")
+                content = event_data.get("preview", "")
+                is_valid, error_msg = validate_citation_content(
+                    chunk_id, doc_title, content, user_id
+                )
+                if not is_valid:
+                    logger.warning(
+                        "Invalid citation blocked",
+                        extra={"user_id": user_id, "error": error_msg}
+                    )
+                    metrics.record_error(f"Invalid citation: {error_msg}")
+                    continue
+                metrics.record_citation()
+
+            elif event_type == SSEEventType.AGENT_START.value:
+                agent = event_data.get("agent", "unknown")
+                metrics.record_agent_start(agent)
+
+            elif event_type == SSEEventType.AGENT_COMPLETE.value:
+                agent = event_data.get("agent", "unknown")
+                duration = event_data.get("duration_ms", 0)
+                metrics.record_agent_complete(agent, duration)
 
             # Format as SSE
-            sse_message = f"event: {event_type}\ndata: {event_data}\n\n"
+            sse_message = f"event: {event_type}\ndata: {event_data_str}\n\n"
             yield sse_message
+
+            # Small delay to allow disconnect detection
+            await asyncio.sleep(0)
+
+    except asyncio.CancelledError:
+        logger.info(
+            "Stream cancelled",
+            extra={"user_id": user_id, "thread_id": str(thread_id)}
+        )
+        metrics.record_cancel()
+        raise
 
     except Exception as e:
         logger.error(
@@ -114,9 +208,11 @@ async def sse_generator(
             extra={"error": str(e), "user_id": user_id},
             exc_info=True
         )
+        metrics.record_error(str(e))
+
         # Send error event
         error_event = {
-            "event": SSEEventType.AGENT_ERROR,
+            "event": SSEEventType.AGENT_ERROR.value,
             "data": json.dumps({
                 "error": str(e),
                 "message": "Stream encountered an error"
@@ -126,10 +222,18 @@ async def sse_generator(
 
         # Send end event
         end_event = {
-            "event": SSEEventType.END,
+            "event": SSEEventType.END.value,
             "data": json.dumps({"done": True, "error": True})
         }
         yield f"event: {end_event['event']}\ndata: {end_event['data']}\n\n"
+
+    finally:
+        # Finalize and log metrics
+        metrics.finalize()
+        logger.debug(
+            "Stream metrics",
+            extra={"metrics": metrics.to_dict()}
+        )
 
 
 # ============================================================================
@@ -141,10 +245,12 @@ async def sse_generator(
     "",
     summary="Chat with the agentic RAG system",
     description="Send a message and get an AI-generated response using agentic retrieval-augmented generation",
+    dependencies=[Depends(check_user_rate_limit)],
 )
 async def chat(
-    request: ChatRequest,
+    chat_request: ChatRequest,
     user_id: UserID,
+    request: Request,
 ):
     """
     Chat endpoint with support for both streaming and non-streaming responses.
@@ -179,17 +285,17 @@ async def chat(
         "Chat request received",
         extra={
             "user_id": user_id,
-            "message_hash": get_message_hash(request.message),
-            "stream": request.stream,
-            "thread_id": str(request.thread_id) if request.thread_id else "new",
+            "message_hash": get_message_hash(chat_request.message),
+            "stream": chat_request.stream,
+            "thread_id": str(chat_request.thread_id) if chat_request.thread_id else "new",
         }
     )
 
     # Generate thread_id if not provided
-    thread_id = request.thread_id or uuid4()
+    thread_id = chat_request.thread_id or uuid4()
 
     try:
-        if request.stream:
+        if chat_request.stream:
             # === STREAMING MODE (SSE) ===
             logger.debug(
                 "Starting SSE stream",
@@ -198,9 +304,10 @@ async def chat(
 
             return StreamingResponse(
                 sse_generator(
-                    query=request.message,
+                    query=chat_request.message,
                     thread_id=thread_id,
                     user_id=user_id,
+                    request=request,
                 ),
                 media_type="text/event-stream",
                 headers={
@@ -219,7 +326,7 @@ async def chat(
 
             # Run agent and wait for completion
             response = await run_agent(
-                query=request.message,
+                query=chat_request.message,
                 thread_id=thread_id,
                 user_id=user_id,
             )

@@ -6,6 +6,7 @@ and routes to the appropriate next node (retriever or query expander).
 """
 
 import re
+import time
 from typing import Literal
 
 from langgraph.types import Command
@@ -123,6 +124,9 @@ def router_node(state: AgentState) -> Command[Literal["retriever", "query_expand
         >>> cmd.update["query_complexity"]
         'simple'
     """
+    start_time = time.time()
+    logger.info("⏱️  ROUTER NODE: Starting query complexity analysis")
+
     # Extract query from state (either from original_query or last message)
     query: str = ""
 
@@ -175,6 +179,10 @@ def router_node(state: AgentState) -> Command[Literal["retriever", "query_expand
     else:
         next_node = "query_expander"
         logger.info(f"Routing to query_expander ({complexity} query)")
+
+    elapsed_time = time.time() - start_time
+    logger.info(
+        f"⏱️  ROUTER NODE: Completed in {elapsed_time:.3f}s | Complexity: {complexity} | Next: {next_node}")
 
     # Return Command with state update and routing
     return Command(
