@@ -19,7 +19,7 @@ export function CitationBadge({ citation }: CitationBadgeProps) {
     >
       <FileText className="h-3 w-3" />
       <span>{citation.document_title}</span>
-      {citation.similarity_score && (
+      {citation.similarity_score != null && (
         <span className="text-muted-foreground">
           ({Math.round(citation.similarity_score * 100)}%)
         </span>

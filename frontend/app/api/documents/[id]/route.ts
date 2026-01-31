@@ -20,11 +20,16 @@ export async function DELETE(
       method: 'DELETE',
     })
 
-    const data = await response.json()
-
     if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
       return NextResponse.json(data, { status: response.status })
     }
+
+    // Handle 204 No Content or empty responses
+    const text = await response.text()
+    const data = text ? JSON.parse(text) : { success: true }
+
+    return NextResponse.json(data)
 
     return NextResponse.json(data)
   } catch (error) {

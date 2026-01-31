@@ -167,13 +167,181 @@ All frontend event types match backend schemas defined in `/backend/app/schemas/
 - ✅ EndEvent
 - ✅ ErrorEvent
 
+## Critical Production Features (IMPLEMENTED)
+
+### 1. **SSE Retry Logic** ✅
+
+- Client-side reconnection with exponential backoff
+- Configurable max retries (default: 3)
+- Base delay: 1000ms, max delay: 10000ms
+- Jitter added to prevent thundering herd
+- User notifications on connection loss and reconnect
+- **File**: `frontend/lib/sse-client.ts`
+
+### 2. **Stream Cancellation** ✅
+
+- AbortController-based cancellation
+- User can stop LLM generation mid-stream
+- Server detects client disconnect via `request.is_disconnected()`
+- Graceful cleanup of resources
+- **Files**: `frontend/hooks/useChat.ts`, `frontend/app/(dashboard)/chat/page.tsx`
+
+### 3. **XSS Sanitization** ✅
+
+- Client-side token validation before display
+- Dangerous pattern detection (scripts, event handlers, etc.)
+- Citation content validation
+- Blocks malicious content with security warnings
+- **File**: `frontend/lib/sanitizer.ts`
+
+### 4. **Token Validation** ✅
+
+- Server-side token length limits (max 1000 chars per token)
+- Total content length limits (max 50000 chars)
+- Dangerous pattern detection on server
+- Citation content validation (max 500 char title, 5000 char content)
+- **File**: `backend/app/utils/stream_validator.py`
+
+### 5. **Rate Limiting** ✅
+
+- Applied to streaming chat endpoint via `RateLimitCheck` dependency
+- Uses existing Redis-based rate limiter
+- Configurable per-endpoint limits
+- **File**: `backend/app/api/v1/chat.py`
+
+### 6. **Stream Observability** ✅
+
+- Comprehensive metrics tracking:
+  - Connection success/failure rates
+  - Stream latency measurements
+  - Token throughput (tokens/second)
+  - Agent execution durations
+  - Error rates and types
+  - Disconnect/cancellation tracking
+- Metrics logged on stream completion
+- **File**: `backend/app/utils/metrics.py`
+
+## Implementation Details
+
+### Frontend Changes:
+
+1. **`frontend/lib/sse-client.ts`** - NEW
+   - Robust SSE client with retry logic
+   - Exponential backoff with jitter
+   - AbortController support
+   - Connection metrics tracking
+
+2. **`frontend/lib/sanitizer.ts`** - NEW
+   - XSS protection utilities
+   - Token and citation validation
+   - Dangerous pattern detection
+   - HTML entity escaping
+
+3. **`frontend/hooks/useChat.ts`** - UPDATED
+   - Uses new SSE client instead of raw fetch
+   - Implements cancellation with AbortController
+   - Sanitizes tokens before display
+   - Validates citations for safety
+   - Exposes `cancelStream()` method
+
+4. **`frontend/app/(dashboard)/chat/page.tsx`** - UPDATED
+   - Added stop button for cancellation
+   - Shows only when stream is active
+   - Calls `cancelStream()` on click
+
+### Backend Changes:
+
+1. **`backend/app/api/v1/chat.py`** - UPDATED
+   - Added rate limiting dependency
+   - Client disconnect detection via `request.is_disconnected()`
+   - Token validation during streaming
+   - Citation content validation
+   - Stream metrics collection and logging
+   - Graceful error handling
+
+2. **`backend/app/utils/stream_validator.py`** - NEW
+   - `TokenValidator` class for per-token validation
+   - Token length limits
+   - Total content length limits
+   - Dangerous pattern detection
+   - Citation validation function
+
+3. **`backend/app/utils/metrics.py`** - NEW
+   - `StreamMetrics` dataclass
+   - Tracks connection, streaming, and agent metrics
+   - Comprehensive logging on completion
+   - Export to dict for observability systems
+
+## Testing
+
+To test all production features:
+
+1. **Start backend**: `cd backend && uvicorn app.main:app --reload`
+2. **Start frontend**: `cd frontend && npm run dev`
+3. **Navigate to `/chat`**
+
+### Test Scenarios:
+
+#### Retry Logic:
+
+1. Kill backend mid-stream
+2. Observe "Connection lost, retrying..." toast
+3. Restart backend
+4. Watch automatic reconnection
+
+#### Cancellation:
+
+1. Send a message
+2. Click stop button while streaming
+3. Observe "Generation cancelled" toast
+4. Check server logs for disconnect message
+
+#### XSS Protection:
+
+1. (Backend) Inject malicious token with `<script>alert('xss')</script>`
+2. Observe blocked content in console
+3. Verify UI shows "[content blocked]"
+
+#### Rate Limiting:
+
+1. Send multiple messages rapidly
+2. Observe 429 errors after limit
+3. Wait for rate limit window to reset
+
+#### Metrics:
+
+1. Send a complete message
+2. Check backend logs for stream metrics:
+   - `tokens_sent`, `citations_sent`, `events_sent`
+   - `agents_executed`, `agent_durations_ms`
+   - `tokens_per_second`, `connection_latency_ms`
+
+## Security Considerations
+
+- ✅ **Input Validation**: All streaming content validated server-side
+- ✅ **XSS Protection**: Client and server-side sanitization
+- ✅ **Rate Limiting**: Prevents abuse of streaming endpoint
+- ✅ **Resource Limits**: Token and content length limits prevent DoS
+- ✅ **Disconnect Detection**: Prevents resource leaks from abandoned streams
+- ✅ **Error Handling**: No sensitive data leaked in error messages
+
+## Performance Metrics
+
+Expected metrics for typical queries:
+
+- **Connection Latency**: < 100ms
+- **First Token**: < 2 seconds
+- **Tokens/Second**: 20-50 (depending on LLM)
+- **Total Events**: 50-200 per query
+- **Stream Duration**: 5-30 seconds
+
 ## Next Steps (Optional Enhancements)
 
-1. **Add retry logic** - Reconnect SSE stream on network errors
-2. **Add streaming progress bar** - Show % complete based on agent stages
-3. **Add citation previews** - Expand citation content on hover
-4. **Add message editing** - Allow users to edit and resend messages
-5. **Add thread history** - Load previous conversations by thread_id
-6. **Add streaming cancellation** - Allow users to stop generation mid-stream
-7. **Add typing indicator** - Animate "..." while waiting for first token
-8. **Add token count display** - Show tokens used in metadata
+1. **Add streaming progress bar** - Show % complete based on agent stages
+2. **Add citation previews** - Expand citation content on hover
+3. **Add message editing** - Allow users to edit and resend messages
+4. **Add thread history** - Load previous conversations by thread_id
+5. **Add typing indicator** - Animate "..." while waiting for first token
+6. **Add token count display** - Show tokens used in metadata
+7. **Add stream analytics dashboard** - Visualize metrics over time
+8. **Add A/B testing** - Compare different streaming strategies

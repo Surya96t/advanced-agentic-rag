@@ -69,6 +69,7 @@ export function MessageInput({
         disabled={disabled || !message.trim()}
         size="icon"
         className="h-15 w-15 shrink-0"
+        aria-label={disabled ? "Sending message" : "Send message"}
       >
         {disabled ? (
           <Loader2 className="h-5 w-5 animate-spin" />

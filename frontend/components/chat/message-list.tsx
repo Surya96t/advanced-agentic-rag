@@ -19,6 +19,7 @@ interface MessageListProps {
 
 export function MessageList({ messages, currentAgent, isLoading }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
+  const viewportRef = useRef<HTMLDivElement>(null)
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
 
   // Auto-scroll to bottom when new messages arrive (only if user hasn't manually scrolled up)
@@ -28,14 +29,27 @@ export function MessageList({ messages, currentAgent, isLoading }: MessageListPr
     }
   }, [messages, currentAgent, isLoading, shouldAutoScroll])
 
-  // Detect if user has scrolled up
-  const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
-    const element = event.currentTarget
+  // Detect if user has scrolled up from the ScrollArea viewport
+  const handleScroll = () => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+
+    // Calculate if user is at the bottom of the scroll area
     const isAtBottom = Math.abs(
-      element.scrollHeight - element.clientHeight - element.scrollTop
+      viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop
     ) < 10
+    
     setShouldAutoScroll(isAtBottom)
   }
+
+  // Attach scroll listener to viewport after mount
+  useEffect(() => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+
+    viewport.addEventListener('scroll', handleScroll)
+    return () => viewport.removeEventListener('scroll', handleScroll)
+  }, []) // handleScroll is stable, no need to include it
 
   if (messages.length === 0) {
     return (
@@ -52,7 +66,7 @@ export function MessageList({ messages, currentAgent, isLoading }: MessageListPr
 
   return (
     <div className="flex-1 overflow-hidden relative">
-      <ScrollArea className="h-full px-4" onScrollCapture={handleScroll}>
+      <ScrollArea className="h-full px-4" ref={viewportRef}>
         <div className="py-4 space-y-4">
           {messages.map((message) => (
             <MessageBubble key={message.id} message={message} />

@@ -25,6 +25,14 @@ interface BackendDocumentListResponse {
  */
 export async function GET() {
   try {
+    const { userId } = await auth()
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
     const response = await apiJSON('/api/v1/documents') as BackendDocumentListResponse
     
     // Transform backend response to match frontend expectations

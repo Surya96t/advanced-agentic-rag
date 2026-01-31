@@ -58,6 +58,10 @@ class Settings(BaseSettings):
         repr=False,
         alias="SUPABASE_DB_PASSWORD"
     )
+    supabase_pooler_region: str = Field(
+        default="aws-1-us-east-1",
+        description="Supabase pooler region (e.g., aws-1-us-east-1, aws-0-us-west-1)"
+    )
 
     # Database Settings
     db_pool_size: int = Field(
@@ -369,7 +373,8 @@ class Settings(BaseSettings):
         # Session pooler maintains connection state and supports prepared statements
         username = f"postgres.{project_ref}"
         # Session pooler endpoint (supports prepared statements)
-        host = "aws-1-us-east-1.pooler.supabase.com"
+        # Region is configurable via SUPABASE_POOLER_REGION env var
+        host = f"{self.supabase_pooler_region}.pooler.supabase.com"
         password = self.supabase_db_password
         database = "postgres"
         port = 5432  # SESSION POOLER port (was 6543 for transaction pooler)

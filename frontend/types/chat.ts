@@ -111,6 +111,8 @@ export interface ErrorEvent {
  * Union type for all streaming events
  */
 export type StreamEvent =
+  | { type: 'start'; data: StartEvent }
+  | { type: 'token'; data: TokenEvent }
   | { type: 'citation'; data: CitationEvent }
   | { type: 'agent_start'; data: AgentStartEvent }
   | { type: 'agent_complete'; data: AgentCompleteEvent }

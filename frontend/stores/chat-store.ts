@@ -128,6 +128,6 @@ export const useChatStore = create<ChatState>((set) => ({
     set({ error }),
 
   clearMessages: () =>
-    set({ messages: [], error: null, streamingMessageId: null, currentAgent: null }),
+    set({ messages: [], error: null, streamingMessageId: null, currentAgent: null, isLoading: false }),
 }))
 

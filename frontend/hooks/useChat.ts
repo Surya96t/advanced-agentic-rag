@@ -1,14 +1,16 @@
 /**
  * Custom chat hook
- * Handles message sending and SSE streaming
+ * Handles message sending and SSE streaming with retry and cancellation
  */
 
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import { useChatStore } from '@/stores/chat-store'
-import { parseSSEStream, parseEventData } from '@/lib/sse-parser'
+import { SSEClient } from '@/lib/sse-client'
+import { parseEventData } from '@/lib/sse-parser'
+import { sanitizeToken, isCitationSafe } from '@/lib/sanitizer'
 import type {
   TokenEvent,
   CitationEvent,
@@ -37,6 +39,10 @@ export function useChat() {
     clearMessages,
   } = useChatStore()
 
+  // AbortController for cancellation
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const sseClientRef = useRef<SSEClient | null>(null)
+
   const sendMessage = useCallback(
     async (content: string) => {
       if (!content.trim() || isLoading) return
@@ -47,55 +53,26 @@ export function useChat() {
         setLoading(true)
         setError(null)
 
-        // Call BFF chat endpoint (streaming)
-        const response = await fetch('/api/chat', {
+        // Create AbortController for cancellation
+        abortControllerRef.current = new AbortController()
+
+        // Track streaming state
+        let messageStarted = false
+
+        // Create SSE client with retry logic
+        const client = new SSEClient({
+          url: '/api/chat',
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            message: content,
-          }),
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.error || 'Failed to send message')
-        }
-
-        // Check if response is streaming
-        const contentType = response.headers.get('content-type')
-        if (!contentType?.includes('text/event-stream')) {
-          // Non-streaming response (fallback)
-          const data = await response.json()
-          if (data.content) {
-            startStreamingMessage()
-            appendToStreamingMessage(data.content)
-            if (data.sources) {
-              data.sources.forEach((source: CitationEvent) => {
-                // Convert to Citation format
-                addCitationToStreamingMessage({
-                  document_id: source.chunk_id.split('_')[0] || 'unknown',
-                  document_title: source.document_title,
-                  chunk_id: source.chunk_id,
-                  content: source.content,
-                  similarity_score: source.similarity_score,
-                })
-              })
-            }
-            finishStreamingMessage()
-          }
-          return
-        }
-
-        // Start streaming message in UI
-        let messageStarted = false
-
-        // Parse SSE stream
-        await parseSSEStream(
-          response,
-          (event) => {
-            // Parse event data
+          body: { message: content },
+          maxRetries: 3,
+          baseDelay: 1000,
+          maxDelay: 10000,
+          signal: abortControllerRef.current.signal,
+          onEvent: (event) => {
+            // Parse and handle event
             switch (event.event) {
               case 'agent_start': {
                 const data = parseEventData<AgentStartEvent>(event)
@@ -114,12 +91,15 @@ export function useChat() {
               case 'token': {
                 const data = parseEventData<TokenEvent>(event)
                 if (data) {
+                  // Sanitize token before display
+                  const sanitizedToken = sanitizeToken(data.token)
+                  
                   // Ensure message is started
                   if (!messageStarted) {
                     startStreamingMessage()
                     messageStarted = true
                   }
-                  appendToStreamingMessage(data.token)
+                  appendToStreamingMessage(sanitizedToken)
                 }
                 break
               }
@@ -127,6 +107,12 @@ export function useChat() {
               case 'citation': {
                 const data = parseEventData<CitationEvent>(event)
                 if (data) {
+                  // Validate citation content
+                  if (!isCitationSafe(data)) {
+                    console.warn('[Security] Blocked unsafe citation')
+                    return
+                  }
+
                   // Ensure message is started
                   if (!messageStarted) {
                     startStreamingMessage()
@@ -134,7 +120,7 @@ export function useChat() {
                   }
                   // Convert CitationEvent to Citation format
                   addCitationToStreamingMessage({
-                    document_id: data.chunk_id.split('_')[0] || 'unknown',
+                    document_id: data.chunk_id?.split('_')[0] || 'unknown',
                     document_title: data.document_title,
                     chunk_id: data.chunk_id,
                     content: data.preview || '',
@@ -177,7 +163,7 @@ export function useChat() {
                 const data = parseEventData<EndEvent>(event)
                 if (data) {
                   console.log('[SSE] Chat complete:', data.success ? 'success' : 'failed')
-                  // Ensure message is started (in case no agents ran)
+                  // Ensure message is started
                   if (!messageStarted) {
                     startStreamingMessage()
                     messageStarted = true
@@ -205,19 +191,42 @@ export function useChat() {
                 console.log('[SSE] Unknown event:', event.event)
             }
           },
-          (error) => {
-            console.error('[SSE] Stream error:', error)
-            throw error
-          }
-        )
+          onError: (error, retryCount) => {
+            console.error(`[SSE] Connection error (attempt ${retryCount}):`, error.message)
+            if (retryCount === 1) {
+              toast.error('Connection lost, retrying...')
+            }
+          },
+          onReconnect: (retryCount) => {
+            console.log(`[SSE] Reconnecting (attempt ${retryCount})...`)
+            toast.info('Reconnecting...')
+          },
+        })
+
+        sseClientRef.current = client
+
+        // Connect and stream
+        await client.connect()
+
+        // Log metrics
+        const metrics = client.getMetrics()
+        console.log('[SSE] Stream metrics:', metrics)
+
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to send message'
-        setError(errorMessage)
-        toast.error(errorMessage)
+        
+        // Don't show error toast for user cancellation
+        if (!errorMessage.includes('cancelled') && !errorMessage.includes('aborted')) {
+          setError(errorMessage)
+          toast.error(errorMessage)
+        }
+        
         finishStreamingMessage()
       } finally {
         setLoading(false)
         setCurrentAgent(null)
+        abortControllerRef.current = null
+        sseClientRef.current = null
       }
     },
     [
@@ -233,12 +242,28 @@ export function useChat() {
     ]
   )
 
+  /**
+   * Cancel current streaming request
+   */
+  const cancelStream = useCallback(() => {
+    if (abortControllerRef.current) {
+      console.log('[SSE] Cancelling stream')
+      abortControllerRef.current.abort()
+      sseClientRef.current?.cancel()
+      toast.info('Generation cancelled')
+      finishStreamingMessage()
+      setLoading(false)
+      setCurrentAgent(null)
+    }
+  }, [finishStreamingMessage, setLoading, setCurrentAgent])
+
   return {
     messages,
     isLoading,
     error,
     currentAgent,
     sendMessage,
+    cancelStream,
     clearMessages,
   }
 }

@@ -494,17 +494,17 @@ async def stream_agent(
                         }
 
                 # Validation events
-                if node_name == "validator" and "validation_result" in node_update:
-                    validation = node_update["validation_result"]
-                    yield {
-                        "event": SSEEventType.VALIDATION.value,
-                        "data": ValidationEvent(
-                            passed=validation.get("passed", False),
-                            score=validation.get("score", 0.0),
-                            issues=validation.get("issues", []),
-                        ).model_dump_json()
-                    }
-
+            # Validation events
+            if node_name == "validator" and "validation_result" in node_update:
+                validation = node_update["validation_result"]
+                yield {
+                    "event": SSEEventType.VALIDATION.value,
+                    "data": ValidationEvent(
+                        passed=validation.get("passed", False),
+                        score=validation.get("score", 0.0),
+                        issues=validation.get("issues", []),
+                    ).model_dump_json()
+                }
             elif mode == "custom":
                 # Handle custom events from nodes (e.g., token streaming)
                 if isinstance(data, dict):

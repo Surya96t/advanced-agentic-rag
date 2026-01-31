@@ -53,22 +53,24 @@ def sync_user(request: UserSyncRequest) -> UserSyncResponse:
     """
     logger.info(
         "Syncing user to database",
-        extra={"user_id": request.user_id, "email": request.email}
+        extra={"user_id": request.user_id}
     )
 
     try:
         supabase = get_db()
 
-        # Try to insert user (upsert will update if exists)
+        # Check if user already exists
+        existing_user = supabase.table("users").select(
+            "id").eq("id", request.user_id).execute()
+        created = len(existing_user.data or []) == 0
+
+        # Upsert user (insert if new, update if exists)
         # Note: 'id' is the column name in the users table (not 'user_id')
         result = supabase.table("users").upsert({
             "id": request.user_id,
             "email": request.email,
             "full_name": request.full_name,
         }, on_conflict="id").execute()
-
-        # Check if it was an insert or update
-        created = len(result.data) > 0
 
         logger.info(
             "User synced successfully",

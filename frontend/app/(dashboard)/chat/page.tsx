@@ -8,10 +8,12 @@
 import { MessageList } from '@/components/chat/message-list'
 import { MessageInput } from '@/components/chat/message-input'
 import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { StopCircle } from 'lucide-react'
 import { useChat } from '@/hooks/useChat'
 
 export default function ChatPage() {
-  const { messages, isLoading, currentAgent, sendMessage } = useChat()
+  const { messages, isLoading, currentAgent, sendMessage, cancelStream } = useChat()
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-6xl h-[calc(100vh-8rem)]">
@@ -35,11 +37,26 @@ export default function ChatPage() {
 
           {/* Message Input */}
           <div className="border-t p-4">
-            <MessageInput
-              onSend={sendMessage}
-              disabled={isLoading}
-              placeholder="Ask a question about your documentation..."
-            />
+            <div className="flex gap-2 items-end">
+              <div className="flex-1">
+                <MessageInput
+                  onSend={sendMessage}
+                  disabled={isLoading}
+                  placeholder="Ask a question about your documentation..."
+                />
+              </div>
+              {isLoading && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={cancelStream}
+                  title="Stop generation"
+                  className="shrink-0"
+                >
+                  <StopCircle className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </div>
         </Card>
       </div>

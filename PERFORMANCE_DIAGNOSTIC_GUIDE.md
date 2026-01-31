@@ -39,6 +39,7 @@ uv run python scripts/test_performance.py
 ```
 
 This will:
+
 - Run a test query through the full pipeline
 - Display detailed timing logs for each node
 - Show a results summary with metrics
@@ -56,10 +57,12 @@ cd frontend
 pnpm dev
 
 # Terminal 3: Monitor logs
+# From project root directory:
 tail -f backend/server.log | grep -E "(⏱️|🚀|📚|✍️|✅|⚠️|❌)"
 ```
 
 Then:
+
 1. Open http://localhost:3000
 2. Go to Chat page
 3. Send a query
@@ -186,20 +189,20 @@ Total:          11.32s
 
 After running the test, answer these questions:
 
-1. **How long did the RETRIEVER NODE take?** _____s
+1. **How long did the RETRIEVER NODE take?** **\_**s
    - If >15s: Multiple queries + slow searches
    - If 5-10s: Moderate (2-3 queries)
    - If <5s: Fast (1 query or very fast DB)
 
-2. **How many queries were searched?** _____
+2. **How many queries were searched?** **\_**
    - If 3: Query was classified as "complex" → decomposed
    - If 1: Query was classified as "simple" or "ambiguous"
 
-3. **Embedding generation time per query?** _____s
+3. **Embedding generation time per query?** **\_**s
    - If >2s: OpenAI API is slow (network latency)
    - If <1s: Normal
 
-4. **Database search time per query?** _____s
+4. **Database search time per query?** **\_**s
    - If >2s: Supabase slow (check index usage)
    - If <1s: Normal
 
@@ -212,15 +215,19 @@ After running the test, answer these questions:
 ## 💡 Next Steps Based on Results
 
 ### **If Retriever >15s:**
+
 → Proceed with **Phase 1 Optimizations** in PERFORMANCE_OPTIMIZATION_PLAN.md:
+
 - Reduce `top_k` from 10 to 5
 - Enable parallel vector + text search
 - Lower validator threshold
 
 ### **If Validator Retries:**
+
 → Adjust validator threshold from 0.5 to 0.4
 
 ### **If Query Expansion Always 3 Queries:**
+
 → Reduce to 2 queries or skip expansion for simple queries
 
 ---
@@ -229,10 +236,10 @@ After running the test, answer these questions:
 
 After running the test, please share:
 
-1. **Total time:** _____s
-2. **Retriever time:** _____s
-3. **Number of queries:** _____
-4. **Retry count:** _____
+1. **Total time:** **\_**s
+2. **Retriever time:** **\_**s
+3. **Number of queries:** **\_**
+4. **Retry count:** **\_**
 5. **Screenshot or paste of timing logs**
 
 Then we can determine the best optimization strategy! 🚀

@@ -39,7 +39,12 @@ export async function POST(request: NextRequest) {
     })
 
     if (!response.ok) {
-      const error = await response.json()
+      let error
+      try {
+        error = await response.json()
+      } catch {
+        error = { error: `Backend error: ${response.statusText}` }
+      }
       return NextResponse.json(error, { status: response.status })
     }
 

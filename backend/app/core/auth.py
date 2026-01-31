@@ -111,16 +111,17 @@ def verify_jwt_token(token: str) -> dict:
     except JWTError as e:
         logger.error(f"JWT verification failed: {e}")
         logger.error(f"Expected issuer: {settings.clerk_issuer_url}")
-        # Try to decode without verification to see actual issuer
+        # Try to decode without verification to see actual issuer (for debugging issuer mismatches)
         try:
             import json
             import base64
             payload_b64 = token.split('.')[1]
             # Add padding if needed
             payload_b64 += '=' * (4 - len(payload_b64) % 4)
-            payload_decoded = json.loads(base64.b64decode(payload_b64))
-            logger.error(f"Actual token issuer: {payload_decoded.get('iss')}")
-            logger.error(f"Token claims: {payload_decoded}")
+            payload_decoded = json.loads(base64.urlsafe_b64decode(payload_b64))
+            # Only log issuer for debugging - do NOT log full claims (may contain PII)
+            actual_issuer = payload_decoded.get('iss', 'unknown')
+            logger.error(f"Actual token issuer: {actual_issuer}")
         except Exception as decode_error:
             logger.error(
                 f"Could not decode token for debugging: {decode_error}")

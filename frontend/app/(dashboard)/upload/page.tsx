@@ -8,7 +8,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 
+// Generate a simple unique ID
+const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
 interface UploadingFile {
+  fileId: string;
   file: File;
   progress: number;
   status: "pending" | "uploading" | "success" | "error";
@@ -37,11 +41,11 @@ export default function UploadPage() {
     e.stopPropagation();
   }, []);
 
-  const uploadFile = async (file: File, index: number) => {
+  const uploadFile = async (file: File, fileId: string) => {
     try {
       // Update status to uploading
       setUploadingFiles((prev) =>
-        prev.map((f, i) => (i === index ? { ...f, status: "uploading" as const } : f))
+        prev.map((f) => (f.fileId === fileId ? { ...f, status: "uploading" as const } : f))
       );
 
       const formData = new FormData();
@@ -60,15 +64,15 @@ export default function UploadPage() {
       // Simulate progress (since we don't have real progress tracking)
       for (let progress = 0; progress <= 100; progress += 20) {
         setUploadingFiles((prev) =>
-          prev.map((f, i) => (i === index ? { ...f, progress } : f))
+          prev.map((f) => (f.fileId === fileId ? { ...f, progress } : f))
         );
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
 
       // Mark as success
       setUploadingFiles((prev) =>
-        prev.map((f, i) =>
-          i === index ? { ...f, status: "success" as const, progress: 100 } : f
+        prev.map((f) =>
+          f.fileId === fileId ? { ...f, status: "success" as const, progress: 100 } : f
         )
       );
 
@@ -76,8 +80,8 @@ export default function UploadPage() {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Upload failed";
       setUploadingFiles((prev) =>
-        prev.map((f, i) =>
-          i === index ? { ...f, status: "error" as const, error: errorMessage } : f
+        prev.map((f) =>
+          f.fileId === fileId ? { ...f, status: "error" as const, error: errorMessage } : f
         )
       );
       toast.error(`Failed to upload ${file.name}: ${errorMessage}`);
@@ -85,20 +89,28 @@ export default function UploadPage() {
   };
 
   const handleFiles = useCallback(async (files: File[]) => {
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
     // Validate file types (txt, md, pdf)
     const validFiles = files.filter((file) => {
       const ext = file.name.split(".").pop()?.toLowerCase();
-      return ext === "txt" || ext === "md" || ext === "pdf";
+      const validExt = ext === "txt" || ext === "md" || ext === "pdf";
+      const validSize = file.size <= MAX_FILE_SIZE;
+      return validExt && validSize;
     });
 
-    if (validFiles.length !== files.length) {
-      toast.error("Some files were rejected. Only .txt, .md, and .pdf files are allowed.");
+    const rejectedCount = files.length - validFiles.length;
+    if (rejectedCount > 0) {
+      toast.error(
+        "Some files were rejected. Only .txt, .md, and .pdf files under 10MB are allowed."
+      );
     }
 
     if (validFiles.length === 0) return;
 
-    // Initialize uploading state
+    // Initialize uploading state with unique IDs
     const newUploadingFiles: UploadingFile[] = validFiles.map((file) => ({
+      fileId: generateId(),
       file,
       progress: 0,
       status: "pending",
@@ -106,11 +118,11 @@ export default function UploadPage() {
 
     setUploadingFiles((prev) => [...prev, ...newUploadingFiles]);
 
-    // Upload each file
-    for (let i = 0; i < validFiles.length; i++) {
-      await uploadFile(validFiles[i], uploadingFiles.length + i);
+    // Upload each file using its unique ID
+    for (const uploadingFile of newUploadingFiles) {
+      await uploadFile(uploadingFile.file, uploadingFile.fileId);
     }
-  }, [uploadingFiles.length]);
+  }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -128,8 +140,8 @@ export default function UploadPage() {
     }
   }, [handleFiles]);
 
-  const removeFile = (index: number) => {
-    setUploadingFiles((prev) => prev.filter((_, i) => i !== index));
+  const removeFile = (fileId: string) => {
+    setUploadingFiles((prev) => prev.filter((f) => f.fileId !== fileId));
   };
 
   const clearCompleted = () => {
@@ -212,8 +224,8 @@ export default function UploadPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {uploadingFiles.map((upload, index) => (
-                <div key={index} className="flex items-start gap-3 p-3 border rounded-lg">
+              {uploadingFiles.map((upload) => (
+                <div key={upload.fileId} className="flex items-start gap-3 p-3 border rounded-lg">
                   <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-2">
@@ -222,7 +234,7 @@ export default function UploadPage() {
                         variant="ghost"
                         size="icon"
                         className="h-6 w-6"
-                        onClick={() => removeFile(index)}
+                        onClick={() => removeFile(upload.fileId)}
                       >
                         <X className="h-4 w-4" />
                       </Button>

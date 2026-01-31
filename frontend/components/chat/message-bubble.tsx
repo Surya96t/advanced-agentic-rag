@@ -77,10 +77,16 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                     <li className="mb-1">{children}</li>
                   ),
                   code: ({ className, children, ...props }) => {
-                    const match = /language-(\w+)/.exec(className || '')
-                    const isInline = !match
+                    // Determine if this is inline code or block code
+                    // Multiple heuristics for robust detection:
+                    // 1. If className contains 'language-*', it's a fenced code block
+                    // 2. If children contains newlines, it's likely block code
+                    // 3. Otherwise, treat as inline code
+                    const hasLanguageClass = /language-(\w+)/.test(className || '')
+                    const hasNewlines = children?.toString().includes('\n')
+                    const isInlineCode = !hasLanguageClass && !hasNewlines
                     
-                    if (isInline) {
+                    if (isInlineCode) {
                       return (
                         <code
                           className="bg-muted px-1 py-0.5 rounded text-sm font-mono"
@@ -91,6 +97,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                       )
                     }
                     
+                    // Block code (inside <pre> with syntax highlighting)
                     return (
                       <code className={className} {...props}>
                         {children}
