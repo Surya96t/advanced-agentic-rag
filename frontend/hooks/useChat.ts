@@ -8,6 +8,7 @@
 import { useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import { useChatStore } from '@/stores/chat-store'
+import { useRateLimitStore } from '@/stores/rate-limit-store'
 import { SSEClient } from '@/lib/sse-client'
 import { parseEventData } from '@/lib/sse-parser'
 import { sanitizeToken, isCitationSafe } from '@/lib/sanitizer'
@@ -38,6 +39,8 @@ export function useChat() {
     setError,
     clearMessages,
   } = useChatStore()
+
+  const { setRateLimit } = useRateLimitStore()
 
   // AbortController for cancellation
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -71,6 +74,42 @@ export function useChat() {
           baseDelay: 1000,
           maxDelay: 10000,
           signal: abortControllerRef.current.signal,
+          onHeaders: (headers) => {
+            // Parse and store rate limit headers
+            const limit = headers.get('X-RateLimit-Limit')
+            const remaining = headers.get('X-RateLimit-Remaining')
+            const reset = headers.get('X-RateLimit-Reset')
+
+            console.log('[Rate Limit] Headers received:', {
+              limit,
+              remaining,
+              reset,
+              resetDate: reset ? new Date(parseInt(reset) * 1000).toLocaleString() : null
+            })
+
+            if (limit && remaining && reset) {
+              const limitNum = parseInt(limit)
+              const remainingNum = parseInt(remaining)
+              const resetNum = parseInt(reset)
+              
+              // Skip if rate limiting is disabled (limit=0)
+              if (limitNum === 0) {
+                console.log('[Rate Limit] Rate limiting disabled (limit=0), skipping')
+                return
+              }
+              
+              console.log('[Rate Limit] Updating store:', {
+                limit: limitNum,
+                remaining: remainingNum,
+                reset: resetNum,
+                isRateLimited: remainingNum === 0
+              })
+              
+              setRateLimit(limitNum, remainingNum, resetNum)
+            } else {
+              console.log('[Rate Limit] Missing headers, not updating store')
+            }
+          },
           onEvent: (event) => {
             // Parse and handle event
             switch (event.event) {
@@ -239,6 +278,7 @@ export function useChat() {
       setCurrentAgent,
       setLoading,
       setError,
+      setRateLimit,
     ]
   )
 
