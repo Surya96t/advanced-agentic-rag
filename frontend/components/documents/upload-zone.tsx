@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useId } from "react";
 import { Upload, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,6 +22,7 @@ export function UploadZone({
   onDragStateChange,
   disabled = false,
 }: UploadZoneProps) {
+  const fileInputId = useId();
   const [isExpanded, setIsExpanded] = useState(true);
 
   const handleDragEnter = useCallback(
@@ -57,8 +58,14 @@ export function UploadZone({
 
       if (disabled) return;
 
+      const allowedExtensions = ['.txt', '.md', '.pdf'];
       const files = Array.from(e.dataTransfer.files);
-      onFilesSelected(files);
+      const validFiles = files.filter((file) => 
+        allowedExtensions.some((ext) => file.name.toLowerCase().endsWith(ext))
+      );
+      if (validFiles.length > 0) {
+        onFilesSelected(validFiles);
+      }
     },
     [disabled, onFilesSelected, onDragStateChange]
   );
@@ -78,9 +85,9 @@ export function UploadZone({
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      document.getElementById('file-upload')?.click();
+      document.getElementById(fileInputId)?.click();
     }
-  }, []);
+  }, [fileInputId]);
 
   return (
     <Card>
@@ -147,10 +154,10 @@ export function UploadZone({
               accept=".txt,.md,.pdf"
               onChange={handleFileInput}
               className="hidden"
-              id="file-upload"
+              id={fileInputId}
               disabled={disabled}
             />
-            <label htmlFor="file-upload">
+            <label htmlFor={fileInputId}>
               <Button asChild disabled={disabled}>
                 <span>Choose Files</span>
               </Button>

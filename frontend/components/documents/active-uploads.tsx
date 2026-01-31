@@ -12,7 +12,7 @@ export type UploadStatus = "pending" | "uploading" | "success" | "error";
 export interface UploadingFile {
   fileId: string;
   file: File;
-  progress: number;
+  progress: number | undefined; // undefined = indeterminate/spinner state during upload
   status: UploadStatus;
   error?: string;
 }
@@ -104,20 +104,30 @@ export function ActiveUploads({ uploads, onRemove, onClearCompleted }: ActiveUpl
                       size="icon"
                       className="h-6 w-6 shrink-0"
                       onClick={() => onRemove(upload.fileId)}
+                      aria-label={`Remove ${upload.file.name}`}
                     >
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
 
-                  {/* Progress bar */}
+                  {/* Progress bar or spinner for indeterminate state */}
                   {upload.status !== "error" && (
-                    <Progress
-                      value={upload.progress}
-                      className={cn(
-                        "h-2 mb-1",
-                        upload.status === "success" && "*:bg-green-500"
+                    <>
+                      {upload.progress !== undefined ? (
+                        <Progress
+                          value={upload.progress}
+                          className={cn(
+                            "h-2 mb-1",
+                            upload.status === "success" && "*:bg-green-500"
+                          )}
+                        />
+                      ) : (
+                        // Indeterminate state during actual upload
+                        <div className="h-2 mb-1 bg-muted rounded-full overflow-hidden">
+                          <div className="h-full bg-primary animate-pulse" style={{ width: "100%" }} />
+                        </div>
                       )}
-                    />
+                    </>
                   )}
 
                   {/* Status and file size */}
@@ -127,7 +137,7 @@ export function ActiveUploads({ uploads, onRemove, onClearCompleted }: ActiveUpl
                         className={cn("h-3.5 w-3.5", statusConfig.color, statusConfig.animate)}
                       />
                       <span className={statusConfig.color}>
-                        {upload.status === "uploading" && `${upload.progress}%`}
+                        {upload.status === "uploading" && (upload.progress !== undefined ? `${upload.progress}%` : "Uploading...")}
                         {upload.status === "pending" && statusConfig.label}
                         {upload.status === "success" && statusConfig.label}
                         {upload.status === "error" && upload.error}

@@ -81,7 +81,7 @@ export function DocumentsToolbar({
             onValueChange={(value: string) => onSortChange(value as SortField, sortOrder)}
             disabled={isLoading}
           >
-            <SelectTrigger className="w-35">
+            <SelectTrigger className="w-36">
               <SelectValue placeholder="Sort by..." />
             </SelectTrigger>
             <SelectContent>

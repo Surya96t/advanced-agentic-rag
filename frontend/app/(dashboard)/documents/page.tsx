@@ -85,9 +85,9 @@ export default function DocumentsPage() {
    */
   const uploadFile = useCallback(async (file: File, fileId: string) => {
     try {
-      // Update status to uploading
+      // Update status to uploading (indeterminate state - no fake progress)
       setUploadingFiles((prev) =>
-        prev.map((f) => (f.fileId === fileId ? { ...f, status: "uploading" } : f))
+        prev.map((f) => (f.fileId === fileId ? { ...f, status: "uploading", progress: undefined } : f))
       );
 
       const formData = new FormData();
@@ -103,15 +103,7 @@ export default function DocumentsPage() {
         throw new Error(error.error || "Upload failed");
       }
 
-      // Simulate progress (since we don't have real progress tracking)
-      for (let progress = 0; progress <= 100; progress += 20) {
-        setUploadingFiles((prev) =>
-          prev.map((f) => (f.fileId === fileId ? { ...f, progress } : f))
-        );
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-
-      // Mark as success
+      // Mark as success (set progress to 100 for completed state)
       setUploadingFiles((prev) =>
         prev.map((f) =>
           f.fileId === fileId ? { ...f, status: "success", progress: 100 } : f
@@ -271,25 +263,53 @@ export default function DocumentsPage() {
     try {
       setBulkDeleting(true);
 
-      // Delete all selected documents
+      // Delete all selected documents with proper error checking
       const deletePromises = selectedDocuments.map((doc) =>
         fetch(`/api/documents/${doc.id}`, { method: "DELETE" })
+          .then(async (res) => {
+            if (!res.ok) {
+              const error = await res.json().catch(() => ({ error: "Delete failed" }));
+              throw new Error(error.error || `Failed to delete ${doc.filename}`);
+            }
+            return { success: true, docId: doc.id };
+          })
       );
 
       const results = await Promise.allSettled(deletePromises);
 
-      // Check for failures
+      // Separate successful and failed deletions
+      const successful = results
+        .filter((r): r is PromiseFulfilledResult<{ success: true; docId: string }> => 
+          r.status === "fulfilled"
+        )
+        .map((r) => r.value.docId);
+
       const failures = results.filter((r) => r.status === "rejected");
-      if (failures.length > 0) {
-        throw new Error(`Failed to delete ${failures.length} document(s)`);
+
+      // Remove only successfully deleted documents from state
+      if (successful.length > 0) {
+        setDocuments((prev) => prev.filter((doc) => !successful.includes(doc.id)));
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          successful.forEach((id) => next.delete(id));
+          return next;
+        });
       }
 
-      toast.success(`${selectedDocuments.length} document(s) deleted successfully`);
-      
-      // Remove deleted documents from state
-      setDocuments((prev) => prev.filter((doc) => !selectedIds.has(doc.id)));
-      setSelectedIds(new Set());
-      setBulkDeleteDialogOpen(false);
+      // Show appropriate feedback
+      if (failures.length === 0) {
+        toast.success(`${successful.length} document(s) deleted successfully`);
+        setBulkDeleteDialogOpen(false);
+      } else if (successful.length > 0) {
+        toast.warning(
+          `${successful.length} deleted, ${failures.length} failed`,
+          {
+            description: "Some documents could not be deleted. Please try again.",
+          }
+        );
+      } else {
+        throw new Error(`Failed to delete all ${failures.length} document(s)`);
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to delete";
       toast.error(errorMessage);
