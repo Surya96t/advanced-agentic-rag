@@ -116,7 +116,7 @@ async def sse_generator(
         )
         # Send error event
         error_event = {
-            "event": SSEEventType.AGENT_ERROR,
+            "event": SSEEventType.AGENT_ERROR.value,
             "data": json.dumps({
                 "error": str(e),
                 "message": "Stream encountered an error"
@@ -126,7 +126,7 @@ async def sse_generator(
 
         # Send end event
         end_event = {
-            "event": SSEEventType.END,
+            "event": SSEEventType.END.value,
             "data": json.dumps({"done": True, "error": True})
         }
         yield f"event: {end_event['event']}\ndata: {end_event['data']}\n\n"

@@ -214,13 +214,32 @@ class EndEvent(BaseSchema):
     token_count: int | None = Field(
         None, ge=0, description="Total tokens used")
 
+    # Additional fields for error handling and thread tracking
+    thread_id: str | UUID | None = Field(
+        None, description="Thread ID for the conversation")
+    success: bool = Field(
+        default=True, description="Whether execution completed successfully")
+    error: str | None = Field(
+        None, description="Error message if execution failed")
+
     model_config = ConfigDict(
         json_schema_extra={
             "examples": [
                 {
                     "done": True,
                     "total_time_ms": 3240,
-                    "token_count": 1850
+                    "token_count": 1850,
+                    "thread_id": "550e8400-e29b-41d4-a716-446655440000",
+                    "success": True,
+                    "error": None
+                },
+                {
+                    "done": True,
+                    "total_time_ms": 0,
+                    "token_count": 0,
+                    "thread_id": "invalid",
+                    "success": False,
+                    "error": "Invalid thread_id format"
                 }
             ]
         }

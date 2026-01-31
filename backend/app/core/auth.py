@@ -54,7 +54,7 @@ class JWKSClient:
                 return self._jwks
 
         # Fetch fresh JWKS
-        jwks_url = f"{settings.clerk_issuer}/.well-known/jwks.json"
+        jwks_url = f"{settings.clerk_issuer_url}/.well-known/jwks.json"
         try:
             response = httpx.get(jwks_url, timeout=10.0)
             response.raise_for_status()
@@ -95,7 +95,7 @@ def verify_jwt_token(token: str) -> dict:
             token,
             jwks,
             algorithms=["RS256"],
-            issuer=settings.clerk_issuer,
+            issuer=settings.clerk_issuer_url,
             options={
                 "verify_signature": True,
                 "verify_exp": True,
@@ -109,7 +109,21 @@ def verify_jwt_token(token: str) -> dict:
         return payload
 
     except JWTError as e:
-        logger.warning(f"JWT verification failed: {e}")
+        logger.error(f"JWT verification failed: {e}")
+        logger.error(f"Expected issuer: {settings.clerk_issuer_url}")
+        # Try to decode without verification to see actual issuer
+        try:
+            import json
+            import base64
+            payload_b64 = token.split('.')[1]
+            # Add padding if needed
+            payload_b64 += '=' * (4 - len(payload_b64) % 4)
+            payload_decoded = json.loads(base64.b64decode(payload_b64))
+            logger.error(f"Actual token issuer: {payload_decoded.get('iss')}")
+            logger.error(f"Token claims: {payload_decoded}")
+        except Exception as decode_error:
+            logger.error(
+                f"Could not decode token for debugging: {decode_error}")
         raise AuthenticationError(f"Invalid token: {str(e)}")
     except Exception as e:
         logger.error(f"Unexpected error during JWT verification: {e}")

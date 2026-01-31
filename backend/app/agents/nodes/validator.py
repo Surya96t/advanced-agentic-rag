@@ -257,11 +257,11 @@ def validator_node(state: AgentState) -> Command[Literal["query_expander", "__en
     4. Retrieval confidence (15% weight)
 
     Decision Logic:
-    - quality_score >= 0.7: PASS → END (regardless of retry_count)
-    - quality_score < 0.7 AND retry_count >= 2: MAX RETRIES → END (with disclaimer)
-    - quality_score 0.6-0.7 AND retry_count < 2: BORDERLINE → retry via query_expander
+    - quality_score >= 0.5: PASS → END (regardless of retry_count)
+    - quality_score < 0.5 AND retry_count >= 2: MAX RETRIES → END (with disclaimer)
+    - quality_score 0.4-0.5 AND retry_count < 2: BORDERLINE → retry via query_expander
       (optional human feedback via interrupt() when enabled)
-    - quality_score < 0.6 AND retry_count < 2: FAIL → retry via query_expander
+    - quality_score < 0.4 AND retry_count < 2: FAIL → retry via query_expander
 
     Args:
         state: Current agent state with generated_response, retrieved_chunks, retry_count
@@ -324,8 +324,9 @@ def validator_node(state: AgentState) -> Command[Literal["query_expander", "__en
     }
 
     # Decision logic
-    if quality_score >= 0.7:
-        # PASS: Quality is good
+    # UPDATED: Lowered threshold from 0.7 to 0.5 to reduce retries and improve response time
+    if quality_score >= 0.5:
+        # PASS: Quality is acceptable
         logger.info(f"✅ Validation PASSED (score: {quality_score:.2f})")
         return Command(
             update={"validation_result": validation_result},
@@ -345,7 +346,7 @@ def validator_node(state: AgentState) -> Command[Literal["query_expander", "__en
             goto="__end__"
         )
 
-    elif 0.6 <= quality_score < 0.7:
+    elif 0.4 <= quality_score < 0.5:
         # BORDERLINE: Optionally request human feedback
         # For now, we'll retry. To enable HITL, uncomment the interrupt() call
         logger.info(
@@ -368,7 +369,7 @@ def validator_node(state: AgentState) -> Command[Literal["query_expander", "__en
                 "validation_result": validation_result,
                 "retry_count": retry_count + 1,
                 "metadata": {
-                    "retry_reason": f"Quality score {quality_score:.2f} below threshold 0.7",
+                    "retry_reason": f"Quality score {quality_score:.2f} below threshold 0.5",
                     "retry_attempt": retry_count + 1,
                 }
             },
@@ -384,7 +385,7 @@ def validator_node(state: AgentState) -> Command[Literal["query_expander", "__en
                 "validation_result": validation_result,
                 "retry_count": retry_count + 1,
                 "metadata": {
-                    "retry_reason": f"Quality score {quality_score:.2f} below threshold 0.7",
+                    "retry_reason": f"Quality score {quality_score:.2f} below threshold 0.5",
                     "retry_attempt": retry_count + 1,
                 }
             },

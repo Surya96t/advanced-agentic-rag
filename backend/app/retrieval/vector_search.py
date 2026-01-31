@@ -111,11 +111,16 @@ class VectorSearcher:
 
         try:
             # Step 1: Generate query embedding
+            import time
+            start_embed = time.time()
             logger.debug("Generating query embedding")
             query_embedding = await self.embedder.embed_single(query)
+            embed_time = time.time() - start_embed
+            logger.info(f"Embedding generation took {embed_time:.2f}s")
 
             # Step 2: Call stored procedure for vector search
             # Uses the search_chunks_by_embedding() function from migration 001
+            start_db = time.time()
             logger.debug("Executing vector search query")
 
             result = self.db.rpc(
@@ -126,6 +131,8 @@ class VectorSearcher:
                     "filter_user_id": user_id,
                 }
             ).execute()
+            db_time = time.time() - start_db
+            logger.info(f"Database search took {db_time:.2f}s")
 
             # Step 3: Parse results
             if not result.data:
