@@ -6,6 +6,7 @@ and grounding in retrieved sources. Implements retry logic for low-quality respo
 """
 
 import re
+import time
 from typing import Literal
 
 from langgraph.types import Command, interrupt
@@ -279,7 +280,8 @@ def validator_node(state: AgentState) -> Command[Literal["query_expander", "__en
         >>> cmd.goto
         '__end__'  # or 'query_expander' for retry
     """
-    logger.info("Validator node: Checking response quality")
+    start_time = time.time()
+    logger.info("⏱️  VALIDATOR NODE: Starting response quality checks")
 
     response = state.get("generated_response", "")
     chunks = state.get("retrieved_chunks", [])
@@ -323,11 +325,14 @@ def validator_node(state: AgentState) -> Command[Literal["query_expander", "__en
         }
     }
 
+    elapsed_time = time.time() - start_time
+
     # Decision logic
     # UPDATED: Lowered threshold from 0.7 to 0.5 to reduce retries and improve response time
     if quality_score >= 0.5:
         # PASS: Quality is acceptable
-        logger.info(f"✅ Validation PASSED (score: {quality_score:.2f})")
+        logger.info(
+            f"⏱️  VALIDATOR NODE: Completed in {elapsed_time:.3f}s | ✅ PASSED (score: {quality_score:.2f})")
         return Command(
             update={"validation_result": validation_result},
             goto="__end__"
@@ -336,7 +341,7 @@ def validator_node(state: AgentState) -> Command[Literal["query_expander", "__en
     elif retry_count >= 2:
         # MAX RETRIES: Stop trying, return best attempt
         logger.warning(
-            f"⚠️ Max retries reached (score: {quality_score:.2f}), returning response with disclaimer")
+            f"⏱️  VALIDATOR NODE: Completed in {elapsed_time:.3f}s | ⚠️ Max retries reached (score: {quality_score:.2f})")
         validation_result["disclaimer"] = (
             "Response quality is below threshold after 2 retries. "
             "This answer may be incomplete or less accurate than ideal."
@@ -350,7 +355,7 @@ def validator_node(state: AgentState) -> Command[Literal["query_expander", "__en
         # BORDERLINE: Optionally request human feedback
         # For now, we'll retry. To enable HITL, uncomment the interrupt() call
         logger.info(
-            f"⚠️ Borderline quality (score: {quality_score:.2f}), retrying")
+            f"⏱️  VALIDATOR NODE: Completed in {elapsed_time:.3f}s | ⚠️ Borderline quality (score: {quality_score:.2f}), retrying")
 
         # OPTIONAL: Human-in-the-loop for borderline cases
         # Uncomment to enable:
@@ -379,7 +384,7 @@ def validator_node(state: AgentState) -> Command[Literal["query_expander", "__en
     else:
         # FAIL: Quality too low, retry
         logger.warning(
-            f"❌ Validation FAILED (score: {quality_score:.2f}), retrying (attempt {retry_count + 1}/2)")
+            f"⏱️  VALIDATOR NODE: Completed in {elapsed_time:.3f}s | ❌ FAILED (score: {quality_score:.2f}), retrying (attempt {retry_count + 1}/2)")
         return Command(
             update={
                 "validation_result": validation_result,

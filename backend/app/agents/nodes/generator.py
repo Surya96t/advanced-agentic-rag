@@ -173,13 +173,13 @@ async def generator_node(state: AgentState) -> dict:
     Process:
     1. Format retrieved chunks into context
     2. Build prompt with system + user messages
-    3. Stream LLM response token-by-token
+    3. Stream LLM response token-by-token (emitting tokens via custom stream)
     4. Track metadata (tokens, latency, cost)
     5. Return generated response
 
-    Note: Streaming is handled by LangGraph's streaming modes.
-    This node just uses the streaming LLM, and tokens are automatically
-    streamed if graph is invoked with stream_mode="messages".
+    Note: When used with stream_mode="custom" or ["updates", "custom"], this node
+    emits custom token events for real-time token-by-token streaming. When used with
+    ainvoke() or without custom streaming, it returns the full response synchronously.
 
     Args:
         state: Current agent state with retrieved_chunks and original_query
@@ -196,9 +196,10 @@ async def generator_node(state: AgentState) -> dict:
         >>> "generated_response" in result
         True
     """
-    logger.info("Generator node: Synthesizing response from retrieved context")
+    from langgraph.config import get_stream_writer
 
     start_time = time.time()
+    logger.info("⏱️  GENERATOR NODE: Starting LLM response generation")
 
     # Get query and chunks
     query = state["original_query"]
@@ -225,14 +226,35 @@ async def generator_node(state: AgentState) -> dict:
     logger.info("Calling LLM for response generation")
 
     try:
-        # Stream the response
-        # Note: LangGraph automatically handles streaming when stream_mode="messages"
-        # We collect the full response here, then count tokens accurately after streaming
+        # Get stream writer for emitting custom token events
+        # This will only work if stream_mode="custom" is enabled
+        writer = None
+        try:
+            writer = get_stream_writer()
+        except Exception:
+            # No stream writer available (e.g., not in streaming mode)
+            pass
+
+        # Stream the response token-by-token
+        llm_start = time.time()
         full_response = ""
 
+        # Stream tokens from LLM
         async for chunk in llm.astream(messages):
             if chunk.content:
-                full_response += chunk.content
+                token = chunk.content
+                full_response += token
+                
+                # Emit token event for real-time streaming (if writer available)
+                if writer:
+                    writer({
+                        "type": "token",
+                        "token": token,
+                        "model": settings.openai_model,
+                    })
+
+        llm_time = time.time() - llm_start
+        logger.info(f"  ↳ LLM generation took {llm_time:.3f}s")
 
         # Calculate accurate token counts using tiktoken after streaming completes
         # Use chat-aware token counting to account for ChatML formatting overhead
@@ -245,15 +267,12 @@ async def generator_node(state: AgentState) -> dict:
         total_tokens = prompt_tokens + completion_tokens
 
         end_time = time.time()
-        latency_ms = int((end_time - start_time) * 1000)
+        elapsed_time = end_time - start_time
+        latency_ms = int(elapsed_time * 1000)
 
         logger.info(
-            "Generation complete",
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=total_tokens,
-            latency_ms=latency_ms,
-            response_length=len(full_response)
+            f"⏱️  GENERATOR NODE: Completed in {elapsed_time:.3f}s | "
+            f"Tokens: {total_tokens} ({prompt_tokens} prompt + {completion_tokens} completion)"
         )
 
         # Calculate cost based on actual token counts

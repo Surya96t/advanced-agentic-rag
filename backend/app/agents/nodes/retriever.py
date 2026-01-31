@@ -5,6 +5,7 @@ This module executes multi-query hybrid search, deduplicates results,
 and applies re-ranking for optimal chunk selection.
 """
 
+import time
 from langgraph.types import RunnableConfig
 
 from app.agents.state import AgentState
@@ -79,7 +80,8 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
         >>> len(result["retrieved_chunks"])
         5
     """
-    logger.info("Retriever node: Starting multi-query hybrid search")
+    start_time = time.time()
+    logger.info("⏱️  RETRIEVER NODE: Starting multi-query hybrid search")
 
     # Extract user_id from config (provided by graph invoke/stream call)
     user_id = config.get("configurable", {}).get("user_id", "")
@@ -140,6 +142,7 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
     )
 
     # Step 1: Search each query
+    search_start = time.time()
     all_results: list[SearchResult] = []
     for idx, query in enumerate(queries, 1):
         logger.info(f"Searching query {idx}/{len(queries)}: {query[:100]}...")
@@ -159,8 +162,13 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
             # Continue with other queries
             continue
 
+    search_time = time.time() - search_start
+    logger.info(f"  ↳ All searches completed in {search_time:.3f}s")
+
     if not all_results:
-        logger.warning("No results found for any query")
+        elapsed_time = time.time() - start_time
+        logger.warning(
+            f"⏱️  RETRIEVER NODE: Completed in {elapsed_time:.3f}s | No results found")
         return {
             "retrieved_chunks": [],
             "sources": [],
@@ -170,6 +178,7 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
     logger.info(f"Total results from all queries: {len(all_results)}")
 
     # Step 2: Deduplicate by chunk_id (keep highest score)
+    dedup_start = time.time()
     # Build dict of chunk_id -> SearchResult
     unique_results: dict[str, SearchResult] = {}
     for result in all_results:
@@ -178,9 +187,12 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
             unique_results[chunk_id] = result
 
     deduplicated = list(unique_results.values())
-    logger.info(f"After deduplication: {len(deduplicated)} unique chunks")
+    dedup_time = time.time() - dedup_start
+    logger.info(
+        f"  ↳ Deduplication took {dedup_time:.3f}s | {len(deduplicated)} unique chunks")
 
     # Step 3: Re-rank using FlashRank
+    rerank_start = time.time()
     # Use original query for re-ranking (most representative)
     # Defensive: retrieve original_query safely (should always exist after validation above)
     original_query = state.get("original_query", "")
@@ -215,6 +227,9 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
             reranked_results = sorted(
                 deduplicated, key=lambda x: x.score, reverse=True)[:5]
 
+    rerank_time = time.time() - rerank_start
+    logger.info(f"  ↳ Re-ranking took {rerank_time:.3f}s")
+
     # Step 4: Build sources for citation
     sources = [
         {
@@ -227,12 +242,10 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
         for result in reranked_results
     ]
 
+    elapsed_time = time.time() - start_time
     logger.info(
-        "Retrieval complete",
-        queries_searched=len(queries),
-        total_found=len(all_results),
-        after_dedup=len(deduplicated),
-        final_count=len(reranked_results)
+        f"⏱️  RETRIEVER NODE: Completed in {elapsed_time:.3f}s | "
+        f"Queries: {len(queries)} | Results: {len(all_results)} → {len(deduplicated)} → {len(reranked_results)}"
     )
 
     # Return state updates
@@ -247,6 +260,12 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
                 "total_results": len(all_results),
                 "after_dedup": len(deduplicated),
                 "reranked_count": len(reranked_results),
+                "timing": {
+                    "search": f"{search_time:.3f}s",
+                    "dedup": f"{dedup_time:.3f}s",
+                    "rerank": f"{rerank_time:.3f}s",
+                    "total": f"{elapsed_time:.3f}s"
+                }
             }
         }
     }

@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     # OpenAI Configuration
     openai_api_key: str = Field(..., description="OpenAI API key", repr=False)
     openai_model: str = Field(
-        default="gpt-4o", description="OpenAI model for chat")
+        default="gpt-4o-mini", description="OpenAI model for chat")
     openai_embedding_model: str = Field(
         default="text-embedding-3-small",
         description="OpenAI model for embeddings (1536 dimensions)"
@@ -364,13 +364,15 @@ class Settings(BaseSettings):
         # - Port: 6543 (transaction pooler port, NOT 5432)
         # - Database: postgres (default database)
         #
-        # Note: prepare_threshold=0 must be set via connection options, not URI
+        # CRITICAL: Use SESSION POOLER (port 5432) instead of Transaction Pooler (port 6543)
+        # Transaction pooler does NOT support prepared statements, causing "prepared statement already exists" errors
+        # Session pooler maintains connection state and supports prepared statements
         username = f"postgres.{project_ref}"
-        # Transaction pooler endpoint (from Supabase dashboard)
+        # Session pooler endpoint (supports prepared statements)
         host = "aws-1-us-east-1.pooler.supabase.com"
         password = self.supabase_db_password
         database = "postgres"
-        port = 6543  # Transaction pooler port
+        port = 5432  # SESSION POOLER port (was 6543 for transaction pooler)
 
         # URL-encode password in case it contains special characters
         encoded_password = quote_plus(password)

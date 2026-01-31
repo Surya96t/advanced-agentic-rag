@@ -35,12 +35,6 @@ from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
 from uuid import UUID, uuid4
 from typing import AsyncIterator
-import os
-
-# CRITICAL: Set BEFORE any PostgreSQL connections are created
-# Supabase Transaction Pooler requires prepared statements to be disabled
-os.environ["PGPREPARE_THRESHOLD"] = "0"
-
 
 logger = get_logger(__name__)
 
@@ -124,14 +118,13 @@ async def get_checkpointer():
     logger.info("Initializing PostgreSQL checkpointer")
 
     try:
-        # For Supabase Transaction Pooler, prepared statements are disabled
-        # via the PGPREPARE_THRESHOLD=0 environment variable set at module top.
-        # Do NOT append prepare_threshold to the connection string -
-        # it's not a valid psycopg3 URI parameter and will cause errors.
+        # FIXED: Using Supabase Session Pooler (port 5432) instead of Transaction Pooler (port 6543)
+        # Session pooler supports prepared statements and maintains connection state
+        # This eliminates the "prepared statement already exists" error
         conn_string = settings.supabase_connection_string
 
         logger.debug(
-            f"Using PGPREPARE_THRESHOLD=0 from environment for Supabase compatibility")
+            f"Using Supabase Session Pooler for checkpointing (supports prepared statements)")
 
         # from_conn_string returns an async context manager
         checkpointer = AsyncPostgresSaver.from_conn_string(
@@ -365,12 +358,12 @@ async def stream_agent(
     user_id: str = "anonymous",
 ) -> AsyncIterator[dict]:
     """
-    Stream agent execution with real-time SSE events.
+    Stream agent execution with real-time SSE events and token-by-token streaming.
 
     Emits events for:
     - Agent node starts/completions
     - Progress updates from nodes
-    - LLM token streaming
+    - LLM token streaming (token-by-token from generator)
     - Citation discoveries
     - Validation results
     - Final completion
@@ -388,7 +381,8 @@ async def stream_agent(
         ...     print(f"{event['event']}: {event['data']}")
         agent_start: {"node": "router", ...}
         progress: {"message": "Analyzing query...", ...}
-        agent_complete: {"node": "router", ...}
+        token: {"token": "To", "model": "gpt-4o-mini"}
+        token: {"token": " integrate", "model": "gpt-4o-mini"}
         ...
     """
     # Validate and convert thread_id
@@ -421,79 +415,82 @@ async def stream_agent(
         }
     }
 
-    # Track previous node for event correlation
+    # Track current node for event correlation
     current_node: str | None = None
 
     try:
         # Get compiled graph with checkpointer
         graph = await get_graph()
 
-        # Stream with updates mode for node state changes
-        async for event in graph.astream(
+        # Stream with both updates and custom modes to get node updates + token events
+        # Using combined modes: ["updates", "custom"]
+        async for chunk in graph.astream(
             initial_state,
             config=config,
-            stream_mode="updates",  # Use single mode for simpler event handling
+            stream_mode=["updates", "custom"],
         ):
-            # Event structure with single mode: {node_name: node_update}
-            if not event:
-                continue  # Skip empty events
-
-            # Extract node name and update
-            node_name = next(iter(event.keys()))
-            node_update = event[node_name]
-
-            # Emit agent_start if new node
-            if node_name != current_node:
-                if current_node:
-                    # Complete previous node
+            # chunk can be either:
+            # - ("updates", {node_name: node_update}) for node state changes
+            # - ("custom", custom_data) for custom events from nodes
+            
+            mode, data = chunk
+            
+            if mode == "updates":
+                # Handle node state updates
+                if not data:
+                    continue
+                
+                # Extract node name and update
+                node_name = next(iter(data.keys()))
+                node_update = data[node_name]
+                
+                # Emit agent_start if new node
+                if node_name != current_node:
+                    if current_node:
+                        # Complete previous node
+                        yield {
+                            "event": SSEEventType.AGENT_COMPLETE.value,
+                            "data": AgentCompleteEvent(
+                                agent=current_node,
+                                result={},
+                            ).model_dump_json()
+                        }
+                    
+                    # Start new node
+                    current_node = node_name
                     yield {
-                        "event": SSEEventType.AGENT_COMPLETE.value,
-                        "data": AgentCompleteEvent(
-                            agent=current_node,
-                            result={},
+                        "event": SSEEventType.AGENT_START.value,
+                        "data": AgentStartEvent(
+                            agent=node_name,
+                            message=f"Executing {node_name} node",
                         ).model_dump_json()
                     }
-
-                # Start new node
-                current_node = node_name
-                yield {
-                    "event": SSEEventType.AGENT_START.value,
-                    "data": AgentStartEvent(
-                        agent=node_name,
-                        message=f"Executing {node_name} node",
-                    ).model_dump_json()
-                }
-
-            # Process specific update types
-            # Citation events from retriever
-            if node_name == "retriever" and "sources" in node_update:
-                for source in node_update["sources"]:
-                    # Safely extract required fields from source
-                    chunk_id = source.get("chunk_id")
-                    document_id = source.get("document_id")
-
-                    # Skip sources missing required fields
-                    if not chunk_id or not document_id:
-                        logger.warning(
-                            f"Skipping citation with missing required fields: "
-                            f"chunk_id={chunk_id}, document_id={document_id}"
-                        )
-                        continue
-
-                    # Emit citation event with safe field access
-                    yield {
-                        "event": SSEEventType.CITATION.value,
-                        "data": CitationEvent(
-                            chunk_id=chunk_id,
-                            document_title=source.get(
-                                "document_title", "Unknown Document"),
-                            score=source.get("score", 0.0),
-                            source=source.get("source", "unknown"),
-                            preview=source.get("content", "")[
-                                :200] if source.get("content") else None,
-                        ).model_dump_json()
-                    }
-
+                
+                # Process specific update types
+                # Citation events from retriever
+                if node_name == "retriever" and "sources" in node_update:
+                    for source in node_update["sources"]:
+                        chunk_id = source.get("chunk_id")
+                        document_id = source.get("document_id")
+                        
+                        if not chunk_id or not document_id:
+                            logger.warning(
+                                f"Skipping citation with missing required fields: "
+                                f"chunk_id={chunk_id}, document_id={document_id}"
+                            )
+                            continue
+                        
+                        yield {
+                            "event": SSEEventType.CITATION.value,
+                            "data": CitationEvent(
+                                chunk_id=chunk_id,
+                                document_title=source.get("document_title", "Unknown Document"),
+                                score=source.get("score", 0.0),
+                                source=source.get("source", "unknown"),
+                                preview=source.get("content", "")[:200] if source.get("content") else None,
+                            ).model_dump_json()
+                        }
+                
                 # Validation events
                 if node_name == "validator" and "validation_result" in node_update:
                     validation = node_update["validation_result"]
@@ -505,6 +502,21 @@ async def stream_agent(
                             issues=validation.get("issues", []),
                         ).model_dump_json()
                     }
+            
+            elif mode == "custom":
+                # Handle custom events from nodes (e.g., token streaming)
+                if isinstance(data, dict):
+                    event_type = data.get("type")
+                    
+                    # Token streaming events from generator
+                    if event_type == "token":
+                        yield {
+                            "event": SSEEventType.TOKEN.value,
+                            "data": TokenEvent(
+                                token=data.get("token", ""),
+                                model=data.get("model"),
+                            ).model_dump_json()
+                        }
 
         # Complete final node
         if current_node:
@@ -515,19 +527,6 @@ async def stream_agent(
                     result={},
                 ).model_dump_json()
             }
-
-        # Get final state to retrieve generated response
-        final_state = await graph.aget_state(config)
-        if final_state and final_state.values:
-            generated_response = final_state.values.get(
-                "generated_response", "")
-
-            # Send complete response as a single token to preserve formatting
-            if generated_response:
-                yield {
-                    "event": SSEEventType.TOKEN.value,
-                    "data": TokenEvent(token=generated_response).model_dump_json()
-                }
 
         # Final end event
         yield {

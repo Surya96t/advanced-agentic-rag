@@ -7,6 +7,7 @@ This module implements two query expansion strategies:
 """
 
 import json
+import time
 from typing import Literal
 
 from langchain_openai import ChatOpenAI
@@ -178,24 +179,32 @@ async def query_expander_node(state: AgentState) -> dict:
         >>> result["expanded_queries"]
         ["How does Clerk work?", "How does Prisma connect?", "Auth + ORM patterns?"]
     """
+    start_time = time.time()
     query = state.get("original_query")
     if not query:
         logger.error("Missing original_query in state")
         return {"expanded_queries": []}
     complexity = state.get("query_complexity", "simple")
 
-    logger.info(f"Query expander node: Processing {complexity} query")
+    logger.info(
+        f"⏱️  QUERY_EXPANDER NODE: Starting {complexity} query expansion")
 
     # Select strategy based on complexity
     if complexity == "complex":
         # Decompose into sub-queries
         logger.info("Using sub-query decomposition strategy")
+        strategy_start = time.time()
         expanded = await decompose_query(query)
+        strategy_time = time.time() - strategy_start
+        logger.info(f"  ↳ Decomposition took {strategy_time:.3f}s")
 
     elif complexity == "ambiguous":
         # Generate hypothetical document
         logger.info("Using HyDE (hypothetical document) strategy")
+        strategy_start = time.time()
         hypothetical_doc = await generate_hyde(query)
+        strategy_time = time.time() - strategy_start
+        logger.info(f"  ↳ HyDE generation took {strategy_time:.3f}s")
         # For HyDE, we use the hypothetical doc as a single "query"
         expanded = [hypothetical_doc]
 
@@ -213,6 +222,8 @@ async def query_expander_node(state: AgentState) -> dict:
             f"Unknown complexity '{complexity}' in expander, using original query")
         expanded = [query]
 
-    logger.info(f"Query expansion complete: {len(expanded)} queries generated")
+    elapsed_time = time.time() - start_time
+    logger.info(
+        f"⏱️  QUERY_EXPANDER NODE: Completed in {elapsed_time:.3f}s | Generated {len(expanded)} queries")
 
     return {"expanded_queries": expanded}
