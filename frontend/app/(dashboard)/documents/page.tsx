@@ -1,18 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { FileText, Trash2, Upload, AlertCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { useEffect, useState, useCallback } from "react";
+import { toast } from "sonner";
+import { UploadZone } from "@/components/documents/upload-zone";
+import { ActiveUploads, type UploadingFile } from "@/components/documents/active-uploads";
+import { DocumentsToolbar } from "@/components/documents/documents-toolbar";
+import { DocumentsTable } from "@/components/documents/documents-table";
+import { DocumentsMobileCards } from "@/components/documents/documents-mobile-cards";
+import { BulkDeleteDialog } from "@/components/documents/bulk-delete-dialog";
 import {
   Dialog,
   DialogContent,
@@ -21,32 +16,56 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { toast } from "sonner";
-
-interface Document {
-  id: string;
-  filename: string;
-  upload_date: string;
-  chunk_count?: number;
-}
+import { Button } from "@/components/ui/button";
+import { AlertCircle } from "lucide-react";
+import {
+  type Document,
+  type SortField,
+  type SortOrder,
+  validateFile,
+  generateFileId,
+  searchDocuments,
+  sortDocuments,
+  formatDate,
+} from "@/lib/document-utils";
 
 export default function DocumentsPage() {
-  const router = useRouter();
+  // Documents state
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Upload state
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
+
+  // Selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Search/Sort state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<SortField>("date");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
+
+  // Dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState<Document | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
+  // Fetch documents on mount
   useEffect(() => {
     fetchDocuments();
   }, []);
 
+  /**
+   * Fetch documents from API
+   */
   const fetchDocuments = async () => {
     try {
       setLoading(true);
       const response = await fetch("/api/documents");
-      
+
       if (!response.ok) {
         throw new Error("Failed to fetch documents");
       }
@@ -61,11 +80,155 @@ export default function DocumentsPage() {
     }
   };
 
+  /**
+   * Upload a single file
+   */
+  const uploadFile = useCallback(async (file: File, fileId: string) => {
+    try {
+      // Update status to uploading
+      setUploadingFiles((prev) =>
+        prev.map((f) => (f.fileId === fileId ? { ...f, status: "uploading" } : f))
+      );
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/documents", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Upload failed");
+      }
+
+      // Simulate progress (since we don't have real progress tracking)
+      for (let progress = 0; progress <= 100; progress += 20) {
+        setUploadingFiles((prev) =>
+          prev.map((f) => (f.fileId === fileId ? { ...f, progress } : f))
+        );
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+
+      // Mark as success
+      setUploadingFiles((prev) =>
+        prev.map((f) =>
+          f.fileId === fileId ? { ...f, status: "success", progress: 100 } : f
+        )
+      );
+
+      toast.success(`${file.name} uploaded successfully`);
+
+      // Refresh documents list
+      await fetchDocuments();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Upload failed";
+      setUploadingFiles((prev) =>
+        prev.map((f) =>
+          f.fileId === fileId ? { ...f, status: "error", error: errorMessage } : f
+        )
+      );
+      toast.error(`Failed to upload ${file.name}`, {
+        description: errorMessage,
+      });
+    }
+  }, []);
+
+  /**
+   * Handle file selection from upload zone
+   */
+  const handleFilesSelected = useCallback(async (files: File[]) => {
+    // Validate and filter files
+    const validatedFiles: UploadingFile[] = [];
+    const rejectedFiles: string[] = [];
+
+    files.forEach((file) => {
+      const validation = validateFile(file);
+      if (validation.valid) {
+        validatedFiles.push({
+          fileId: generateFileId(),
+          file,
+          progress: 0,
+          status: "pending",
+        });
+      } else {
+        rejectedFiles.push(`${file.name}: ${validation.error}`);
+      }
+    });
+
+    // Show rejection errors
+    if (rejectedFiles.length > 0) {
+      toast.error(`${rejectedFiles.length} file(s) rejected`, {
+        description: rejectedFiles[0],
+      });
+    }
+
+    if (validatedFiles.length === 0) return;
+
+    // Add to uploading state
+    setUploadingFiles((prev) => [...prev, ...validatedFiles]);
+
+    // Upload each file
+    for (const uploadingFile of validatedFiles) {
+      await uploadFile(uploadingFile.file, uploadingFile.fileId);
+    }
+  }, [uploadFile]);
+
+  /**
+   * Remove file from upload list
+   */
+  const handleRemoveUpload = (fileId: string) => {
+    setUploadingFiles((prev) => prev.filter((f) => f.fileId !== fileId));
+  };
+
+  /**
+   * Clear completed uploads
+   */
+  const handleClearCompleted = () => {
+    setUploadingFiles((prev) => prev.filter((f) => f.status !== "success"));
+  };
+
+  /**
+   * Toggle document selection
+   */
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  /**
+   * Select all documents
+   */
+  const handleSelectAll = () => {
+    setSelectedIds(new Set(filteredAndSortedDocuments.map((doc) => doc.id)));
+  };
+
+  /**
+   * Deselect all documents
+   */
+  const handleDeselectAll = () => {
+    setSelectedIds(new Set());
+  };
+
+  /**
+   * Open single delete dialog
+   */
   const handleDeleteClick = (doc: Document) => {
     setDocumentToDelete(doc);
     setDeleteDialogOpen(true);
   };
 
+  /**
+   * Confirm single delete
+   */
   const handleDeleteConfirm = async () => {
     if (!documentToDelete) return;
 
@@ -92,101 +255,137 @@ export default function DocumentsPage() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  /**
+   * Open bulk delete dialog
+   */
+  const handleBulkDeleteClick = () => {
+    setBulkDeleteDialogOpen(true);
   };
+
+  /**
+   * Confirm bulk delete
+   */
+  const handleBulkDeleteConfirm = async () => {
+    const selectedDocuments = documents.filter((doc) => selectedIds.has(doc.id));
+    
+    try {
+      setBulkDeleting(true);
+
+      // Delete all selected documents
+      const deletePromises = selectedDocuments.map((doc) =>
+        fetch(`/api/documents/${doc.id}`, { method: "DELETE" })
+      );
+
+      const results = await Promise.allSettled(deletePromises);
+
+      // Check for failures
+      const failures = results.filter((r) => r.status === "rejected");
+      if (failures.length > 0) {
+        throw new Error(`Failed to delete ${failures.length} document(s)`);
+      }
+
+      toast.success(`${selectedDocuments.length} document(s) deleted successfully`);
+      
+      // Remove deleted documents from state
+      setDocuments((prev) => prev.filter((doc) => !selectedIds.has(doc.id)));
+      setSelectedIds(new Set());
+      setBulkDeleteDialogOpen(false);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to delete";
+      toast.error(errorMessage);
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  /**
+   * Handle search/sort changes
+   */
+  const handleSortChange = (field: SortField, order: SortOrder) => {
+    setSortBy(field);
+    setSortOrder(order);
+  };
+
+  // Apply search and sort
+  const filteredAndSortedDocuments = sortDocuments(
+    searchDocuments(documents, searchQuery),
+    sortBy,
+    sortOrder
+  );
+
+  // Get selected documents for bulk delete
+  const selectedDocuments = documents.filter((doc) => selectedIds.has(doc.id));
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-6xl">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">Documents</h1>
-          <p className="text-muted-foreground">
-            Manage your uploaded API documentation
-          </p>
-        </div>
-        <Button onClick={() => router.push("/upload")}>
-          <Upload className="mr-2 h-4 w-4" />
-          Upload New
-        </Button>
+      {/* Page header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold mb-2">Documents</h1>
+        <p className="text-muted-foreground">
+          Upload and manage your API documentation knowledge base
+        </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Your Documents</CardTitle>
-          <CardDescription>
-            {documents.length} document{documents.length !== 1 ? "s" : ""} in your knowledge base
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                <p className="text-muted-foreground">Loading documents...</p>
-              </div>
-            </div>
-          ) : documents.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No documents yet</h3>
-              <p className="text-muted-foreground mb-4">
-                Upload your first API documentation to get started
-              </p>
-              <Button onClick={() => router.push("/upload")}>
-                <Upload className="mr-2 h-4 w-4" />
-                Upload Document
-              </Button>
-            </div>
-          ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Upload Date</TableHead>
-                    <TableHead>Chunks</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {documents.map((doc) => (
-                    <TableRow key={doc.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-muted-foreground" />
-                          {doc.filename}
-                        </div>
-                      </TableCell>
-                      <TableCell>{formatDate(doc.upload_date)}</TableCell>
-                      <TableCell>
-                        {doc.chunk_count !== undefined ? doc.chunk_count : "—"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDeleteClick(doc)}
-                          className="hover:bg-destructive/10 hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Upload zone (collapsible) */}
+      <div className="mb-6">
+        <UploadZone
+          onFilesSelected={handleFilesSelected}
+          isDragging={isDragging}
+          onDragStateChange={setIsDragging}
+          disabled={uploadingFiles.some((f) => f.status === "uploading")}
+        />
+      </div>
 
+      {/* Active uploads (conditional) */}
+      {uploadingFiles.length > 0 && (
+        <div className="mb-6">
+          <ActiveUploads
+            uploads={uploadingFiles}
+            onRemove={handleRemoveUpload}
+            onClearCompleted={handleClearCompleted}
+          />
+        </div>
+      )}
+
+      {/* Toolbar (search, sort, bulk actions) */}
+      <div className="mb-6">
+        <DocumentsToolbar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onSortChange={handleSortChange}
+          totalCount={filteredAndSortedDocuments.length}
+          selectedCount={selectedIds.size}
+          onSelectAll={handleSelectAll}
+          onDeselectAll={handleDeselectAll}
+          onBulkDelete={handleBulkDeleteClick}
+          isLoading={loading}
+        />
+      </div>
+
+      {/* Documents table (desktop) / cards (mobile) */}
+      <div className="hidden md:block">
+        <DocumentsTable
+          documents={filteredAndSortedDocuments}
+          selectedIds={selectedIds}
+          onToggleSelect={handleToggleSelect}
+          onDelete={handleDeleteClick}
+          isLoading={loading}
+        />
+      </div>
+
+      <div className="md:hidden">
+        <DocumentsMobileCards
+          documents={filteredAndSortedDocuments}
+          selectedIds={selectedIds}
+          onToggleSelect={handleToggleSelect}
+          onDelete={handleDeleteClick}
+          isLoading={loading}
+        />
+      </div>
+
+      {/* Single delete dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -214,16 +413,21 @@ export default function DocumentsPage() {
             >
               Cancel
             </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDeleteConfirm}
-              disabled={deleting}
-            >
+            <Button variant="destructive" onClick={handleDeleteConfirm} disabled={deleting}>
               {deleting ? "Deleting..." : "Delete"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Bulk delete dialog */}
+      <BulkDeleteDialog
+        open={bulkDeleteDialogOpen}
+        onOpenChange={setBulkDeleteDialogOpen}
+        selectedDocuments={selectedDocuments}
+        onConfirm={handleBulkDeleteConfirm}
+        isDeleting={bulkDeleting}
+      />
     </div>
   );
 }

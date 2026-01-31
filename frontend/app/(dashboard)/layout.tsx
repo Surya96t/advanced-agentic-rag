@@ -1,7 +1,7 @@
 import Link from 'next/link'
-import { FileText, MessageSquare, Upload } from 'lucide-react'
 import { UserSync } from '@/components/auth/user-sync'
 import { UserButtonWrapper } from '@/components/auth/user-button-wrapper'
+import { DashboardNav } from '@/components/layout/dashboard-nav'
 
 export default function DashboardLayout({
   children,
@@ -21,29 +21,7 @@ export default function DashboardLayout({
           </div>
           
           {/* Navigation */}
-          <nav className="flex flex-1 items-center space-x-6 text-sm font-medium">
-            <Link
-              href="/documents"
-              className="flex items-center space-x-2 text-foreground/60 transition-colors hover:text-foreground"
-            >
-              <FileText className="h-4 w-4" />
-              <span>Documents</span>
-            </Link>
-            <Link
-              href="/upload"
-              className="flex items-center space-x-2 text-foreground/60 transition-colors hover:text-foreground"
-            >
-              <Upload className="h-4 w-4" />
-              <span>Upload</span>
-            </Link>
-            <Link
-              href="/chat"
-              className="flex items-center space-x-2 text-foreground/60 transition-colors hover:text-foreground"
-            >
-              <MessageSquare className="h-4 w-4" />
-              <span>Chat</span>
-            </Link>
-          </nav>
+          <DashboardNav />
 
           {/* User Button */}
           <div className="flex items-center space-x-4">
