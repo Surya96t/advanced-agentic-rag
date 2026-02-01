@@ -7,12 +7,25 @@
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
-import { Bot, User } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import rehypeHighlight from 'rehype-highlight'
+import { Bot, User, Loader2 } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import { CitationsList } from './citation'
 import type { Message } from '@/types/chat'
+
+// Dynamically import the markdown renderer to reduce initial bundle size
+// This heavy component (react-markdown + plugins) is only loaded when needed
+const MarkdownRenderer = dynamic(
+  () => import('./markdown-renderer').then((mod) => mod.MarkdownRenderer),
+  {
+    loading: () => (
+      <div className="flex items-center gap-2 text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span className="text-sm">Loading...</span>
+      </div>
+    ),
+    ssr: false, // Client-side only (markdown rendering not needed for SSR)
+  }
+)
 
 interface MessageBubbleProps {
   message: Message
@@ -57,63 +70,8 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             // User message - plain text
             <p className="text-sm whitespace-pre-wrap">{message.content}</p>
           ) : (
-            // AI message - markdown rendering
-            <div className="prose prose-sm dark:prose-invert max-w-none">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                rehypePlugins={[rehypeHighlight]}
-                components={{
-                  // Customize markdown rendering
-                  p: ({ children }) => (
-                    <p className="mb-2 last:mb-0">{children}</p>
-                  ),
-                  ul: ({ children }) => (
-                    <ul className="list-disc list-inside mb-2">{children}</ul>
-                  ),
-                  ol: ({ children }) => (
-                    <ol className="list-decimal list-inside mb-2">{children}</ol>
-                  ),
-                  li: ({ children }) => (
-                    <li className="mb-1">{children}</li>
-                  ),
-                  code: ({ className, children, ...props }) => {
-                    // Determine if this is inline code or block code
-                    // Multiple heuristics for robust detection:
-                    // 1. If className contains 'language-*', it's a fenced code block
-                    // 2. If children contains newlines, it's likely block code
-                    // 3. Otherwise, treat as inline code
-                    const hasLanguageClass = /language-(\w+)/.test(className || '')
-                    const hasNewlines = children?.toString().includes('\n')
-                    const isInlineCode = !hasLanguageClass && !hasNewlines
-                    
-                    if (isInlineCode) {
-                      return (
-                        <code
-                          className="bg-muted px-1 py-0.5 rounded text-sm font-mono"
-                          {...props}
-                        >
-                          {children}
-                        </code>
-                      )
-                    }
-                    
-                    // Block code (inside <pre> with syntax highlighting)
-                    return (
-                      <code className={className} {...props}>
-                        {children}
-                      </code>
-                    )
-                  },
-                  pre: ({ children }) => (
-                    <pre className="bg-muted p-3 rounded-md overflow-x-auto mb-2">
-                      {children}
-                    </pre>
-                  ),
-                }}
-              >
-                {message.content}
-              </ReactMarkdown>
-            </div>
+            // AI message - markdown rendering (lazy-loaded)
+            <MarkdownRenderer content={message.content} />
           )}
         </div>
 

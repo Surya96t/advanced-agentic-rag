@@ -1,5 +1,18 @@
 # Frontend Implementation TODO
 
+> **⚠️ DEPRECATED - February 1, 2026**
+>
+> This file is no longer actively maintained. It was used during initial frontend planning but is now outdated.
+>
+> **Please use instead:**
+>
+> - **`PROJECT_STATUS.md`** (root) - Current project status and remaining tasks
+> - **`frontend/IMPLEMENTATION_PLAN.md`** - Frontend roadmap and checkpoint details
+>
+> This file is kept for historical reference only.
+
+---
+
 ## Project Overview
 
 **Integration Forge Frontend** - A production-grade Next.js 16.1.4+ application using the BFF (Backend-for-Frontend) pattern to provide a conversational RAG interface for API documentation synthesis.

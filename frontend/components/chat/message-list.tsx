@@ -67,7 +67,7 @@ export function MessageList({ messages, currentAgent, isLoading }: MessageListPr
   return (
     <div className="flex-1 overflow-hidden relative">
       <ScrollArea className="h-full px-4" ref={viewportRef}>
-        <div className="py-4 space-y-4">
+        <div className="py-4 space-y-4" role="log" aria-label="Chat messages" aria-live="polite">
           {messages.map((message) => (
             <MessageBubble key={message.id} message={message} />
           ))}

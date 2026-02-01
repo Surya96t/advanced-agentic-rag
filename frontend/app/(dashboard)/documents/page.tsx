@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import { UploadZone } from "@/components/documents/upload-zone";
 import { ActiveUploads, type UploadingFile } from "@/components/documents/active-uploads";
 import { DocumentsToolbar } from "@/components/documents/documents-toolbar";
 import { DocumentsTable } from "@/components/documents/documents-table";
 import { DocumentsMobileCards } from "@/components/documents/documents-mobile-cards";
-import { BulkDeleteDialog } from "@/components/documents/bulk-delete-dialog";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +28,12 @@ import {
   sortDocuments,
   formatDate,
 } from "@/lib/document-utils";
+
+// Lazy-load bulk delete dialog (only used when deleting multiple documents)
+const BulkDeleteDialog = dynamic(
+  () => import("@/components/documents/bulk-delete-dialog").then(mod => ({ default: mod.BulkDeleteDialog })),
+  { ssr: false }
+);
 
 export default function DocumentsPage() {
   // Documents state

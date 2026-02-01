@@ -63,6 +63,7 @@ export function MessageInput({
         disabled={disabled}
         className="min-h-15 max-h-50 resize-none"
         rows={1}
+        aria-label="Chat message input"
       />
       <Button
         onClick={handleSend}

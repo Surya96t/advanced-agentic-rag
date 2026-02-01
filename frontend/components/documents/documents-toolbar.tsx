@@ -71,6 +71,7 @@ export function DocumentsToolbar({
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => onSearchChange(e.target.value)}
             className="pl-9"
             disabled={isLoading}
+            aria-label="Search documents by filename"
           />
         </div>
 
@@ -117,6 +118,7 @@ export function DocumentsToolbar({
                   size="sm"
                   onClick={onSelectAll}
                   disabled={isLoading}
+                  aria-label={`Select all ${totalCount} documents`}
                 >
                   Select All
                 </Button>
@@ -126,6 +128,7 @@ export function DocumentsToolbar({
                 size="sm"
                 onClick={onDeselectAll}
                 disabled={isLoading}
+                aria-label={`Deselect all ${selectedCount} documents`}
               >
                 Deselect All
               </Button>
@@ -137,6 +140,7 @@ export function DocumentsToolbar({
             size="sm"
             onClick={onBulkDelete}
             disabled={isLoading}
+            aria-label={`Delete ${selectedCount} selected document${selectedCount !== 1 ? 's' : ''}`}
           >
             <Trash2 className="mr-2 h-4 w-4" />
             Delete Selected
