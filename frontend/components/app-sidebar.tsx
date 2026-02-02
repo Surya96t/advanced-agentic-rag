@@ -11,7 +11,6 @@ import {
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
-import ProfileDropdown from "@/components/profile-dropdown"
 import {
   Sidebar,
   SidebarContent,

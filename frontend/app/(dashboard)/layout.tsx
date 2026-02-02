@@ -1,5 +1,6 @@
 import { UserSync } from '@/components/auth/user-sync'
 import { AppSidebar } from '@/components/app-sidebar'
+import ProfileDropdown from '@/components/profile-dropdown'
 import {
   SidebarInset,
   SidebarProvider,
@@ -23,6 +24,9 @@ export default function DashboardLayout({
             <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="mr-2 h-4" />
             <h1 className="text-xl font-semibold">Integration Forge</h1>
+          </div>
+          <div className="ml-auto px-4">
+            <ProfileDropdown />
           </div>
         </header>
 
