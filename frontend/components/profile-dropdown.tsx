@@ -2,10 +2,12 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { Settings, CreditCard, LogOut, User } from "lucide-react";
+import { Settings, CreditCard, LogOut, User, Moon, Sun } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useUser, useClerk } from "@clerk/nextjs";
+import { useTheme } from "next-themes";
+import { Switch } from "@/components/ui/switch";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -41,6 +43,7 @@ export default function ProfileDropdown({
 }: ProfileDropdownProps) {
     const { user } = useUser();
     const { signOut } = useClerk();
+    const { theme, setTheme } = useTheme();
 
     // Use Clerk user data
     const profileData: Profile = {
@@ -68,6 +71,12 @@ export default function ProfileDropdown({
             icon: <Settings className="w-4 h-4" />,
         },
     ];
+
+    const isDarkMode = theme === "dark";
+    
+    const toggleTheme = () => {
+        setTheme(isDarkMode ? "light" : "dark");
+    };
 
     return (
         <div className={cn("relative", className)} {...props}>
@@ -129,6 +138,25 @@ export default function ProfileDropdown({
                                     </Link>
                                 </DropdownMenuItem>
                             ))}
+
+                            {/* Theme Toggle with Switch */}
+                            <div className="flex items-center p-3 rounded-xl border border-transparent">
+                                <div className="flex items-center gap-2 flex-1">
+                                    {isDarkMode ? (
+                                        <Moon className="w-4 h-4 text-zinc-900 dark:text-zinc-100" />
+                                    ) : (
+                                        <Sun className="w-4 h-4 text-zinc-900 dark:text-zinc-100" />
+                                    )}
+                                    <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100 tracking-tight leading-tight whitespace-nowrap">
+                                        Dark Mode
+                                    </span>
+                                </div>
+                                <Switch 
+                                    checked={isDarkMode} 
+                                    onCheckedChange={toggleTheme}
+                                    aria-label="Toggle dark mode"
+                                />
+                            </div>
                         </div>
 
                         <DropdownMenuSeparator className="my-3 bg-linear-to-r from-transparent via-zinc-200 to-transparent dark:via-zinc-800" />

@@ -1,29 +1,27 @@
 /**
- * Markdown renderer component (lazy-loaded)
- * Heavy dependencies: react-markdown, remark-gfm, rehype-highlight
- * This component is dynamically imported to reduce initial bundle size
+ * Markdown renderer component with AI Elements CodeBlock
+ * Lazy-loaded to reduce initial bundle size
  */
 
 'use client'
 
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import rehypeHighlight from 'rehype-highlight'
+import { CodeBlock, CodeBlockCopyButton, CodeBlockHeader, CodeBlockTitle } from '@/components/ai-elements/code-block'
+import type { BundledLanguage } from 'shiki'
 
 interface MarkdownRendererProps {
   content: string
 }
 
 /**
- * Renders markdown content with syntax highlighting
- * Used for AI message responses in chat
+ * Renders markdown content with AI Elements syntax highlighting and copy buttons
  */
 export function MarkdownRenderer({ content }: MarkdownRendererProps) {
   return (
-    <div className="prose prose-sm dark:prose-invert max-w-none">
+    <div className="prose prose-sm dark:prose-invert max-w-none overflow-x-hidden">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeHighlight]}
         components={{
           // Customize markdown rendering
           p: ({ children }) => (
@@ -39,10 +37,9 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
             <li className="mb-1">{children}</li>
           ),
           code: ({ className, children, ...props }) => {
-            // Determine if this is inline code or block code
-            const hasLanguageClass = /language-(\w+)/.test(className || '')
+            const match = /language-(\w+)/.exec(className || '')
             const hasNewlines = children?.toString().includes('\n')
-            const isInlineCode = !hasLanguageClass && !hasNewlines
+            const isInlineCode = !match && !hasNewlines
             
             if (isInlineCode) {
               return (
@@ -55,18 +52,28 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
               )
             }
             
-            // Block code (inside <pre> with syntax highlighting from rehype-highlight)
+            // Block code - use AI Elements CodeBlock with copy button
+            const language = (match?.[1] || 'text') as BundledLanguage
+            const codeString = String(children).replace(/\n$/, '')
+            
             return (
-              <code className={className} {...props}>
-                {children}
-              </code>
+              <CodeBlock
+                code={codeString}
+                language={language}
+                showLineNumbers={false}
+                className="my-2 overflow-x-auto"
+              >
+                <CodeBlockHeader>
+                  <CodeBlockTitle>{language}</CodeBlockTitle>
+                  <CodeBlockCopyButton />
+                </CodeBlockHeader>
+              </CodeBlock>
             )
           },
-          pre: ({ children }) => (
-            <pre className="bg-muted p-3 rounded-md overflow-x-auto mb-2">
-              {children}
-            </pre>
-          ),
+          pre: ({ children }) => {
+            // Let the code component handle rendering
+            return <>{children}</>
+          },
           a: ({ href, children }) => (
             <a
               href={href}

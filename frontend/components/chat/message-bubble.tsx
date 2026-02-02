@@ -1,19 +1,20 @@
 /**
- * Message bubble component
- * Displays user and AI messages with markdown support
+ * Message bubble component using AI Elements
+ * Displays user and AI messages with markdown support, citations, timestamps, and follow-up suggestions
  */
 
 'use client'
 
+import { Message, MessageContent } from '@/components/ai-elements/message'
+import { Suggestions, Suggestion } from '@/components/ai-elements/suggestion'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
 import { Bot, User, Loader2 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { CitationsList } from './citation'
-import type { Message } from '@/types/chat'
+import type { Message as MessageType } from '@/types/chat'
 
 // Dynamically import the markdown renderer to reduce initial bundle size
-// This heavy component (react-markdown + plugins) is only loaded when needed
 const MarkdownRenderer = dynamic(
   () => import('./markdown-renderer').then((mod) => mod.MarkdownRenderer),
   {
@@ -23,26 +24,32 @@ const MarkdownRenderer = dynamic(
         <span className="text-sm">Loading...</span>
       </div>
     ),
-    ssr: false, // Client-side only (markdown rendering not needed for SSR)
+    ssr: false,
   }
 )
 
 interface MessageBubbleProps {
-  message: Message
+  message: MessageType
+  isLatestAI?: boolean
+  onSuggestionClick?: (suggestion: string) => void
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+// AI-generated follow-up suggestions based on common documentation queries
+const FOLLOW_UP_SUGGESTIONS = [
+  "Show me code examples",
+  "What are the best practices?",
+  "How do I get started?",
+  "What are the requirements?",
+  "Tell me more about authentication",
+]
+
+export function MessageBubble({ message, isLatestAI = false, onSuggestionClick }: MessageBubbleProps) {
   const isUser = message.role === 'user'
 
   return (
-    <div
-      className={cn(
-        'flex gap-3 mb-4',
-        isUser ? 'flex-row-reverse' : 'flex-row'
-      )}
-    >
+    <div className="flex gap-3 mb-4 w-full overflow-hidden">
       {/* Avatar */}
-      <Avatar className="h-8 w-8 mt-1">
+      <Avatar className="h-8 w-8 mt-1 shrink-0">
         <AvatarFallback className={cn(
           isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'
         )}>
@@ -50,44 +57,45 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         </AvatarFallback>
       </Avatar>
 
-      {/* Message Content */}
-      <div
-        className={cn(
-          'flex flex-col gap-1 max-w-[80%]',
-          isUser ? 'items-end' : 'items-start'
-        )}
-      >
-        {/* Message Bubble */}
-        <div
-          className={cn(
-            'rounded-lg px-4 py-2',
-            isUser
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-muted'
-          )}
-        >
+      {/* Message using AI Elements */}
+      <Message from={isUser ? 'user' : 'assistant'} className="flex-1 min-w-0 overflow-hidden">
+        <MessageContent className="overflow-hidden">
+          {/* Message text */}
           {isUser ? (
-            // User message - plain text
-            <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+            <p className="text-sm whitespace-pre-wrap wrap-break-word">{message.content}</p>
           ) : (
-            // AI message - markdown rendering (lazy-loaded)
             <MarkdownRenderer content={message.content} />
           )}
-        </div>
 
-        {/* Citations (AI messages only) */}
-        {!isUser && message.citations && message.citations.length > 0 && (
-          <CitationsList citations={message.citations} />
-        )}
+          {/* Citations (AI messages only) */}
+          {!isUser && message.citations && message.citations.length > 0 && (
+            <CitationsList citations={message.citations} />
+          )}
 
-        {/* Timestamp */}
-        <span className="text-xs text-muted-foreground px-1">
-          {message.timestamp.toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
-        </span>
-      </div>
+          {/* Follow-up suggestions (latest AI message only) */}
+          {!isUser && isLatestAI && onSuggestionClick && (
+            <div className="mt-4">
+              <Suggestions>
+                {FOLLOW_UP_SUGGESTIONS.map((suggestion) => (
+                  <Suggestion
+                    key={suggestion}
+                    suggestion={suggestion}
+                    onClick={onSuggestionClick}
+                  />
+                ))}
+              </Suggestions>
+            </div>
+          )}
+
+          {/* Timestamp */}
+          <div className="text-xs text-muted-foreground mt-1">
+            {message.timestamp.toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </div>
+        </MessageContent>
+      </Message>
     </div>
   )
 }
