@@ -302,13 +302,20 @@ class HybridSearcher:
         fused_results: list[SearchResult] = []
         for rank, chunk_id in enumerate(sorted_chunk_ids, start=1):
             base_result = chunk_map[chunk_id]
+
+            # Preserve the best original score for display
+            # Prefer vector search score (cosine similarity) as it's more intuitive
+            original_score = base_result.original_score or base_result.score
+
             fused_results.append(
                 SearchResult(
                     chunk_id=chunk_id,
                     document_id=base_result.document_id,
+                    document_title=base_result.document_title,  # Include document title!
                     content=base_result.content,
                     metadata=base_result.metadata,
-                    score=rrf_scores[chunk_id],
+                    score=rrf_scores[chunk_id],  # RRF score for ranking
+                    original_score=original_score,  # Original score for display
                     rank=rank,
                     source="hybrid",
                 )

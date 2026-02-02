@@ -10,7 +10,8 @@ export interface Citation {
   document_title: string
   chunk_id: string
   content: string
-  similarity_score?: number
+  similarity_score?: number  // RRF score (0-1, lower is better for ranking)
+  original_score?: number    // Original cosine similarity (0-1, higher is better for display)
   chunk_index?: number
 }
 
@@ -69,9 +70,12 @@ export interface TokenEvent {
 export interface CitationEvent {
   chunk_id: string
   document_title: string
-  content: string
-  preview: string
+  content?: string
+  preview?: string
   similarity_score?: number
+  score?: number  // Backend sends 'score' (RRF), not 'similarity_score'
+  original_score?: number  // Original cosine similarity for display
+  source?: string  // Search method (vector/text/hybrid/reranked)
 }
 
 export interface AgentStartEvent {

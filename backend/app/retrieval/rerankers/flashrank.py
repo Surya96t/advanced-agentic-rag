@@ -174,7 +174,8 @@ class FlashRankReranker(Reranker):
                     "meta": {
                         "chunk_id": str(result.chunk_id),
                         "document_id": str(result.document_id),
-                        "original_score": result.score,
+                        "document_title": result.document_title,  # Preserve document title!
+                        "original_score": result.original_score,  # Preserve original score!
                         "original_rank": result.rank,
                         "source": result.source,
                         "metadata": result.metadata,
@@ -205,9 +206,14 @@ class FlashRankReranker(Reranker):
                     SearchResult(
                         chunk_id=meta["chunk_id"],
                         document_id=meta["document_id"],
+                        # Include document title!
+                        document_title=meta.get(
+                            "document_title", "Unknown Document"),
                         content=passage["text"],
                         metadata=meta.get("metadata", {}),
                         score=passage["score"],  # FlashRank score (0-1)
+                        # Preserve original score
+                        original_score=meta.get("original_score"),
                         rank=len(reranked_results) + 1,
                         source="reranked",  # Mark as re-ranked
                     )

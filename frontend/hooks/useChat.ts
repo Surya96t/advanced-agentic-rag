@@ -146,6 +146,8 @@ export function useChat() {
               case 'citation': {
                 const data = parseEventData<CitationEvent>(event)
                 if (data) {
+                  console.log('[Citation Event]', data) // DEBUG
+                  
                   // Validate citation content
                   if (!isCitationSafe(data)) {
                     console.warn('[Security] Blocked unsafe citation')
@@ -157,14 +159,18 @@ export function useChat() {
                     startStreamingMessage()
                     messageStarted = true
                   }
+                  
                   // Convert CitationEvent to Citation format
-                  addCitationToStreamingMessage({
-                    document_id: data.chunk_id?.split('_')[0] || 'unknown',
-                    document_title: data.document_title,
+                  const citation = {
+                    document_id: data.chunk_id || 'unknown',
+                    document_title: data.document_title || 'Unknown Document',
                     chunk_id: data.chunk_id,
-                    content: data.preview || '',
-                    similarity_score: data.similarity_score,
-                  })
+                    content: data.preview || data.content || '',
+                    similarity_score: data.score ?? data.similarity_score,
+                    original_score: data.original_score,  // Original cosine similarity
+                  }
+                  console.log('[Adding Citation]', citation) // DEBUG
+                  addCitationToStreamingMessage(citation)
                 }
                 break
               }

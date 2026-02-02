@@ -2,7 +2,31 @@
 Vector search implementation using pgvector and OpenAI embeddings.
 
 This module provides semantic search capabilities using dense vector embeddings
-and cosine similarity. It leverages the existing HNSW index for fast retrieval.
+and c                            results.append(
+                    SearchResult(
+                        chunk_id=row["id"],
+                        document_id=row["document_id"],
+                        document_title=row.get("document_title", "Unknown Document"),
+                        content=row["content"],
+                        metadata=row.get("metadata", {}),
+                        score=similarity,
+                        original_score=similarity,  # Preserve original cosine similarity
+                        rank=rank,
+                        source="vector",
+                    )
+                )append(
+                    SearchResult(
+                        chunk_id=row["id"],
+                        document_id=row["document_id"],
+                        document_title=row.get("document_title", "Unknown Document"),
+                        content=row["content"],
+                        metadata=row.get("metadata", {}),
+                        score=similarity,
+                        original_score=similarity,  # Preserve original cosine similarity
+                        rank=rank,
+                        source="vector",
+                    )
+                )rity. It leverages the existing HNSW index for fast retrieval.
 """
 
 from typing import Any
@@ -159,6 +183,8 @@ class VectorSearcher:
                     SearchResult(
                         chunk_id=UUID(row["id"]),
                         document_id=UUID(row["document_id"]),
+                        document_title=row.get(
+                            "document_title", "Unknown Document"),
                         content=row["content"],
                         metadata=row.get("metadata", {}),
                         score=similarity,
@@ -262,6 +288,8 @@ class VectorSearcher:
                     SearchResult(
                         chunk_id=UUID(row["id"]),
                         document_id=UUID(row["document_id"]),
+                        document_title=row.get(
+                            "document_title", "Unknown Document"),
                         content=row["content"],
                         metadata=row.get("metadata", {}),
                         score=similarity,

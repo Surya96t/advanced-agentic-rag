@@ -1,6 +1,9 @@
 /**
  * Citation component using AI Elements Sources
  * Displays collapsible source document references with similarity scores
+ * 
+ * Shows original_score (cosine similarity 0-1, higher = more relevant)
+ * instead of RRF score (0-1, lower = better ranking)
  */
 
 'use client'
@@ -28,9 +31,9 @@ export function CitationsList({ citations }: CitationsListProps) {
               href={`/documents/${citation.document_id}`}
               title={citation.document_title}
             />
-            {citation.similarity_score != null && (
-              <Badge variant="secondary" className="text-xs shrink-0">
-                {Math.round(citation.similarity_score * 100)}%
+            {citation.original_score != null && (
+              <Badge variant="secondary" className="text-xs shrink-0" title="Similarity Score">
+                {Math.round(citation.original_score * 100)}%
               </Badge>
             )}
           </div>

@@ -23,20 +23,24 @@ class SearchResult(BaseSchema):
     Attributes:
         chunk_id: Unique identifier for the chunk
         document_id: ID of the parent document
+        document_title: Title of the parent document
         content: The actual text content of the chunk
         metadata: JSONB metadata (headers, page numbers, language, etc.)
         score: Relevance score (0.0 to 1.0 for vector, varies for text/hybrid)
+        original_score: Original score before fusion/reranking (for display)
         rank: Position in the result list (1-indexed)
         source: Which search method produced this result
 
     Learning Note:
     - Vector search score: cosine similarity (0.0 to 1.0, higher is better)
     - Text search score: ts_rank or ts_rank_cd (varies, higher is better)
-    - Hybrid search score: RRF score (0.0 to 1.0, higher is better)
+    - Hybrid search score: RRF score (0.0 to 0.033, small numbers are normal!)
     - Reranked score: cross-encoder score (0.0 to 1.0, higher is better)
+    - Original score: Preserved from vector/text search for user display
     """
     chunk_id: UUID = Field(..., description="Chunk UUID")
     document_id: UUID = Field(..., description="Parent document UUID")
+    document_title: str = Field(..., description="Parent document title")
     content: str = Field(..., description="Chunk text content")
     metadata: dict = Field(
         default_factory=dict,
@@ -45,6 +49,10 @@ class SearchResult(BaseSchema):
     score: float = Field(
         ...,
         description="Relevance score (interpretation varies by source)"
+    )
+    original_score: float | None = Field(
+        default=None,
+        description="Original cosine similarity or text rank before RRF fusion (for display to users)"
     )
     rank: int = Field(
         ...,

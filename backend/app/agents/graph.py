@@ -469,9 +469,23 @@ async def stream_agent(
                 # Process specific update types
                 # Citation events from retriever
                 if node_name == "retriever" and "sources" in node_update:
+                    logger.info(
+                        f"Processing {len(node_update['sources'])} sources from retriever")
                     for source in node_update["sources"]:
                         chunk_id = source.get("chunk_id")
                         document_id = source.get("document_id")
+                        document_title = source.get("document_title")
+                        rrf_score = source.get("score", 0.0)
+                        original_score = source.get("original_score")
+
+                        # Format original_score for logging
+                        original_score_str = f"{original_score:.4f}" if original_score is not None else "N/A"
+
+                        logger.info(
+                            f"📄 Citation: chunk_id={chunk_id}, document_id={document_id}, "
+                            f"title='{document_title}', rrf_score={rrf_score:.4f}, "
+                            f"original_score={original_score_str}"
+                        )
 
                         if not chunk_id or not document_id:
                             logger.warning(
@@ -486,12 +500,16 @@ async def stream_agent(
                                 chunk_id=chunk_id,
                                 document_title=source.get(
                                     "document_title", "Unknown Document"),
-                                score=source.get("score", 0.0),
+                                score=rrf_score,
+                                original_score=original_score,  # Include original score for display
                                 source=source.get("source", "unknown"),
                                 preview=source.get("content", "")[
                                     :200] if source.get("content") else None,
                             ).model_dump_json()
                         }
+                elif node_name == "retriever":
+                    logger.warning(
+                        f"Retriever node update missing 'sources' field. Keys: {list(node_update.keys())}")
 
                 # Validation events
             # Validation events
