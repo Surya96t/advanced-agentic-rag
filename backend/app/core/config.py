@@ -223,6 +223,12 @@ class Settings(BaseSettings):
         description="(Deprecated) Use rate_limit_default_requests and rate_limit_default_window instead"
     )
 
+    # LangGraph Checkpointing Configuration
+    enable_checkpointing: bool = Field(
+        default=True,
+        description="Enable LangGraph PostgreSQL checkpointing for conversation and agent state persistence"
+    )
+
     # Logging
     log_level: str = Field(default="INFO", description="Logging level")
     log_format: str = Field(

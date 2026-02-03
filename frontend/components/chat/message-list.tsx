@@ -1,86 +1,70 @@
 /**
  * Message list component
  * Displays chat messages with auto-scroll and agent status
+ * Simple container - parent handles scrolling
  */
 
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { useEffect, useRef } from 'react'
 import { MessageBubble } from './message-bubble'
-import { AgentStatus } from './agent-status'
 import type { Message } from '@/types/chat'
+import type { AgentStep, StreamingMetrics } from '@/stores/chat-store'
 
 interface MessageListProps {
   messages: Message[]
-  currentAgent?: string | null
+  agentHistory?: AgentStep[]
+  streamingMetrics?: StreamingMetrics
   isLoading?: boolean
+  onSuggestionClick?: (suggestion: string) => void
 }
 
-export function MessageList({ messages, currentAgent, isLoading }: MessageListProps) {
+export function MessageList({ 
+  messages, 
+  agentHistory = [],
+  streamingMetrics,
+  isLoading,
+  onSuggestionClick 
+}: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
-  const viewportRef = useRef<HTMLDivElement>(null)
-  const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
 
-  // Auto-scroll to bottom when new messages arrive (only if user hasn't manually scrolled up)
+  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    if (shouldAutoScroll || isLoading) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }
-  }, [messages, currentAgent, isLoading, shouldAutoScroll])
-
-  // Detect if user has scrolled up from the ScrollArea viewport
-  const handleScroll = () => {
-    const viewport = viewportRef.current
-    if (!viewport) return
-
-    // Calculate if user is at the bottom of the scroll area
-    const isAtBottom = Math.abs(
-      viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop
-    ) < 10
-    
-    setShouldAutoScroll(isAtBottom)
-  }
-
-  // Attach scroll listener to viewport after mount
-  useEffect(() => {
-    const viewport = viewportRef.current
-    if (!viewport) return
-
-    viewport.addEventListener('scroll', handleScroll)
-    return () => viewport.removeEventListener('scroll', handleScroll)
-  }, []) // handleScroll is stable, no need to include it
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages.length, isLoading])
 
   if (messages.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center text-muted-foreground">
-          <p className="text-lg font-medium mb-2">Start a conversation</p>
-          <p className="text-sm">
-            Ask questions about your uploaded API documentation
-          </p>
-        </div>
-      </div>
-    )
+    return null
   }
 
+  // Find the last AI message index
+  const lastAIMessageIndex = messages.reduce((lastIndex, msg, index) => {
+    return msg.role === 'assistant' ? index : lastIndex
+  }, -1)
+
   return (
-    <div className="flex-1 overflow-hidden relative">
-      <ScrollArea className="h-full px-4" ref={viewportRef}>
-        <div className="py-4 space-y-4">
-          {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} />
-          ))}
+    <div className="px-4 py-4 w-full">
+      <div className="space-y-4 max-w-4xl mx-auto w-full overflow-hidden">
+        {messages.map((message, index) => {
+          // For the latest AI message during streaming, pass agent history and metrics
+          const isCurrentlyStreaming = isLoading && index === messages.length - 1 && message.role === 'assistant'
           
-          {/* Show agent status when streaming */}
-          {isLoading && currentAgent && (
-            <AgentStatus agent={currentAgent} className="ml-11" />
-          )}
-          
-          {/* Invisible div for auto-scroll target */}
-          <div ref={bottomRef} />
-        </div>
-      </ScrollArea>
+          return (
+            <MessageBubble 
+              key={message.id} 
+              message={message}
+              isLatestAI={!isLoading && index === lastAIMessageIndex}
+              isStreaming={isCurrentlyStreaming}
+              agentHistory={isCurrentlyStreaming ? agentHistory : []}
+              streamingMetrics={isCurrentlyStreaming ? streamingMetrics : undefined}
+              onSuggestionClick={onSuggestionClick}
+            />
+          )
+        })}
+        
+        {/* Invisible div for auto-scroll target */}
+        <div ref={bottomRef} />
+      </div>
     </div>
   )
 }

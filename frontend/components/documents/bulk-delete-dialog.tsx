@@ -66,6 +66,7 @@ export function BulkDeleteDialog({
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={isDeleting}
+            aria-label="Cancel deletion"
           >
             Cancel
           </Button>
@@ -73,6 +74,7 @@ export function BulkDeleteDialog({
             variant="destructive"
             onClick={onConfirm}
             disabled={isDeleting}
+            aria-label={isDeleting ? "Deleting documents" : `Confirm deletion of ${count} document${count !== 1 ? 's' : ''}`}
           >
             {isDeleting ? "Deleting..." : `Delete ${count} Document${count !== 1 ? 's' : ''}`}
           </Button>

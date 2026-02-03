@@ -1,32 +1,15 @@
 /**
- * Citation badge component
- * Displays source document references
+ * Citation component with expandable cards
+ * Displays interactive source document references with similarity scores
+ * 
+ * Shows original_score (cosine similarity 0-1, higher = more relevant)
+ * instead of RRF score (0-1, lower = better ranking)
  */
 
-import { Badge } from '@/components/ui/badge'
-import { FileText } from 'lucide-react'
+'use client'
+
+import { CitationCard } from '@/components/chat/citation-card'
 import type { Citation } from '@/types/chat'
-
-interface CitationBadgeProps {
-  citation: Citation
-}
-
-export function CitationBadge({ citation }: CitationBadgeProps) {
-  return (
-    <Badge
-      variant="secondary"
-      className="gap-1 text-xs font-normal"
-    >
-      <FileText className="h-3 w-3" />
-      <span>{citation.document_title}</span>
-      {citation.similarity_score != null && (
-        <span className="text-muted-foreground">
-          ({Math.round(citation.similarity_score * 100)}%)
-        </span>
-      )}
-    </Badge>
-  )
-}
 
 interface CitationsListProps {
   citations: Citation[]
@@ -37,14 +20,27 @@ export function CitationsList({ citations }: CitationsListProps) {
     return null
   }
 
+  // Sort citations by relevance score (highest first)
+  const sortedCitations = [...citations].sort((a, b) => {
+    const scoreA = a.original_score ?? 0
+    const scoreB = b.original_score ?? 0
+    return scoreB - scoreA
+  })
+
   return (
-    <div className="flex flex-wrap gap-2 mt-2">
-      {citations.map((citation, index) => (
-        <CitationBadge
-          key={`${citation.chunk_id}-${index}`}
-          citation={citation}
-        />
-      ))}
+    <div className="mt-3">
+      <h3 className="text-xs font-medium text-muted-foreground mb-1.5">
+        Sources ({citations.length})
+      </h3>
+      <div className="flex flex-wrap gap-1.5">
+        {sortedCitations.map((citation, index) => (
+          <CitationCard 
+            key={`${citation.chunk_id}-${index}`}
+            citation={citation}
+            index={index}
+          />
+        ))}
+      </div>
     </div>
   )
 }

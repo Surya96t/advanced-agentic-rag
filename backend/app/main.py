@@ -44,6 +44,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         version="0.1.0",
     )
 
+    # Initialize checkpointer context manager
+    checkpointer_cm = None
+
     try:
         # Initialize Supabase client (for side effects)
         SupabaseClient.get_client()
@@ -56,6 +59,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         else:
             logger.info("Database health check passed")
 
+        # Initialize checkpointer if enabled
+        if settings.enable_checkpointing:
+            logger.info("Initializing LangGraph checkpointer...")
+            from app.agents.graph import get_checkpointer
+
+            # Get checkpointer context manager
+            checkpointer_cm = await get_checkpointer()
+
+            # Enter the context manager to get the actual checkpointer instance
+            checkpointer_instance = await checkpointer_cm.__aenter__()
+
+            # Call setup() to create tables if they don't exist (idempotent)
+            logger.info(
+                "Running checkpointer setup (creates tables if needed)")
+            await checkpointer_instance.setup()
+
+            # Store checkpointer in app state for use in routes
+            app.state.checkpointer = checkpointer_instance
+            logger.info("✅ Checkpointer initialized and stored in app.state")
+        else:
+            logger.info("Checkpointing disabled (ENABLE_CHECKPOINTING=false)")
+            app.state.checkpointer = None
+
     except Exception as e:
         logger.error(
             "Failed to initialize application",
@@ -63,12 +89,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             exc_info=True,
         )
         # We log but don't fail startup - let health endpoint show the issue
-        pass
+        app.state.checkpointer = None
 
     yield
 
     # Shutdown
     logger.info("Shutting down Integration Forge backend")
+
+    # Clean up checkpointer context manager
+    if checkpointer_cm is not None:
+        try:
+            logger.info("Closing checkpointer connection...")
+            await checkpointer_cm.__aexit__(None, None, None)
+            logger.info("Checkpointer connection closed")
+        except Exception as e:
+            logger.error(f"Error closing checkpointer: {e}")
+
     SupabaseClient.close()
     logger.info("Application shutdown complete")
 

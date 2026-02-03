@@ -1,6 +1,5 @@
 import { UserSync } from '@/components/auth/user-sync'
 import { AppSidebar } from '@/components/app-sidebar'
-import { ModeToggle } from '@/components/mode-toggle'
 import ProfileDropdown from '@/components/profile-dropdown'
 import {
   SidebarInset,
@@ -26,14 +25,13 @@ export default function DashboardLayout({
             <Separator orientation="vertical" className="mr-2 h-4" />
             <h1 className="text-xl font-semibold">Integration Forge</h1>
           </div>
-          <div className="ml-auto px-4 flex items-center gap-3">
-            <ModeToggle />
+          <div className="ml-auto px-4">
             <ProfileDropdown />
           </div>
         </header>
 
-        {/* Main Content */}
-        <main className="flex flex-1 flex-col gap-4 p-4">
+        {/* Main Content - Relative positioned container for chat's absolute positioning */}
+        <main className="relative flex flex-1 flex-col gap-4 p-4 pt-0 min-h-0">
           {children}
         </main>
       </SidebarInset>

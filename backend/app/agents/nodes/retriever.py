@@ -235,8 +235,11 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
         {
             "chunk_id": str(result.chunk_id),
             "document_id": str(result.document_id),
-            "document_title": result.metadata.get("document_title", "Unknown"),
-            "score": result.score,
+            # Use the actual document_title field, not metadata!
+            "document_title": result.document_title,
+            "score": result.score,  # RRF or reranked score
+            # Original cosine similarity for display
+            "original_score": result.original_score,
             "source": result.source,
         }
         for result in reranked_results

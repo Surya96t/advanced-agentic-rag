@@ -73,7 +73,12 @@ export function ActiveUploads({ uploads, onRemove, onClearCompleted }: ActiveUpl
         <div className="flex items-center justify-between">
           <CardTitle>Active Uploads ({uploads.length})</CardTitle>
           {hasCompleted && (
-            <Button variant="outline" size="sm" onClick={onClearCompleted}>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={onClearCompleted}
+              aria-label="Clear completed uploads"
+            >
               Clear Completed
             </Button>
           )}

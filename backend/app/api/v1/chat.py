@@ -125,7 +125,10 @@ async def sse_generator(
     validator = TokenValidator()
 
     try:
-        async for event in stream_agent(query, thread_id, user_id):
+        # Get checkpointer from app state
+        checkpointer = request.app.state.checkpointer
+
+        async for event in stream_agent(query, thread_id, user_id, checkpointer=checkpointer):
             # Check for client disconnect
             if await request.is_disconnected():
                 logger.info(

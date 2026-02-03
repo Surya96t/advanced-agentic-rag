@@ -114,8 +114,10 @@ class CitationEvent(BaseSchema):
 
     chunk_id: UUID = Field(..., description="Chunk UUID")
     document_title: str = Field(..., description="Source document title")
-    score: float = Field(..., ge=0.0, le=1.0,
-                         description="Relevance score (0.0 to 1.0)")
+    score: float = Field(..., ge=0.0,
+                         description="RRF or reranked score (may be small!)")
+    original_score: float | None = Field(
+        None, ge=0.0, description="Original cosine similarity (0.0-1.0) or text rank for display")
     source: str = Field(...,
                         description="Search method (vector/text/hybrid/reranked)")
     preview: str | None = Field(
@@ -127,8 +129,9 @@ class CitationEvent(BaseSchema):
                 {
                     "chunk_id": "550e8400-e29b-41d4-a716-446655440000",
                     "document_title": "Clerk Authentication Guide",
-                    "score": 0.89,
-                    "source": "reranked",
+                    "score": 0.0164,
+                    "original_score": 0.89,
+                    "source": "hybrid",
                     "preview": "To integrate Clerk with your application, first install the package..."
                 }
             ]

@@ -32,6 +32,7 @@ export function NavUser({
         <SidebarMenuButton
           size="lg"
           className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+          suppressHydrationWarning
         >
           <UserButton 
             afterSignOutUrl="/"
@@ -41,9 +42,9 @@ export function NavUser({
               }
             }}
           />
-          <div className="grid flex-1 text-left text-sm leading-tight">
-            <span className="truncate font-medium">{displayName}</span>
-            <span className="truncate text-xs">{displayEmail}</span>
+          <div className="grid flex-1 text-left text-sm leading-tight" suppressHydrationWarning>
+            <span className="truncate font-medium" suppressHydrationWarning>{displayName}</span>
+            <span className="truncate text-xs" suppressHydrationWarning>{displayEmail}</span>
           </div>
           <ChevronsUpDown className="ml-auto size-4" />
         </SidebarMenuButton>

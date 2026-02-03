@@ -151,65 +151,36 @@ graph = _builder.compile()
 logger.info(
     "✅ Studio graph compiled (use get_graph() for production with checkpointing)")
 
-# Cache for runtime graph with checkpointer
-_compiled_graph = None
-_checkpointer_cm = None
 
-
-async def get_graph():
+def get_graph(checkpointer=None):
     """
-    Get or create the compiled LangGraph with checkpointer for production use.
+    Get the compiled LangGraph with optional checkpointer for production use.
 
-    This function defers checkpointer initialization to runtime to properly wire in
-    the async PostgreSQL checkpointer. The compiled graph is cached after
-    first initialization.
+    This function compiles the graph with the provided checkpointer instance,
+    which should be managed by the FastAPI application lifecycle.
+
+    Args:
+        checkpointer: Optional AsyncPostgresSaver instance from app.state.
+                     If None, graph is compiled without checkpointing.
 
     Returns:
-        Compiled StateGraph with checkpointing enabled
-
-    Raises:
-        Exception: If checkpointer initialization or graph compilation fails
+        Compiled StateGraph with or without checkpointing
 
     Note:
         - For LangGraph Studio: use the module-level `graph` variable
-        - For production runtime: use this `get_graph()` function
-
-        The checkpointer uses an async context manager that stays open for 
-        the lifetime of the application.
+        - For production runtime: pass checkpointer from app.state
+        - Checkpointer lifecycle is managed by FastAPI lifespan events
     """
-    global _compiled_graph, _checkpointer_cm
-
-    # Return cached graph if already compiled
-    if _compiled_graph is not None:
-        return _compiled_graph
-
-    logger.info(
-        "Compiling LangGraph with checkpointing (first-time production initialization)")
-
-    try:
-        # Get checkpointer context manager
-        _checkpointer_cm = await get_checkpointer()
-
-        # Enter the context manager to get the actual checkpointer instance
-        checkpointer_instance = await _checkpointer_cm.__aenter__()
-
-        # Build and compile graph with checkpointer
+    if checkpointer is None:
+        logger.info("Compiling graph without checkpointing")
         builder = build_graph()
-        _compiled_graph = builder.compile(checkpointer=checkpointer_instance)
+        return builder.compile()
 
-        logger.info(
-            "✅ LangGraph compiled successfully with checkpointing enabled")
-        return _compiled_graph
-
-    except Exception as e:
-        logger.error(f"Failed to compile graph with checkpointer: {e}")
-        # Clean up if context manager was entered
-        if _checkpointer_cm is not None:
-            try:
-                await _checkpointer_cm.__aexit__(None, None, None)
-            except Exception:
-                pass
-        raise
+    logger.info("Compiling graph with checkpointing enabled")
+    builder = build_graph()
+    compiled = builder.compile(checkpointer=checkpointer)
+    logger.info("✅ Graph compiled successfully with checkpointing")
+    return compiled
 
 
 # ============================================================================
@@ -262,6 +233,7 @@ async def run_agent(
     query: str,
     thread_id: str | UUID | None = None,
     user_id: str = "anonymous",
+    checkpointer=None,
 ) -> ChatResponse:
     """
     Run the agentic RAG workflow and return final response.
@@ -273,6 +245,7 @@ async def run_agent(
         query: User's question
         thread_id: Optional conversation thread ID for checkpointing
         user_id: User identifier for RLS in database
+        checkpointer: Optional checkpointer instance from app.state
 
     Returns:
         ChatResponse with generated answer, sources, and metadata
@@ -309,10 +282,10 @@ async def run_agent(
 
     try:
         # Get compiled graph with checkpointer
-        graph = await get_graph()
+        graph_instance = get_graph(checkpointer=checkpointer)
 
         # Invoke graph (blocks until completion)
-        final_state = await graph.ainvoke(initial_state, config=config)
+        final_state = await graph_instance.ainvoke(initial_state, config=config)
 
         # Build response from final state
         response = ChatResponse(
@@ -356,6 +329,7 @@ async def stream_agent(
     query: str,
     thread_id: str | UUID | None = None,
     user_id: str = "anonymous",
+    checkpointer=None,
 ) -> AsyncIterator[dict]:
     """
     Stream agent execution with real-time SSE events and token-by-token streaming.
@@ -372,6 +346,7 @@ async def stream_agent(
         query: User's question
         thread_id: Optional conversation thread ID
         user_id: User identifier for RLS
+        checkpointer: Optional checkpointer instance from app.state
 
     Yields:
         SSE event dictionaries with "event" and "data" keys
@@ -420,11 +395,11 @@ async def stream_agent(
 
     try:
         # Get compiled graph with checkpointer
-        graph = await get_graph()
+        graph_instance = get_graph(checkpointer=checkpointer)
 
         # Stream with both updates and custom modes to get node updates + token events
         # Using combined modes: ["updates", "custom"]
-        async for chunk in graph.astream(
+        async for chunk in graph_instance.astream(
             initial_state,
             config=config,
             stream_mode=["updates", "custom"],
@@ -469,9 +444,23 @@ async def stream_agent(
                 # Process specific update types
                 # Citation events from retriever
                 if node_name == "retriever" and "sources" in node_update:
+                    logger.info(
+                        f"Processing {len(node_update['sources'])} sources from retriever")
                     for source in node_update["sources"]:
                         chunk_id = source.get("chunk_id")
                         document_id = source.get("document_id")
+                        document_title = source.get("document_title")
+                        rrf_score = source.get("score", 0.0)
+                        original_score = source.get("original_score")
+
+                        # Format original_score for logging
+                        original_score_str = f"{original_score:.4f}" if original_score is not None else "N/A"
+
+                        logger.info(
+                            f"📄 Citation: chunk_id={chunk_id}, document_id={document_id}, "
+                            f"title='{document_title}', rrf_score={rrf_score:.4f}, "
+                            f"original_score={original_score_str}"
+                        )
 
                         if not chunk_id or not document_id:
                             logger.warning(
@@ -486,12 +475,16 @@ async def stream_agent(
                                 chunk_id=chunk_id,
                                 document_title=source.get(
                                     "document_title", "Unknown Document"),
-                                score=source.get("score", 0.0),
+                                score=rrf_score,
+                                original_score=original_score,  # Include original score for display
                                 source=source.get("source", "unknown"),
                                 preview=source.get("content", "")[
                                     :200] if source.get("content") else None,
                             ).model_dump_json()
                         }
+                elif node_name == "retriever":
+                    logger.warning(
+                        f"Retriever node update missing 'sources' field. Keys: {list(node_update.keys())}")
 
                 # Validation events
             # Validation events
@@ -564,7 +557,7 @@ async def stream_agent(
         }
 
 
-async def get_checkpoint(thread_id: str | UUID) -> dict | None:
+async def get_checkpoint(thread_id: str | UUID, checkpointer=None) -> dict | None:
     """
     Get the latest checkpoint for a conversation thread.
 
@@ -572,6 +565,7 @@ async def get_checkpoint(thread_id: str | UUID) -> dict | None:
 
     Args:
         thread_id: Thread identifier
+        checkpointer: Optional checkpointer instance from app.state
 
     Returns:
         Checkpoint state dict, or None if no checkpoint found
@@ -593,11 +587,11 @@ async def get_checkpoint(thread_id: str | UUID) -> dict | None:
 
     try:
         # Get compiled graph with checkpointer
-        graph = await get_graph()
+        graph_instance = get_graph(checkpointer=checkpointer)
 
         # Get checkpoint from graph
         config = {"configurable": {"thread_id": thread_id_str}}
-        state_snapshot = await graph.aget_state(config)
+        state_snapshot = await graph_instance.aget_state(config)
 
         if state_snapshot:
             logger.info(f"Checkpoint found for thread {thread_id_str}")
@@ -614,6 +608,7 @@ async def get_checkpoint(thread_id: str | UUID) -> dict | None:
 async def resume_agent(
     thread_id: str | UUID,
     user_id: str = "anonymous",
+    checkpointer=None,
 ) -> ChatResponse:
     """
     Resume agent execution from the last checkpoint.
@@ -624,15 +619,37 @@ async def resume_agent(
     Args:
         thread_id: Thread to resume
         user_id: User identifier
+        checkpointer: Optional checkpointer instance from app.state
 
     Returns:
         ChatResponse from resumed execution
 
+    Raises:
+        ValueError: If checkpointer is None (resuming requires checkpointing)
+
     Example:
         >>> # Agent paused for feedback
-        >>> response = await resume_agent("thread_123")
+        >>> response = await resume_agent("thread_123", checkpointer=app.state.checkpointer)
         >>> print(response.content)
     """
+    # Validate checkpointer is provided
+    if checkpointer is None:
+        error_msg = (
+            f"Cannot resume agent for thread_id='{thread_id}', user_id='{user_id}': "
+            "Resuming requires a compiled graph with checkpointing enabled. "
+            "Please provide a checkpointer instance from app.state."
+        )
+        logger.error(error_msg)
+        return ChatResponse(
+            content="Cannot resume conversation: Checkpointing is not enabled.",
+            sources=[],
+            metadata={
+                "error": error_msg,
+                "thread_id": str(thread_id),
+                "user_id": user_id,
+            }
+        )
+
     # Validate thread_id
     try:
         thread_id_uuid = validate_thread_id(thread_id)
@@ -656,11 +673,11 @@ async def resume_agent(
 
     try:
         # Get compiled graph with checkpointer
-        graph = await get_graph()
+        graph_instance = get_graph(checkpointer=checkpointer)
 
         # Resume from checkpoint by passing None as input
         # (LangGraph will use last checkpoint state)
-        final_state = await graph.ainvoke(None, config=config)
+        final_state = await graph_instance.ainvoke(None, config=config)
 
         # Build response
         response = ChatResponse(

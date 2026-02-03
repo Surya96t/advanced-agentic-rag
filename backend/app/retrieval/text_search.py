@@ -150,9 +150,12 @@ class TextSearcher:
                     SearchResult(
                         chunk_id=UUID(row["id"]),
                         document_id=UUID(row["document_id"]),
+                        document_title=row.get(
+                            "document_title", "Unknown Document"),
                         content=row["content"],
                         metadata=row.get("metadata", {}),
                         score=text_rank,
+                        original_score=text_rank,  # Preserve original text rank
                         rank=rank,
                         source="text",
                     )
