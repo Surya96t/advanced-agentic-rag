@@ -1,67 +1,40 @@
 /**
- * Chat page
- * Main interface for conversational RAG
- * GPT-style clean layout with fixed input at bottom
+ * Chat page (no thread selected)
+ * Shows empty state prompting user to select or create a conversation
+ * Individual threads are at /chat/[threadId]
  */
 
 'use client'
 
-import { MessageList } from '@/components/chat/message-list'
-import { MessageInput } from '@/components/chat/message-input'
-import { ChatEmptyState } from '@/components/chat/chat-empty-state'
-import { RateLimitBanner } from '@/components/rate-limit-banner'
-import { useChat } from '@/hooks/useChat'
-import { useRateLimitStore } from '@/stores/rate-limit-store'
+import { useEffect } from 'react'
+import { MessageSquare } from 'lucide-react'
+import { useChatStore } from '@/stores/chat-store'
 
 export default function ChatPage() {
-  const { messages, isLoading, agentHistory, streamingMetrics, sendMessage, cancelStream } = useChat()
-  const { isRateLimited } = useRateLimitStore()
-
-  const hasMessages = messages.length > 0
-
-  // Handle follow-up suggestion clicks
-  const handleSuggestionClick = (suggestion: string) => {
-    if (!isLoading && !isRateLimited) {
-      sendMessage(suggestion)
-    }
-  }
+  const { clearMessages, setCurrentThreadId } = useChatStore()
+  
+  // Clear messages when landing on /chat (no thread selected)
+  useEffect(() => {
+    console.log('[ChatPage] Clearing messages - no thread selected')
+    clearMessages()
+    setCurrentThreadId(null)
+  }, [clearMessages, setCurrentThreadId])
 
   return (
-    <>
-      {/* Rate Limit Banner - Fixed at top */}
-      <div className="shrink-0">
-        <RateLimitBanner />
+    <div className="flex flex-1 items-center justify-center">
+      <div className="flex flex-col items-center gap-4 text-center">
+        <div className="rounded-full bg-muted p-6">
+          <MessageSquare className="h-12 w-12 text-muted-foreground" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-2xl font-semibold tracking-tight">
+            No conversation selected
+          </h2>
+          <p className="text-sm text-muted-foreground max-w-sm">
+            Select a conversation from the sidebar or start a new one to begin chatting
+          </p>
+        </div>
       </div>
-      
-      {/* Scrollable Messages Area - Takes all available space */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-        {hasMessages ? (
-          <MessageList 
-            messages={messages} 
-            agentHistory={agentHistory}
-            streamingMetrics={streamingMetrics}
-            isLoading={isLoading}
-            onSuggestionClick={handleSuggestionClick}
-          />
-        ) : (
-          <ChatEmptyState onSuggestionClick={handleSuggestionClick} />
-        )}
-      </div>
-
-      {/* Fixed Input at Bottom - Always visible */}
-      <div className="shrink-0">
-        <MessageInput
-          onSend={sendMessage}
-          onStop={cancelStream}
-          disabled={isRateLimited}
-          isStreaming={isLoading}
-          placeholder={
-            isRateLimited
-              ? "Rate limit exceeded. Please wait..."
-              : "Ask a question about your documentation..."
-          }
-        />
-      </div>
-    </>
+    </div>
   )
 }

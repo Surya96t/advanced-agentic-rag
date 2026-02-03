@@ -21,6 +21,16 @@ export interface StreamingMetrics {
   qualityScore: number | null
 }
 
+export interface Thread {
+  id: string
+  title: string
+  preview?: string
+  messageCount: number
+  createdAt: Date
+  updatedAt: Date
+  userId: string
+}
+
 interface ChatState {
   messages: Message[]
   isLoading: boolean
@@ -29,6 +39,11 @@ interface ChatState {
   agentHistory: AgentStep[]  // Track all agents with their status and timing
   streamingMessageId: string | null  // ID of message being streamed
   streamingMetrics: StreamingMetrics  // Track streaming performance metrics
+  
+  // Thread management
+  currentThreadId: string | null  // Active conversation thread
+  threads: Thread[]  // List of all user's threads
+  isLoadingThreads: boolean  // Loading state for thread list
   
   // Actions
   addMessage: (message: Message) => void
@@ -48,9 +63,17 @@ interface ChatState {
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
   clearMessages: () => void
+  
+  // Thread management actions
+  setCurrentThreadId: (threadId: string | null) => void
+  loadThreads: () => Promise<void>
+  createNewThread: (title?: string) => Promise<string>
+  loadThread: (threadId: string) => Promise<void>
+  deleteThread: (threadId: string) => Promise<void>
+  updateThreadTitle: (threadId: string, title: string) => Promise<void>
 }
 
-export const useChatStore = create<ChatState>((set) => ({
+export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   isLoading: false,
   error: null,
@@ -64,6 +87,11 @@ export const useChatStore = create<ChatState>((set) => ({
     tokensPerSecond: 0,
     qualityScore: null,
   },
+  
+  // Thread management state
+  currentThreadId: null,
+  threads: [],
+  isLoadingThreads: false,
 
   addMessage: (message) =>
     set((state) => ({
@@ -273,5 +301,209 @@ export const useChatStore = create<ChatState>((set) => ({
         qualityScore: null,
       },
     }),
+  
+  // Thread management actions
+  setCurrentThreadId: (threadId) =>
+    set({ currentThreadId: threadId }),
+  
+  loadThreads: async () => {
+    set({ isLoadingThreads: true })
+    console.log('[Store] Loading threads...')
+    try {
+      const response = await fetch('/api/threads', {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to load threads')
+      }
+      
+      const threads = await response.json()
+      console.log('[Store] Received threads:', threads.length, threads)
+      console.log('[Store] First thread raw:', threads.length > 0 ? threads[0] : 'none')
+      console.log('[Store] First thread keys:', threads.length > 0 ? Object.keys(threads[0]) : 'none')
+      
+      // Convert date strings to Date objects and map backend field names
+      const threadsWithDates = threads.map((thread: { 
+        thread_id: string; 
+        title: string; 
+        preview?: string;
+        message_count: number;
+        created_at: string;
+        updated_at: string;
+        user_id: string;
+      }) => {
+        const mapped = {
+          id: thread.thread_id,  // Backend uses thread_id, frontend uses id
+          title: thread.title,
+          preview: thread.preview,
+          messageCount: thread.message_count,
+          createdAt: new Date(thread.created_at),
+          updatedAt: new Date(thread.updated_at),
+          userId: thread.user_id,
+        }
+        // Safety check
+        if (!mapped.id) {
+          console.error('[Store] Thread mapping failed - missing id:', thread)
+        }
+        return mapped
+      })
+      
+      console.log('[Store] Mapped threads:', threadsWithDates.map((t: Thread) => ({ id: t.id, title: t.title })))
+      console.log('[Store] Processed threads:', threadsWithDates.length)
+      set({ threads: threadsWithDates, isLoadingThreads: false })
+    } catch (error) {
+      console.error('[Store] Failed to load threads:', error)
+      set({ isLoadingThreads: false, error: 'Failed to load conversations' })
+    }
+  },
+  
+  createNewThread: async (title?: string) => {
+    try {
+      const response = await fetch('/api/threads', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ title: title || 'New Chat' }),
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to create thread')
+      }
+      
+      const { thread_id } = await response.json()
+      
+      // Clear current messages and set new thread
+      set({
+        currentThreadId: thread_id,
+        messages: [],
+        agentHistory: [],
+        streamingMessageId: null,
+      })
+      
+      // Refresh thread list
+      await get().loadThreads()
+      
+      return thread_id
+    } catch (error) {
+      console.error('Failed to create thread:', error)
+      set({ error: 'Failed to create new conversation' })
+      throw error
+    }
+  },
+  
+  loadThread: async (threadId: string) => {
+    try {
+      const response = await fetch(`/api/threads/${threadId}`, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to load thread')
+      }
+      
+      // Backend returns { metadata: {...}, messages: [...] }
+      const threadDetail = await response.json()
+      const messages = threadDetail.messages || []
+      
+      // Convert backend message format to frontend format
+      const formattedMessages: Message[] = messages.map((msg: {
+        role: 'user' | 'assistant';
+        content: string;
+        timestamp?: string;
+        citations?: Citation[];
+      }) => ({
+        id: crypto.randomUUID(),
+        role: msg.role,
+        content: msg.content,
+        timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+        citations: msg.citations || [],
+      }))
+      
+      set({
+        currentThreadId: threadId,
+        messages: formattedMessages,
+        agentHistory: [],
+        streamingMessageId: null,
+      })
+    } catch (error) {
+      console.error('Failed to load thread:', error)
+      set({ error: 'Failed to load conversation' })
+    }
+  },
+  
+  deleteThread: async (threadId: string) => {
+    try {
+      const response = await fetch(`/api/threads/${threadId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete thread')
+      }
+      
+      // Refresh thread list
+      await get().loadThreads()
+      
+      // If deleted current thread, reset
+      if (get().currentThreadId === threadId) {
+        set({
+          currentThreadId: null,
+          messages: [],
+          agentHistory: [],
+          streamingMessageId: null,
+        })
+      }
+    } catch (error) {
+      console.error('Failed to delete thread:', error)
+      set({ error: 'Failed to delete conversation' })
+    }
+  },
+  
+  updateThreadTitle: async (threadId: string, title: string) => {
+    try {
+      console.log('[Store] Updating thread title:', { threadId, title })
+      
+      const response = await fetch(`/api/threads/${threadId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ title }),
+      })
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('[Store] Update failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText
+        })
+        throw new Error(`Failed to update thread: ${response.status} ${errorText}`)
+      }
+      
+      console.log('[Store] Thread title updated successfully')
+      
+      // Refresh thread list to get updated title
+      await get().loadThreads()
+    } catch (error) {
+      console.error('Failed to update thread title:', error)
+      set({ error: 'Failed to update conversation title' })
+      throw error
+    }
+  },
 }))
 

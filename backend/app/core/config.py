@@ -229,6 +229,20 @@ class Settings(BaseSettings):
         description="Enable LangGraph PostgreSQL checkpointing for conversation and agent state persistence"
     )
 
+    # Conversational Memory Configuration
+    max_conversation_tokens: int = Field(
+        default=8000,
+        ge=1000,
+        le=100000,
+        description="Max tokens for conversation history (reserve space for system prompt + retrieval context)"
+    )
+    recent_message_count: int = Field(
+        default=10,
+        ge=2,
+        le=50,
+        description="Number of recent messages to always keep (sliding window)"
+    )
+
     # Logging
     log_level: str = Field(default="INFO", description="Logging level")
     log_format: str = Field(
