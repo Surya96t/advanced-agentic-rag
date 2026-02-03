@@ -17,14 +17,28 @@ export default function RateLimitedPage() {
   const resetParam = searchParams.get('reset')
   
   // Parse reset time (Unix timestamp in seconds) - use useState to avoid impure function during render
-  const [resetTime] = useState(() => 
-    resetParam ? parseInt(resetParam, 10) * 1000 : Date.now() + 60000
-  )
+  const [resetTime] = useState(() => {
+    if (!resetParam) {
+      return Date.now() + 60000
+    }
+    
+    const parsed = parseInt(resetParam, 10)
+    // Validate that parsed value is a finite number before using it
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed * 1000
+    }
+    
+    // Fallback to default if invalid
+    return Date.now() + 60000
+  })
   
   const [timeRemaining, setTimeRemaining] = useState<number>(0)
   const [progressValue, setProgressValue] = useState<number>(0)
 
   useEffect(() => {
+    // Declare interval first to avoid TDZ issues
+    let interval: NodeJS.Timeout | null = null
+    
     const updateCountdown = () => {
       const now = Date.now()
       const remaining = Math.max(0, resetTime - now)
@@ -35,15 +49,20 @@ export default function RateLimitedPage() {
       const progress = 100 - (remaining / totalDuration) * 100
       setProgressValue(Math.max(0, Math.min(100, progress)))
       
-      if (remaining <= 0) {
+      if (remaining <= 0 && interval !== null) {
         clearInterval(interval)
+        interval = null
       }
     }
 
     updateCountdown()
-    const interval = setInterval(updateCountdown, 1000)
+    interval = setInterval(updateCountdown, 1000)
 
-    return () => clearInterval(interval)
+    return () => {
+      if (interval !== null) {
+        clearInterval(interval)
+      }
+    }
   }, [resetTime])
 
   const formatTime = (ms: number) => {

@@ -624,11 +624,32 @@ async def resume_agent(
     Returns:
         ChatResponse from resumed execution
 
+    Raises:
+        ValueError: If checkpointer is None (resuming requires checkpointing)
+
     Example:
         >>> # Agent paused for feedback
-        >>> response = await resume_agent("thread_123")
+        >>> response = await resume_agent("thread_123", checkpointer=app.state.checkpointer)
         >>> print(response.content)
     """
+    # Validate checkpointer is provided
+    if checkpointer is None:
+        error_msg = (
+            f"Cannot resume agent for thread_id='{thread_id}', user_id='{user_id}': "
+            "Resuming requires a compiled graph with checkpointing enabled. "
+            "Please provide a checkpointer instance from app.state."
+        )
+        logger.error(error_msg)
+        return ChatResponse(
+            content="Cannot resume conversation: Checkpointing is not enabled.",
+            sources=[],
+            metadata={
+                "error": error_msg,
+                "thread_id": str(thread_id),
+                "user_id": user_id,
+            }
+        )
+
     # Validate thread_id
     try:
         thread_id_uuid = validate_thread_id(thread_id)

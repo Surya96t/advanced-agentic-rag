@@ -61,24 +61,35 @@ export const InlineCitationCardTrigger = ({
   sources,
   className,
   ...props
-}: InlineCitationCardTriggerProps) => (
-  <HoverCardTrigger asChild>
-    <Badge
-      className={cn("ml-1 rounded-full", className)}
-      variant="secondary"
-      {...props}
-    >
-      {sources[0] ? (
-        <>
-          {new URL(sources[0]).hostname}{" "}
-          {sources.length > 1 && `+${sources.length - 1}`}
-        </>
-      ) : (
-        "unknown"
-      )}
-    </Badge>
-  </HoverCardTrigger>
-);
+}: InlineCitationCardTriggerProps) => {
+  // Safely parse the URL, fallback to the source string or "unknown" if invalid
+  const getDisplayText = () => {
+    if (!sources[0]) {
+      return "unknown";
+    }
+
+    try {
+      const url = new URL(sources[0]);
+      return url.hostname;
+    } catch {
+      // If URL parsing fails (invalid/relative URL), use the source string itself
+      return sources[0];
+    }
+  };
+
+  return (
+    <HoverCardTrigger asChild>
+      <Badge
+        className={cn("ml-1 rounded-full", className)}
+        variant="secondary"
+        {...props}
+      >
+        {getDisplayText()}{" "}
+        {sources.length > 1 && `+${sources.length - 1}`}
+      </Badge>
+    </HoverCardTrigger>
+  );
+};
 
 export type InlineCitationCardBodyProps = ComponentProps<"div">;
 
@@ -166,9 +177,16 @@ export const InlineCitationCarouselIndex = ({
     setCount(api.scrollSnapList().length);
     setCurrent(api.selectedScrollSnap() + 1);
 
-    api.on("select", () => {
+    const handleSelect = () => {
       setCurrent(api.selectedScrollSnap() + 1);
-    });
+    };
+
+    api.on("select", handleSelect);
+
+    // Cleanup: remove listener when component unmounts or api changes
+    return () => {
+      api.off("select", handleSelect);
+    };
   }, [api]);
 
   return (

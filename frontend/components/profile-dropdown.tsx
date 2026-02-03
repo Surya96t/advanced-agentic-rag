@@ -43,7 +43,13 @@ export default function ProfileDropdown({
 }: ProfileDropdownProps) {
     const { user } = useUser();
     const { signOut } = useClerk();
-    const { theme, setTheme } = useTheme();
+    const { resolvedTheme, setTheme } = useTheme();
+    const [mounted, setMounted] = React.useState(false);
+
+    // Avoid hydration mismatch by only rendering theme-dependent UI after mount
+    React.useEffect(() => {
+        setMounted(true);
+    }, []);
 
     // Use Clerk user data
     const profileData: Profile = {
@@ -72,7 +78,8 @@ export default function ProfileDropdown({
         },
     ];
 
-    const isDarkMode = theme === "dark";
+    // Use resolvedTheme to handle "system" preference correctly
+    const isDarkMode = resolvedTheme === "dark";
     
     const toggleTheme = () => {
         setTheme(isDarkMode ? "light" : "dark");
@@ -142,7 +149,7 @@ export default function ProfileDropdown({
                             {/* Theme Toggle with Switch */}
                             <div className="flex items-center p-3 rounded-xl border border-transparent">
                                 <div className="flex items-center gap-2 flex-1">
-                                    {isDarkMode ? (
+                                    {mounted && isDarkMode ? (
                                         <Moon className="w-4 h-4 text-zinc-900 dark:text-zinc-100" />
                                     ) : (
                                         <Sun className="w-4 h-4 text-zinc-900 dark:text-zinc-100" />
@@ -151,11 +158,16 @@ export default function ProfileDropdown({
                                         Dark Mode
                                     </span>
                                 </div>
-                                <Switch 
-                                    checked={isDarkMode} 
-                                    onCheckedChange={toggleTheme}
-                                    aria-label="Toggle dark mode"
-                                />
+                                {/* Only render Switch after mount to avoid hydration mismatch */}
+                                {mounted ? (
+                                    <Switch 
+                                        checked={isDarkMode} 
+                                        onCheckedChange={toggleTheme}
+                                        aria-label="Toggle dark mode"
+                                    />
+                                ) : (
+                                    <div className="w-11 h-6" aria-hidden="true" />
+                                )}
                             </div>
                         </div>
 

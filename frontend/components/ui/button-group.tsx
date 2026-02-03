@@ -26,12 +26,15 @@ function ButtonGroup({
   orientation,
   ...props
 }: React.ComponentProps<"div"> & VariantProps<typeof buttonGroupVariants>) {
+  // Ensure consistent default value for both data attribute and variant
+  const resolvedOrientation = orientation ?? "horizontal"
+  
   return (
     <div
       role="group"
       data-slot="button-group"
-      data-orientation={orientation}
-      className={cn(buttonGroupVariants({ orientation }), className)}
+      data-orientation={resolvedOrientation}
+      className={cn(buttonGroupVariants({ orientation: resolvedOrientation }), className)}
       {...props}
     />
   )

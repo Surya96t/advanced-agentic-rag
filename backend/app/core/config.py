@@ -226,13 +226,7 @@ class Settings(BaseSettings):
     # LangGraph Checkpointing Configuration
     enable_checkpointing: bool = Field(
         default=True,
-        description="Enable LangGraph PostgreSQL checkpointing for agent state persistence"
-    )
-
-    # LangGraph Checkpointing Configuration
-    enable_checkpointing: bool = Field(
-        default=True,
-        description="Enable LangGraph PostgreSQL checkpointing for conversation persistence"
+        description="Enable LangGraph PostgreSQL checkpointing for conversation and agent state persistence"
     )
 
     # Logging
