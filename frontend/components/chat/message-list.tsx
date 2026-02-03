@@ -8,19 +8,21 @@
 
 import { useEffect, useRef } from 'react'
 import { MessageBubble } from './message-bubble'
-import { AgentStatus } from './agent-status'
 import type { Message } from '@/types/chat'
+import type { AgentStep, StreamingMetrics } from '@/stores/chat-store'
 
 interface MessageListProps {
   messages: Message[]
-  currentAgent?: string | null
+  agentHistory?: AgentStep[]
+  streamingMetrics?: StreamingMetrics
   isLoading?: boolean
   onSuggestionClick?: (suggestion: string) => void
 }
 
 export function MessageList({ 
   messages, 
-  currentAgent, 
+  agentHistory = [],
+  streamingMetrics,
   isLoading,
   onSuggestionClick 
 }: MessageListProps) {
@@ -43,19 +45,22 @@ export function MessageList({
   return (
     <div className="px-4 py-4 w-full">
       <div className="space-y-4 max-w-4xl mx-auto w-full overflow-hidden">
-        {messages.map((message, index) => (
-          <MessageBubble 
-            key={message.id} 
-            message={message}
-            isLatestAI={!isLoading && index === lastAIMessageIndex}
-            onSuggestionClick={onSuggestionClick}
-          />
-        ))}
-        
-        {/* Show agent status when streaming */}
-        {isLoading && currentAgent && (
-          <AgentStatus agent={currentAgent} className="ml-11" />
-        )}
+        {messages.map((message, index) => {
+          // For the latest AI message during streaming, pass agent history and metrics
+          const isCurrentlyStreaming = isLoading && index === messages.length - 1 && message.role === 'assistant'
+          
+          return (
+            <MessageBubble 
+              key={message.id} 
+              message={message}
+              isLatestAI={!isLoading && index === lastAIMessageIndex}
+              isStreaming={isCurrentlyStreaming}
+              agentHistory={isCurrentlyStreaming ? agentHistory : []}
+              streamingMetrics={isCurrentlyStreaming ? streamingMetrics : undefined}
+              onSuggestionClick={onSuggestionClick}
+            />
+          )
+        })}
         
         {/* Invisible div for auto-scroll target */}
         <div ref={bottomRef} />

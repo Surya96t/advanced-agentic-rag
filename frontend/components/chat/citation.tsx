@@ -1,6 +1,6 @@
 /**
- * Citation component using AI Elements Sources
- * Displays collapsible source document references with similarity scores
+ * Citation component with expandable cards
+ * Displays interactive source document references with similarity scores
  * 
  * Shows original_score (cosine similarity 0-1, higher = more relevant)
  * instead of RRF score (0-1, lower = better ranking)
@@ -8,8 +8,7 @@
 
 'use client'
 
-import { Sources, SourcesTrigger, SourcesContent, Source } from '@/components/ai-elements/sources'
-import { Badge } from '@/components/ui/badge'
+import { CitationCard } from '@/components/chat/citation-card'
 import type { Citation } from '@/types/chat'
 
 interface CitationsListProps {
@@ -21,24 +20,27 @@ export function CitationsList({ citations }: CitationsListProps) {
     return null
   }
 
+  // Sort citations by relevance score (highest first)
+  const sortedCitations = [...citations].sort((a, b) => {
+    const scoreA = a.original_score ?? 0
+    const scoreB = b.original_score ?? 0
+    return scoreB - scoreA
+  })
+
   return (
-    <Sources>
-      <SourcesTrigger count={citations.length} />
-      <SourcesContent>
-        {citations.map((citation, index) => (
-          <div key={`${citation.chunk_id}-${index}`} className="flex items-center gap-2">
-            <Source
-              href={`/documents/${citation.document_id}`}
-              title={citation.document_title}
-            />
-            {citation.original_score != null && (
-              <Badge variant="secondary" className="text-xs shrink-0" title="Similarity Score">
-                {Math.round(citation.original_score * 100)}%
-              </Badge>
-            )}
-          </div>
+    <div className="mt-3">
+      <h3 className="text-xs font-medium text-muted-foreground mb-1.5">
+        Sources ({citations.length})
+      </h3>
+      <div className="flex flex-wrap gap-1.5">
+        {sortedCitations.map((citation, index) => (
+          <CitationCard 
+            key={`${citation.chunk_id}-${index}`}
+            citation={citation}
+            index={index}
+          />
         ))}
-      </SourcesContent>
-    </Sources>
+      </div>
+    </div>
   )
 }

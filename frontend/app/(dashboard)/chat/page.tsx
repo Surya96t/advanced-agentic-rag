@@ -14,7 +14,7 @@ import { useChat } from '@/hooks/useChat'
 import { useRateLimitStore } from '@/stores/rate-limit-store'
 
 export default function ChatPage() {
-  const { messages, isLoading, currentAgent, sendMessage, cancelStream } = useChat()
+  const { messages, isLoading, agentHistory, streamingMetrics, sendMessage, cancelStream } = useChat()
   const { isRateLimited } = useRateLimitStore()
 
   const hasMessages = messages.length > 0
@@ -38,7 +38,8 @@ export default function ChatPage() {
         {hasMessages ? (
           <MessageList 
             messages={messages} 
-            currentAgent={currentAgent}
+            agentHistory={agentHistory}
+            streamingMetrics={streamingMetrics}
             isLoading={isLoading}
             onSuggestionClick={handleSuggestionClick}
           />

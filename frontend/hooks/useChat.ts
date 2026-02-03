@@ -29,12 +29,20 @@ export function useChat() {
     isLoading,
     error,
     currentAgent,
+    agentHistory,
+    streamingMetrics,
     addUserMessage,
     startStreamingMessage,
     appendToStreamingMessage,
     addCitationToStreamingMessage,
     finishStreamingMessage,
     setCurrentAgent,
+    startAgent,
+    completeAgent,
+    errorAgent,
+    resetAgentHistory,
+    setQualityScore,
+    resetStreamingMetrics,
     setLoading,
     setError,
     clearMessages,
@@ -55,6 +63,10 @@ export function useChat() {
         addUserMessage(content)
         setLoading(true)
         setError(null)
+        
+        // Reset agent history and streaming metrics for new conversation turn
+        resetAgentHistory()
+        resetStreamingMetrics()
 
         // Create AbortController for cancellation
         abortControllerRef.current = new AbortController()
@@ -117,7 +129,8 @@ export function useChat() {
                 const data = parseEventData<AgentStartEvent>(event)
                 if (data) {
                   console.log('[SSE] Agent started:', data.agent)
-                  setCurrentAgent(data.agent)
+                  // Use new startAgent method to track in history
+                  startAgent(data.agent)
                   // Start streaming message on first agent
                   if (!messageStarted) {
                     startStreamingMessage()
@@ -179,7 +192,8 @@ export function useChat() {
                 const data = parseEventData<AgentCompleteEvent>(event)
                 if (data) {
                   console.log('[SSE] Agent completed:', data.agent)
-                  setCurrentAgent(null)
+                  // Mark agent as complete in history (keeps it visible)
+                  completeAgent(data.agent)
                 }
                 break
               }
@@ -188,6 +202,8 @@ export function useChat() {
                 const data = parseEventData<AgentErrorEvent>(event)
                 if (data) {
                   console.error('[SSE] Agent error:', data.error)
+                  // Mark agent as error in history
+                  errorAgent(data.agent)
                   toast.error(`Agent error: ${data.error}`)
                 }
                 break
@@ -197,6 +213,8 @@ export function useChat() {
                 const data = parseEventData<ValidationEvent>(event)
                 if (data) {
                   console.log('[SSE] Validation:', data.passed ? 'PASSED' : 'FAILED', `(score: ${data.score})`)
+                  // Store quality score in metrics
+                  setQualityScore(data.score)
                   if (!data.passed && data.issues.length > 0) {
                     console.warn('[SSE] Validation issues:', data.issues)
                   }
@@ -282,6 +300,12 @@ export function useChat() {
       addCitationToStreamingMessage,
       finishStreamingMessage,
       setCurrentAgent,
+      startAgent,
+      completeAgent,
+      errorAgent,
+      resetAgentHistory,
+      setQualityScore,
+      resetStreamingMetrics,
       setLoading,
       setError,
       setRateLimit,
@@ -308,6 +332,8 @@ export function useChat() {
     isLoading,
     error,
     currentAgent,
+    agentHistory,
+    streamingMetrics,
     sendMessage,
     cancelStream,
     clearMessages,

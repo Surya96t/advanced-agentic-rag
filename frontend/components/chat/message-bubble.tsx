@@ -12,7 +12,10 @@ import { cn } from '@/lib/utils'
 import { Bot, User, Loader2 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { CitationsList } from './citation'
+import { AgentStatus } from './agent-status'
+import { StreamingStatus } from './streaming-status'
 import type { Message as MessageType } from '@/types/chat'
+import type { AgentStep, StreamingMetrics } from '@/stores/chat-store'
 
 // Dynamically import the markdown renderer to reduce initial bundle size
 const MarkdownRenderer = dynamic(
@@ -31,6 +34,9 @@ const MarkdownRenderer = dynamic(
 interface MessageBubbleProps {
   message: MessageType
   isLatestAI?: boolean
+  isStreaming?: boolean
+  agentHistory?: AgentStep[]
+  streamingMetrics?: StreamingMetrics
   onSuggestionClick?: (suggestion: string) => void
 }
 
@@ -43,7 +49,14 @@ const FOLLOW_UP_SUGGESTIONS = [
   "Tell me more about authentication",
 ]
 
-export function MessageBubble({ message, isLatestAI = false, onSuggestionClick }: MessageBubbleProps) {
+export function MessageBubble({ 
+  message, 
+  isLatestAI = false, 
+  isStreaming = false,
+  agentHistory = [],
+  streamingMetrics,
+  onSuggestionClick 
+}: MessageBubbleProps) {
   const isUser = message.role === 'user'
 
   return (
@@ -60,6 +73,21 @@ export function MessageBubble({ message, isLatestAI = false, onSuggestionClick }
       {/* Message using AI Elements */}
       <Message from={isUser ? 'user' : 'assistant'} className="flex-1 min-w-0 overflow-hidden">
         <MessageContent className="overflow-hidden">
+          {/* Agent Status (Chain of Thought) - show at top when streaming */}
+          {!isUser && isStreaming && agentHistory.length > 0 && (
+            <div className="mb-4 space-y-2">
+              <AgentStatus agentHistory={agentHistory} />
+              {streamingMetrics && (
+                <StreamingStatus
+                  tokenCount={streamingMetrics.tokenCount}
+                  tokensPerSecond={streamingMetrics.tokensPerSecond}
+                  qualityScore={streamingMetrics.qualityScore ?? undefined}
+                  isThinking={streamingMetrics.tokenCount === 0}
+                />
+              )}
+            </div>
+          )}
+
           {/* Message text */}
           {isUser ? (
             <p className="text-sm whitespace-pre-wrap wrap-break-word">{message.content}</p>
