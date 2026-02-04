@@ -68,11 +68,43 @@ Keep responses concise and friendly."""
     # Build message list for LLM
     llm_messages = [{"role": "system", "content": system_msg}]
 
-    # Add conversation history
+    # Add conversation history with explicit type mapping
     for msg in messages:
-        if hasattr(msg, "type") and hasattr(msg, "content"):
-            role = "user" if msg.type == "human" else "assistant"
-            llm_messages.append({"role": role, "content": msg.content})
+        # Validate message has required attributes
+        if not hasattr(msg, "type"):
+            logger.warning(
+                "Message missing 'type' attribute, skipping",
+                extra={"message": str(msg)[:100]}
+            )
+            continue
+
+        if not hasattr(msg, "content"):
+            logger.warning(
+                "Message missing 'content' attribute, skipping",
+                extra={"message_type": msg.type}
+            )
+            continue
+
+        # Explicit type mapping for known message types
+        msg_type = msg.type
+        if msg_type == "human":
+            role = "user"
+        elif msg_type in ("ai", "assistant"):
+            role = "assistant"
+        elif msg_type == "system":
+            role = "system"
+        elif msg_type == "tool":
+            role = "tool"
+        else:
+            # Unknown message type - log warning and skip
+            logger.warning(
+                f"Unknown message type '{msg_type}', skipping message",
+                extra={"message_type": msg_type, "content_preview": str(msg.content)[
+                    :50]}
+            )
+            continue
+
+        llm_messages.append({"role": role, "content": msg.content})
 
     logger.info(f"Generating simple response for: '{query[:50]}...'")
 

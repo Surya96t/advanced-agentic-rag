@@ -20,7 +20,19 @@ class TokenCounter:
             model: Model name (e.g., "gpt-4", "gpt-3.5-turbo")
         """
         self.model = model
-        self.encoding = tiktoken.encoding_for_model(model)
+
+        # Try to get model-specific encoding, fall back to cl100k_base for unknown models
+        try:
+            self.encoding = tiktoken.encoding_for_model(model)
+        except KeyError:
+            # Model not recognized, use cl100k_base (GPT-4 default encoding)
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"Model '{model}' not recognized by tiktoken. "
+                f"Falling back to 'cl100k_base' encoding."
+            )
+            self.encoding = tiktoken.get_encoding("cl100k_base")
 
     def count_message_tokens(self, message: BaseMessage) -> int:
         """
@@ -42,8 +54,47 @@ class TokenCounter:
             >>> counter.count_message_tokens(msg)
             6  # "Hello world" (2 tokens) + formatting (4 tokens)
         """
+        # Normalize message content to string
+        content = message.content
+        if content is None:
+            normalized_content = ""
+        elif isinstance(content, list):
+            # Handle multimodal content (list of blocks)
+            # Extract only textual fields from dicts to avoid counting metadata/URLs
+            parts = []
+            for item in content:
+                if item is None:
+                    continue
+
+                if isinstance(item, dict):
+                    # Extract known textual fields from multimodal content blocks
+                    # Common fields: "text" (text blocks), "caption" (images), "alt" (images), "content"
+                    textual_fields = ["text", "content",
+                                      "caption", "alt", "description"]
+                    extracted_text = None
+
+                    for field in textual_fields:
+                        if field in item and isinstance(item.get(field), str):
+                            extracted_text = item[field]
+                            break
+
+                    if extracted_text:
+                        parts.append(extracted_text)
+                    # If no textual field found, skip this item (e.g., image_url blocks)
+                elif isinstance(item, str):
+                    # Plain string in list
+                    parts.append(item)
+                # Skip other types (e.g., binary data, complex objects)
+
+            normalized_content = " ".join(parts)
+        elif isinstance(content, str):
+            normalized_content = content
+        else:
+            # Fallback for other types (should be rare)
+            normalized_content = str(content)
+
         # Count message content
-        tokens = len(self.encoding.encode(message.content))
+        tokens = len(self.encoding.encode(normalized_content))
 
         # Add overhead for message formatting (role, etc.)
         # ChatML format: <|im_start|>role\ncontent<|im_end|>
@@ -128,18 +179,61 @@ class TokenCounter:
 
         total = msg_tokens + sys_tokens + doc_tokens
 
-        # Assume 8K context window (adjust based on actual model)
-        # gpt-4: 8K, gpt-4-32k: 32K, gpt-4-turbo: 128K
-        max_tokens = 8000
-        if "32k" in self.model:
-            max_tokens = 32000
-        elif "turbo" in self.model or "gpt-4o" in self.model:
-            max_tokens = 128000
+        # Model-specific context window limits
+        # Check for exact matches first, then patterns
+        model_context_limits = {
+            # GPT-4 models
+            "gpt-4": 8192,
+            "gpt-4-0314": 8192,
+            "gpt-4-0613": 8192,
+            "gpt-4-32k": 32768,
+            "gpt-4-32k-0314": 32768,
+            "gpt-4-32k-0613": 32768,
+            "gpt-4-turbo": 128000,
+            "gpt-4-turbo-preview": 128000,
+            "gpt-4-1106-preview": 128000,
+            "gpt-4o": 128000,
+            "gpt-4o-mini": 128000,
+            # GPT-3.5 models
+            "gpt-3.5-turbo": 4096,
+            "gpt-3.5-turbo-0301": 4096,
+            "gpt-3.5-turbo-0613": 4096,
+            "gpt-3.5-turbo-16k": 16384,
+            "gpt-3.5-turbo-16k-0613": 16384,
+        }
+
+        # Try exact match first
+        max_tokens = model_context_limits.get(self.model)
+
+        # If no exact match, check for patterns in model name
+        # IMPORTANT: Check GPT-3.5 BEFORE generic "turbo" to avoid assigning 128K to GPT-3.5 models
+        if max_tokens is None:
+            if "gpt-3.5" in self.model or "3.5" in self.model:
+                # GPT-3.5 variants: check for 16k, otherwise default to 4k
+                if "16k" in self.model:
+                    max_tokens = 16384
+                else:
+                    max_tokens = 4096
+            elif "gpt-4o" in self.model:
+                max_tokens = 128000
+            elif "32k" in self.model:
+                max_tokens = 32768
+            elif "16k" in self.model:
+                max_tokens = 16384
+            elif "turbo" in self.model:
+                # Generic turbo models (likely GPT-4 turbo variants)
+                max_tokens = 128000
+            else:
+                # Default fallback for unknown models
+                max_tokens = 8192
+
+        # Calculate remaining tokens, ensuring it's never negative
+        remaining = max(0, max_tokens - total)
 
         return {
             "messages": msg_tokens,
             "system": sys_tokens,
             "documents": doc_tokens,
             "total": total,
-            "remaining": max_tokens - total,
+            "remaining": remaining,
         }

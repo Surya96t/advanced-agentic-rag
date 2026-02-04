@@ -242,8 +242,16 @@ async def validation_error_handler(
         }
         # Convert ctx dict if present (may contain datetime or other objects)
         if "ctx" in error:
-            serializable_error["ctx"] = {
-                k: str(v) for k, v in error["ctx"].items()}
+            ctx_value = error.get("ctx")
+            # Verify ctx is dict-like before calling .items()
+            if isinstance(ctx_value, dict):
+                serializable_error["ctx"] = {
+                    k: str(v) for k, v in ctx_value.items()
+                }
+            else:
+                # If ctx is not a dict, convert it to a safe string representation
+                serializable_error["ctx"] = str(
+                    ctx_value) if ctx_value is not None else None
         serializable_errors.append(serializable_error)
 
     return JSONResponse(

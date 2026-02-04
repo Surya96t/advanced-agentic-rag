@@ -69,7 +69,8 @@ Summary:"""
 
         response = await self.llm.ainvoke([HumanMessage(content=prompt)])
 
-        summary = response.content[: max_summary_length]
+        content = response.content if isinstance(response.content, str) else ""
+        summary = content[:max_summary_length]
         return summary
 
     def _format_for_summary(self, messages: list[BaseMessage]) -> str:
@@ -138,6 +139,7 @@ Summary:"""
 {chr(10).join(f"{i+1}. {s}" for i, s in enumerate(chunk_summaries))}
 
 Final summary:"""
-
         response = await self.llm.ainvoke([HumanMessage(content=final_prompt)])
+        content = response.content if isinstance(response.content, str) else ""
+        return content[:500]  # Apply consistent max length
         return response.content

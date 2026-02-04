@@ -13,12 +13,12 @@ Safety:
     - Prompts for confirmation before deleting
 """
 
-import psycopg
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-from app.utils.logger import get_logger
-from app.core.config import settings
-import argparse
 import asyncio
+import argparse
+from app.core.config import settings
+from app.utils.logger import get_logger
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+import psycopg
 import sys
 from pathlib import Path
 
@@ -131,7 +131,8 @@ async def main(dry_run: bool = True):
     logger.info("=" * 60)
     logger.info(
         f"Mode: {'DRY RUN (no changes)' if dry_run else 'EXECUTE (will delete)'}")
-    logger.info(f"Database: {settings.supabase_connection_string[:50]}...")
+    # Log only non-sensitive connection info
+    logger.info("Database: [connection configured via settings]")
     logger.info("")
 
     # Create checkpointer connection

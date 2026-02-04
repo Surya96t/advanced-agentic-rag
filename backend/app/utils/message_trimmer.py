@@ -61,19 +61,33 @@ class MessageTrimmer:
         other_msgs = [m for m in messages if not isinstance(m, SystemMessage)]
 
         # Keep recent messages
-        recent = other_msgs[-keep_recent:]
-        older = other_msgs[:-keep_recent]
+        if keep_recent > 0:
+            recent = other_msgs[-keep_recent:]
+            older = other_msgs[:-keep_recent]
+        else:
+            recent = []
+            older = other_msgs
 
-        # Calculate tokens used by system + recent
-        base_tokens = self.counter.count_messages_tokens(
-            system_msgs
-        ) + self.counter.count_messages_tokens(recent)
+        # Calculate tokens for system messages (always keep these)
+        system_tokens = self.counter.count_messages_tokens(system_msgs)
 
-        # Add older messages until limit
+        # Calculate tokens for recent messages
+        recent_tokens = self.counter.count_messages_tokens(recent)
+
+        # If system + recent exceeds max_tokens, trim recent messages from the front
+        # System messages must always be kept, so we sacrifice recent messages if needed
+        while system_tokens + recent_tokens > max_tokens and recent:
+            # Remove oldest message from recent
+            removed_msg = recent.pop(0)
+            removed_tokens = self.counter.count_message_tokens(removed_msg)
+            recent_tokens -= removed_tokens
+
+        # Calculate remaining tokens available for older messages
+        base_tokens = system_tokens + recent_tokens
         remaining_tokens = max_tokens - base_tokens
         trimmed_older = []
 
-        # Add from oldest to newest until we hit limit
+        # Add older messages from oldest to newest until we hit limit
         for msg in reversed(older):
             msg_tokens = self.counter.count_message_tokens(msg)
             if msg_tokens <= remaining_tokens:
@@ -95,10 +109,13 @@ class MessageTrimmer:
             window_size: Number of recent messages to keep
 
         Returns:
-            Messages within sliding window
+        system_msgs = [m for m in messages if isinstance(m, SystemMessage)]
+        other_msgs = [m for m in messages if not isinstance(m, SystemMessage)]
 
-        Example:
-            >>> counter = TokenCounter("gpt-4")
+        if window_size > 0:
+            return system_msgs + other_msgs[-window_size:]
+        else:
+            return system_msgs
             >>> trimmer = MessageTrimmer(counter)
             >>> messages = [...]  # 50 messages
             >>> windowed = trimmer.create_sliding_window(messages, window_size=10)

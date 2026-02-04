@@ -7,8 +7,6 @@ This node uses an LLM with structured output to classify queries as:
 - complex_standalone: Technical questions requiring full RAG pipeline
 """
 
-from typing import Any
-
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.types import Command
@@ -53,7 +51,7 @@ def format_messages_for_classifier(messages: list) -> str:
     return "\n".join(lines) if lines else "No previous context"
 
 
-async def classify_query(state: AgentState) -> dict[str, Any]:
+async def classify_query(state: AgentState) -> Command:
     """
     Classify the user's query to determine routing.
 
@@ -68,15 +66,16 @@ async def classify_query(state: AgentState) -> dict[str, Any]:
         state: Current agent state with query and message history
 
     Returns:
-        State update dict with query_type, needs_retrieval, and pipeline_path
+        Command object with state updates (query_type, needs_retrieval, pipeline_path)
+        and routing decision (goto: "simple_answer" or "router")
 
     Example:
         >>> state = {"query": "hi", "messages": []}
         >>> result = await classify_query(state)
-        >>> result["query_type"]
+        >>> result.goto
+        'simple_answer'
+        >>> result.update["query_type"]
         'simple'
-        >>> result["needs_retrieval"]
-        False
     """
     query = state.get("query") or state.get("original_query", "")
     messages = state.get("messages", [])
@@ -139,18 +138,21 @@ Classify the current query."""
         if result.query_type == "simple" or not result.needs_retrieval:
             # Route to simple_answer (bypass RAG pipeline)
             next_node = "simple_answer"
+            pipeline_path = "simple"
             logger.info(f"  ↳ Routing to: {next_node} (no retrieval needed)")
         else:
             # Route to router (full RAG pipeline)
             next_node = "router"
+            pipeline_path = "complex"
             logger.info(f"  ↳ Routing to: {next_node} (retrieval needed)")
 
         # Return Command with state updates + routing
+        # Note: pipeline_path mirrors the routing decision for consistency
         return Command(
             update={
                 "query_type": result.query_type,
                 "needs_retrieval": result.needs_retrieval,
-                "pipeline_path": "simple" if result.query_type == "simple" else "complex",
+                "pipeline_path": pipeline_path,
             },
             goto=next_node,
         )

@@ -34,8 +34,14 @@ export async function GET() {
 /**
  * Create a new thread
  * POST /api/threads
+ * 
+ * DEPRECATED: Use lazy thread creation instead (send message with thread_id: null)
+ * This endpoint creates empty threads which is not recommended.
+ * Kept for backward compatibility only.
  */
 export async function POST(request: NextRequest) {
+  console.warn('[API] POST /api/threads is deprecated. Use lazy thread creation instead.')
+  
   try {
     const body = await request.json()
 
