@@ -8,6 +8,7 @@
 'use client'
 
 import { useCallback, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { useChatStore } from '@/stores/chat-store'
 import { useRateLimitStore } from '@/stores/rate-limit-store'
@@ -37,6 +38,7 @@ function generateTitleFromMessage(message: string): string {
 }
 
 export function useChat(threadId?: string) {
+  const router = useRouter()
   const {
     messages,
     isLoading,
@@ -254,6 +256,27 @@ export function useChat(threadId?: string) {
                 break
               }
 
+              case 'thread_created': {
+                // Handle lazy thread creation - backend sends this event when creating a new thread
+                const data = event.data ? JSON.parse(event.data) : null
+                if (data && data.thread_id) {
+                  console.log('[SSE] Thread created event received:', data.thread_id)
+                  setCurrentThreadId(data.thread_id)
+                  
+                  // Redirect to the new thread URL
+                  console.log('[SSE] Redirecting to /chat/' + data.thread_id)
+                  router.push(`/chat/${data.thread_id}`)
+                  
+                  // Refresh thread list to show new conversation
+                  loadThreads().then(() => {
+                    console.log('[Thread] Thread list refreshed after creation')
+                  }).catch(err => {
+                    console.error('[Thread] Failed to refresh thread list:', err)
+                  })
+                }
+                break
+              }
+
               case 'end': {
                 const data = parseEventData<EndEvent>(event)
                 if (data) {
@@ -368,6 +391,7 @@ export function useChat(threadId?: string) {
       messages.length,
       isLoading,
       currentThreadId,
+      router,
       addUserMessage,
       startStreamingMessage,
       appendToStreamingMessage,

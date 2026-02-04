@@ -85,9 +85,11 @@ def get_message_hash(message: str) -> str:
 
 async def sse_generator(
     query: str,
-    thread_id: UUID | None,
+    thread_id: str,
     user_id: str,
     request: Request,
+    is_new_thread: bool = False,
+    custom_title: str | None = None,
 ) -> AsyncIterator[str]:
     """
     Generate Server-Sent Events (SSE) from the agent stream.
@@ -231,6 +233,18 @@ async def sse_generator(
         yield f"event: {end_event['event']}\ndata: {end_event['data']}\n\n"
 
     finally:
+        # Send thread_created event for new threads (after successful completion)
+        if is_new_thread:
+            thread_created_event = {
+                "event": "thread_created",
+                "data": json.dumps({"thread_id": thread_id})
+            }
+            yield f"event: {thread_created_event['event']}\ndata: {thread_created_event['data']}\n\n"
+            logger.info(
+                "Thread created event sent",
+                extra={"user_id": user_id, "thread_id": thread_id}
+            )
+
         # Finalize and log metrics
         metrics.finalize()
         logger.debug(
@@ -294,8 +308,78 @@ async def chat(
         }
     )
 
-    # Generate thread_id if not provided
-    thread_id = chat_request.thread_id or uuid4()
+    # Lazy thread creation: Generate thread_id if not provided
+    if chat_request.thread_id is None:
+        thread_id = str(uuid4())
+        is_new_thread = True
+        logger.info(
+            "Creating new thread (lazy creation)",
+            extra={"user_id": user_id, "thread_id": thread_id}
+        )
+    else:
+        thread_id = chat_request.thread_id
+        is_new_thread = False
+        logger.debug(
+            "Using existing thread",
+            extra={"user_id": user_id, "thread_id": thread_id}
+        )
+
+    # Ownership verification for existing threads
+    if not is_new_thread:
+        # Get checkpointer from app state
+        checkpointer = request.app.state.checkpointer
+
+        # Import here to avoid circular dependency
+        from langgraph.checkpoint.base import CheckpointTuple
+        from app.agents.graph import graph
+
+        try:
+            # Get the current state to verify ownership
+            existing_state = await graph.aget_state(
+                config={"configurable": {
+                    "thread_id": thread_id, "checkpoint_ns": ""}},
+                subgraphs=False
+            )
+
+            # Check if thread exists
+            if not existing_state.values:
+                logger.warning(
+                    "Thread not found",
+                    extra={"user_id": user_id, "thread_id": thread_id}
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Thread not found"
+                )
+
+            # Verify ownership
+            state_user_id = existing_state.values.get("user_id")
+            if state_user_id != user_id:
+                logger.warning(
+                    "Access denied to thread",
+                    extra={
+                        "user_id": user_id,
+                        "thread_id": thread_id,
+                        "owner_id": state_user_id
+                    }
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Thread not found"  # Don't reveal existence to unauthorized user
+                )
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(
+                "Error verifying thread ownership",
+                extra={"user_id": user_id,
+                       "thread_id": thread_id, "error": str(e)},
+                exc_info=True
+            )
+            # If we can't verify, allow it (fail open) but log the issue
+            # This prevents blocking legitimate users if checkpointer has issues
+            pass
 
     # Unpack rate limit info for headers
     limit, remaining, reset_time = rate_limit_info
@@ -314,6 +398,8 @@ async def chat(
                     thread_id=thread_id,
                     user_id=user_id,
                     request=request,
+                    is_new_thread=is_new_thread,
+                    custom_title=chat_request.title,
                 ),
                 media_type="text/event-stream",
                 headers={

@@ -248,6 +248,7 @@ async def list_user_threads_from_db(
             FROM checkpoints
             WHERE checkpoint_ns = ''
               AND checkpoint->'channel_values'->>'user_id' = %s
+              AND jsonb_array_length(checkpoint->'channel_values'->'messages') > 0
             ORDER BY thread_id, checkpoint_id DESC
         )
         SELECT

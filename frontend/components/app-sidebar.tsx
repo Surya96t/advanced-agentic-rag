@@ -78,7 +78,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [editingThreadId, setEditingThreadId] = React.useState<string | null>(null)
   const [editingTitle, setEditingTitle] = React.useState('')
   const router = useRouter()
-  const { threads, isLoadingThreads, currentThreadId, loadThreads, deleteThread, createNewThread, updateThreadTitle } = useChatStore()
+  const { threads, isLoadingThreads, currentThreadId, loadThreads, deleteThread, createNewChat, updateThreadTitle } = useChatStore()
   
   React.useEffect(() => {
     setMounted(true)
@@ -93,19 +93,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     console.log('[Sidebar] Current thread ID:', currentThreadId)
   }, [threads, currentThreadId])
   
-  const handleNewChat = async () => {
-    console.log('[Sidebar] New Chat clicked')
+  const handleNewChat = () => {
+    console.log('[Sidebar] New Chat clicked - using lazy creation')
     
-    try {
-      // Create a new thread in the backend
-      const newThreadId = await createNewThread('New Chat')
-      console.log('[Sidebar] New thread created:', newThreadId)
-      
-      // Navigate to the new thread route
-      router.push(`/chat/${newThreadId}`)
-    } catch (error) {
-      console.error('[Sidebar] Failed to create new thread:', error)
-    }
+    // Use new lazy creation method (no API call)
+    createNewChat()
+    
+    // Navigate to /chat (no thread_id) - thread will be created on first message
+    router.push('/chat')
   }
   
   const handleThreadClick = (threadId: string) => {

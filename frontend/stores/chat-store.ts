@@ -67,7 +67,8 @@ interface ChatState {
   // Thread management actions
   setCurrentThreadId: (threadId: string | null) => void
   loadThreads: () => Promise<void>
-  createNewThread: (title?: string) => Promise<string>
+  createNewThread: (title?: string) => Promise<string>  // DEPRECATED
+  createNewChat: () => void  // New method for lazy creation
   loadThread: (threadId: string) => Promise<void>
   deleteThread: (threadId: string) => Promise<void>
   updateThreadTitle: (threadId: string, title: string) => Promise<void>
@@ -362,6 +363,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
   
   createNewThread: async (title?: string) => {
+    // DEPRECATED: Use createNewChat() instead for lazy thread creation
+    // This method is kept for backward compatibility but creates empty threads
+    console.warn('[Store] createNewThread is deprecated. Use createNewChat() instead.')
     try {
       const response = await fetch('/api/threads', {
         method: 'POST',
@@ -395,6 +399,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ error: 'Failed to create new conversation' })
       throw error
     }
+  },
+  
+  /**
+   * Create a new chat (lazy creation - no API call)
+   * Thread will be created on first message send
+   */
+  createNewChat: () => {
+    console.log('[Store] Creating new chat (lazy creation)')
+    set({
+      currentThreadId: null, // null = new chat (thread created on first message)
+      messages: [],
+      agentHistory: [],
+      streamingMessageId: null,
+      error: null,
+    })
   },
   
   loadThread: async (threadId: string) => {

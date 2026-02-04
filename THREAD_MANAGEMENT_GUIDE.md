@@ -55,13 +55,13 @@ CREATE TABLE public.checkpoints (
     type TEXT,                            -- Checkpoint type (always "checkpoint")
     checkpoint JSONB NOT NULL,            -- Complete agent state (messages, context, etc.)
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb, -- Custom metadata (title, timestamps)
-    
+
     CONSTRAINT checkpoints_pkey PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id)
 );
 
 -- Indexes for fast lookup
 CREATE INDEX idx_checkpoints_thread_id ON checkpoints(thread_id, checkpoint_ns);
-CREATE INDEX idx_checkpoints_parent ON checkpoints(parent_checkpoint_id) 
+CREATE INDEX idx_checkpoints_parent ON checkpoints(parent_checkpoint_id)
     WHERE parent_checkpoint_id IS NOT NULL;
 ```
 
@@ -114,11 +114,11 @@ CREATE TABLE public.checkpoint_writes (
     type TEXT,
     blob BYTEA NOT NULL,
     task_path TEXT NOT NULL DEFAULT '',
-    
+
     CONSTRAINT checkpoint_writes_pkey PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
 );
 
-CREATE INDEX idx_checkpoint_writes_checkpoint 
+CREATE INDEX idx_checkpoint_writes_checkpoint
     ON checkpoint_writes(thread_id, checkpoint_ns, checkpoint_id);
 ```
 
@@ -134,7 +134,7 @@ CREATE TABLE public.checkpoint_blobs (
     version TEXT NOT NULL,
     type TEXT NOT NULL,
     blob BYTEA,
-    
+
     CONSTRAINT checkpoint_blobs_pkey PRIMARY KEY (thread_id, checkpoint_ns, channel, version)
 );
 ```
@@ -160,7 +160,7 @@ CREATE TABLE public.users (
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
     -- ... quota/usage fields
-    
+
     CONSTRAINT users_pkey PRIMARY KEY (id)
 );
 ```
@@ -184,12 +184,14 @@ All endpoints require **Clerk JWT authentication** (user_id extracted from token
 **Purpose:** Retrieve all conversation threads for the authenticated user. **Only returns threads with at least 1 message** (no empty threads).
 
 **Request:**
+
 ```http
 GET /api/v1/threads
 Authorization: Bearer <clerk_jwt_token>
 ```
 
 **Response:** `200 OK`
+
 ```json
 [
   {
@@ -214,6 +216,7 @@ Authorization: Bearer <clerk_jwt_token>
 ```
 
 **Database Query:**
+
 ```sql
 WITH latest_checkpoints AS (
     SELECT DISTINCT ON (thread_id)
@@ -243,12 +246,14 @@ ORDER BY checkpoint_id DESC
 **Purpose:** Retrieve detailed information about a specific thread, including full message history.
 
 **Request:**
+
 ```http
 GET /api/v1/threads/550e8400-e29b-41d4-a716-446655440000
 Authorization: Bearer <clerk_jwt_token>
 ```
 
 **Response:** `200 OK`
+
 ```json
 {
   "metadata": {
@@ -281,6 +286,7 @@ Authorization: Bearer <clerk_jwt_token>
 ```
 
 **Errors:**
+
 - `404 Not Found` - Thread doesn't exist or user doesn't own it
 - `500 Internal Server Error` - Database query failed
 
@@ -295,6 +301,7 @@ Authorization: Bearer <clerk_jwt_token>
 **Purpose:** Send a message to a conversation. **Automatically creates a new thread if `thread_id` is null** (lazy creation).
 
 **Request (New Conversation):**
+
 ```http
 POST /api/v1/chat
 Authorization: Bearer <clerk_jwt_token>
@@ -309,6 +316,7 @@ Content-Type: application/json
 ```
 
 **Request (Existing Conversation):**
+
 ```http
 POST /api/v1/chat
 Authorization: Bearer <clerk_jwt_token>
@@ -322,6 +330,7 @@ Content-Type: application/json
 ```
 
 **Response:** Server-Sent Events (SSE) stream
+
 ```
 event: thread_created
 data: {"thread_id": "770e8400-e29b-41d4-a716-446655440002"}
@@ -344,6 +353,7 @@ data: {"message_id": "msg_123", "thread_id": "770e8400..."}
 **What Happens (New Thread):**
 
 1. **Validate Request:**
+
    ```python
    if request.thread_id is None:
        # New conversation - generate thread_id
@@ -356,6 +366,7 @@ data: {"message_id": "msg_123", "thread_id": "770e8400..."}
    ```
 
 2. **Execute Agent with LangGraph:**
+
    ```python
    config = {
        "configurable": {
@@ -363,7 +374,7 @@ data: {"message_id": "msg_123", "thread_id": "770e8400..."}
            "user_id": user_id,  # Inject for new threads
        }
    }
-   
+
    # LangGraph automatically creates first checkpoint with message
    async for event in graph.astream_events(
        {"messages": [HumanMessage(content=request.message)]},
@@ -375,6 +386,7 @@ data: {"message_id": "msg_123", "thread_id": "770e8400..."}
    ```
 
 3. **Set Custom Title (Optional):**
+
    ```python
    if request.title and request.thread_id is None:
        # Set custom title in metadata
@@ -382,6 +394,7 @@ data: {"message_id": "msg_123", "thread_id": "770e8400..."}
    ```
 
 4. **Database Insert (Automatic via LangGraph):**
+
    ```sql
    INSERT INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, checkpoint, metadata)
    VALUES (
@@ -419,6 +432,7 @@ data: {"message_id": "msg_123", "thread_id": "770e8400..."}
 **Implementation:** `backend/app/api/v1/chat.py::chat()`
 
 **Schema Changes:**
+
 ```python
 # backend/app/schemas/chat.py
 
@@ -438,6 +452,7 @@ class ChatRequest(BaseModel):
 **Purpose:** Update thread metadata (currently only title).
 
 **Request:**
+
 ```http
 PATCH /api/v1/threads/550e8400-e29b-41d4-a716-446655440000
 Authorization: Bearer <clerk_jwt_token>
@@ -449,6 +464,7 @@ Content-Type: application/json
 ```
 
 **Response:** `200 OK`
+
 ```json
 {
   "thread_id": "550e8400-e29b-41d4-a716-446655440000",
@@ -462,6 +478,7 @@ Content-Type: application/json
 ```
 
 **Database Update:**
+
 ```sql
 UPDATE checkpoints
 SET metadata = jsonb_set(
@@ -485,12 +502,14 @@ WHERE thread_id = '550e8400-e29b-41d4-a716-446655440000';
 **Purpose:** Permanently delete a thread and all its checkpoints.
 
 **Request:**
+
 ```http
 DELETE /api/v1/threads/550e8400-e29b-41d4-a716-446655440000
 Authorization: Bearer <clerk_jwt_token>
 ```
 
 **Response:** `200 OK`
+
 ```json
 {
   "success": true,
@@ -499,12 +518,14 @@ Authorization: Bearer <clerk_jwt_token>
 ```
 
 **Database Delete:**
+
 ```sql
 DELETE FROM checkpoints WHERE thread_id = '550e8400-e29b-41d4-a716-446655440000';
 -- Also cascades to checkpoint_writes and checkpoint_blobs (if foreign keys exist)
 ```
 
 **Errors:**
+
 - `404 Not Found` - Thread doesn't exist or user doesn't own it
 - `500 Internal Server Error` - Deletion failed
 
@@ -622,15 +643,15 @@ DELETE FROM checkpoints WHERE thread_id = '550e8400-e29b-41d4-a716-446655440000'
 
 ### Key Differences from Option A (Pre-creation)
 
-| Aspect | Option A (Pre-create) | Option B (Lazy Creation) ✅ |
-|--------|----------------------|----------------------------|
-| **Thread Creation** | On "New Chat" click | On first message sent |
-| **Initial API Call** | `POST /api/threads` | None (navigate to `/chat`) |
-| **Database State** | Empty thread exists | No thread until first message |
-| **URL Pattern** | `/chat/{thread_id}` immediately | `/chat` → `/chat/{thread_id}` after first message |
-| **Orphaned Threads** | Yes (user clicks but doesn't send) | No (only created with message) |
-| **API Calls (New Chat)** | 2 (create + send message) | 1 (send message creates thread) |
-| **Thread List** | May show empty threads | Only shows threads with messages |
+| Aspect                   | Option A (Pre-create)              | Option B (Lazy Creation) ✅                       |
+| ------------------------ | ---------------------------------- | ------------------------------------------------- |
+| **Thread Creation**      | On "New Chat" click                | On first message sent                             |
+| **Initial API Call**     | `POST /api/threads`                | None (navigate to `/chat`)                        |
+| **Database State**       | Empty thread exists                | No thread until first message                     |
+| **URL Pattern**          | `/chat/{thread_id}` immediately    | `/chat` → `/chat/{thread_id}` after first message |
+| **Orphaned Threads**     | Yes (user clicks but doesn't send) | No (only created with message)                    |
+| **API Calls (New Chat)** | 2 (create + send message)          | 1 (send message creates thread)                   |
+| **Thread List**          | May show empty threads             | Only shows threads with messages                  |
 
 ### Title Management
 
@@ -641,6 +662,7 @@ DELETE FROM checkpoints WHERE thread_id = '550e8400-e29b-41d4-a716-446655440000'
    - **Auto-generated:** First 50 chars of first message (if no custom title)
 
 2. **Title Display Priority:**
+
    ```
    1. metadata.custom_title (if provided or user updated via PATCH)
    2. First 50 chars of first message (always available since threads have messages)
@@ -652,20 +674,21 @@ DELETE FROM checkpoints WHERE thread_id = '550e8400-e29b-41d4-a716-446655440000'
    - **On Creation:** Pass `title` field in chat request
 
 **Example:**
+
 ```typescript
 // User wants custom title
 await sendMessage({
   message: "How do I use FastAPI?",
   thread_id: null,
-  title: "My FastAPI Learning Journey"  // ← Custom title
-})
+  title: "My FastAPI Learning Journey", // ← Custom title
+});
 
 // Auto-generated title (from first message)
 await sendMessage({
   message: "How do I use FastAPI?",
-  thread_id: null
+  thread_id: null,
   // Title will be: "How do I use FastAPI?"
-})
+});
 ```
 
 ---
@@ -678,22 +701,22 @@ await sendMessage({
 
 ```typescript
 interface ChatStore {
-  currentThreadId: string | null
-  messages: Message[]
-  agentHistory: AgentHistoryItem[]
-  threads: ThreadSummary[]
-  
+  currentThreadId: string | null;
+  messages: Message[];
+  agentHistory: AgentHistoryItem[];
+  threads: ThreadSummary[];
+
   // Simplified - no longer creates thread via API
-  createNewChat: () => void
-  
+  createNewChat: () => void;
+
   // Modified - handles thread creation on first message
-  sendMessage: (message: string, title?: string) => Promise<void>
-  
+  sendMessage: (message: string, title?: string) => Promise<void>;
+
   // Existing methods
-  loadThreads: () => Promise<void>
-  loadThread: (threadId: string) => Promise<void>
-  updateThreadTitle: (threadId: string, title: string) => Promise<void>
-  deleteThread: (threadId: string) => Promise<void>
+  loadThreads: () => Promise<void>;
+  loadThread: (threadId: string) => Promise<void>;
+  updateThreadTitle: (threadId: string, title: string) => Promise<void>;
+  deleteThread: (threadId: string) => Promise<void>;
 }
 
 const useChatStore = create<ChatStore>((set, get) => ({
@@ -701,148 +724,148 @@ const useChatStore = create<ChatStore>((set, get) => ({
   messages: [],
   agentHistory: [],
   threads: [],
-  
+
   // 1. CREATE NEW CHAT - Just navigate, no API call
   createNewChat: () => {
     set({
-      currentThreadId: null,  // ← NULL indicates new chat
+      currentThreadId: null, // ← NULL indicates new chat
       messages: [],
       agentHistory: [],
       streamingMessageId: null,
-    })
-    
+    });
+
     // Navigate to /chat (no thread_id yet)
-    router.push('/chat')
+    router.push("/chat");
   },
-  
+
   // 2. SEND MESSAGE - Creates thread if needed
   sendMessage: async (message: string, title?: string) => {
-    const { currentThreadId } = get()
-    
+    const { currentThreadId } = get();
+
     // Build request payload
     const payload = {
       message,
-      thread_id: currentThreadId,  // ← null for new chat, string for existing
-      title: title,  // ← Optional custom title
+      thread_id: currentThreadId, // ← null for new chat, string for existing
+      title: title, // ← Optional custom title
       stream: true,
-    }
-    
+    };
+
     // Optimistically add user message
     const tempUserMessage: Message = {
       id: `temp_${Date.now()}`,
-      role: 'user',
+      role: "user",
       content: message,
       timestamp: new Date().toISOString(),
-    }
-    set({ messages: [...get().messages, tempUserMessage] })
-    
+    };
+    set({ messages: [...get().messages, tempUserMessage] });
+
     // Stream response from backend
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify(payload),
-    })
-    
-    if (!response.ok) throw new Error('Failed to send message')
-    
+    });
+
+    if (!response.ok) throw new Error("Failed to send message");
+
     // Parse SSE stream
-    const reader = response.body?.getReader()
-    const decoder = new TextDecoder()
-    
-    let createdThreadId: string | null = null
-    let assistantMessage = ''
-    let citations: Citation[] = []
-    
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+
+    let createdThreadId: string | null = null;
+    let assistantMessage = "";
+    let citations: Citation[] = [];
+
     while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      
-      const chunk = decoder.decode(value, { stream: true })
-      const events = parseSSE(chunk)
-      
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      const events = parseSSE(chunk);
+
       for (const event of events) {
         switch (event.type) {
-          case 'thread_created':
+          case "thread_created":
             // NEW: Handle thread creation
-            createdThreadId = event.data.thread_id
-            set({ currentThreadId: createdThreadId })
-            
+            createdThreadId = event.data.thread_id;
+            set({ currentThreadId: createdThreadId });
+
             // Redirect to new thread URL
-            router.push(`/chat/${createdThreadId}`)
-            break
-          
-          case 'token':
+            router.push(`/chat/${createdThreadId}`);
+            break;
+
+          case "token":
             // Stream AI response
-            assistantMessage += event.data.content
+            assistantMessage += event.data.content;
             set({
               messages: [
-                ...get().messages.slice(0, -1),  // Remove temp message
-                tempUserMessage,  // Add confirmed user message
+                ...get().messages.slice(0, -1), // Remove temp message
+                tempUserMessage, // Add confirmed user message
                 {
                   id: `ai_${Date.now()}`,
-                  role: 'assistant',
+                  role: "assistant",
                   content: assistantMessage,
                   timestamp: new Date().toISOString(),
                 },
               ],
-            })
-            break
-          
-          case 'citation':
-            citations.push(event.data)
-            break
-          
-          case 'message_complete':
+            });
+            break;
+
+          case "citation":
+            citations.push(event.data);
+            break;
+
+          case "message_complete":
             // Finalize message
             set({
               messages: [
                 ...get().messages.slice(0, -1),
                 {
                   id: event.data.message_id,
-                  role: 'assistant',
+                  role: "assistant",
                   content: assistantMessage,
                   citations,
                   timestamp: new Date().toISOString(),
                 },
               ],
-            })
-            
+            });
+
             // Refresh thread list (new thread appears in sidebar)
-            await get().loadThreads()
-            break
+            await get().loadThreads();
+            break;
         }
       }
     }
   },
-  
+
   // 3. LOAD THREADS (unchanged, but now only returns threads with messages)
   loadThreads: async () => {
-    const response = await fetch('/api/threads', {
-      credentials: 'include',
-    })
-    
-    const threads: ThreadSummary[] = await response.json()
-    set({ threads })
+    const response = await fetch("/api/threads", {
+      credentials: "include",
+    });
+
+    const threads: ThreadSummary[] = await response.json();
+    set({ threads });
   },
-  
+
   // 4. LOAD THREAD (unchanged)
   loadThread: async (threadId: string) => {
     const response = await fetch(`/api/threads/${threadId}`, {
-      credentials: 'include',
-    })
-    
-    const { messages, metadata } = await response.json()
-    
+      credentials: "include",
+    });
+
+    const { messages, metadata } = await response.json();
+
     set({
       currentThreadId: threadId,
       messages,
-      agentHistory: [],  // Reset agent history
-    })
+      agentHistory: [], // Reset agent history
+    });
   },
-  
+
   // ... other methods unchanged
-}))
+}));
 ```
 
 **File:** `frontend/app/(dashboard)/chat/page.tsx` (NEW)
@@ -858,26 +881,26 @@ import { useRouter } from 'next/navigation'
 /**
  * New Chat Page (No Thread ID)
  * URL: /chat
- * 
+ *
  * This is where users land when they click "New Chat".
  * No thread exists yet - thread will be created when first message is sent.
  */
 export default function NewChatPage() {
   const router = useRouter()
   const { currentThreadId, sendMessage } = useChatStore()
-  
+
   // If user somehow has a thread ID, redirect to thread page
   useEffect(() => {
     if (currentThreadId) {
       router.push(`/chat/${currentThreadId}`)
     }
   }, [currentThreadId])
-  
+
   const handleSendMessage = async (message: string, title?: string) => {
     // Send message (will create thread and redirect)
     await sendMessage(message, title)
   }
-  
+
   return (
     <div className="flex h-full flex-col">
       <ChatInterface
@@ -902,26 +925,26 @@ import { ChatInterface } from '@/components/chat/chat-interface'
 /**
  * Existing Thread Page
  * URL: /chat/{thread_id}
- * 
+ *
  * Display existing conversation with full message history.
  */
 export default function ChatThreadPage() {
   const params = useParams()
   const threadId = params.threadId as string
   const { currentThreadId, messages, loadThread, sendMessage } = useChatStore()
-  
+
   // Load thread when component mounts or threadId changes
   useEffect(() => {
     if (threadId && threadId !== currentThreadId) {
       loadThread(threadId)
     }
   }, [threadId, currentThreadId])
-  
+
   const handleSendMessage = async (message: string) => {
     // Send message to existing thread (no title param needed)
     await sendMessage(message)
   }
-  
+
   return (
     <div className="flex h-full flex-col">
       <ChatInterface
@@ -945,7 +968,7 @@ import { PlusIcon } from 'lucide-react'
 
 export function ThreadList() {
   const { threads, currentThreadId, createNewChat, loadThread, deleteThread } = useChatStore()
-  
+
   return (
     <div className="flex flex-col h-full">
       {/* New Chat Button - Just navigates, no API call */}
@@ -956,7 +979,7 @@ export function ThreadList() {
         <PlusIcon className="mr-2 h-4 w-4" />
         New Chat
       </Button>
-      
+
       {/* Thread List - Only shows threads with messages */}
       <div className="flex-1 overflow-y-auto space-y-2">
         {threads.map((thread) => (
@@ -979,28 +1002,29 @@ export function ThreadList() {
 **File:** `frontend/app/api/threads/route.ts` (SIMPLIFIED)
 
 ```typescript
-import { auth } from '@clerk/nextjs/server'
-import { NextRequest } from 'next/server'
+import { auth } from "@clerk/nextjs/server";
+import { NextRequest } from "next/server";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
 // GET /api/threads - List threads (only returns threads with messages)
 export async function GET(request: NextRequest) {
-  const { userId, getToken } = auth()
-  
+  const { userId, getToken } = auth();
+
   if (!userId) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
-  
-  const token = await getToken()
-  
+
+  const token = await getToken();
+
   const response = await fetch(`${BACKEND_URL}/api/v1/threads`, {
     headers: {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
-  })
-  
-  return Response.json(await response.json())
+  });
+
+  return Response.json(await response.json());
 }
 
 // NO POST ENDPOINT - Thread creation happens in /api/chat
@@ -1009,41 +1033,42 @@ export async function GET(request: NextRequest) {
 **File:** `frontend/app/api/chat/route.ts` (MODIFIED)
 
 ```typescript
-import { auth } from '@clerk/nextjs/server'
-import { NextRequest } from 'next/server'
+import { auth } from "@clerk/nextjs/server";
+import { NextRequest } from "next/server";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
 // POST /api/chat - Send message (creates thread if thread_id is null)
 export async function POST(request: NextRequest) {
-  const { userId, getToken } = auth()
-  
+  const { userId, getToken } = auth();
+
   if (!userId) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 })
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
-  
-  const token = await getToken()
-  const body = await request.json()
-  
+
+  const token = await getToken();
+  const body = await request.json();
+
   // Forward request to backend
   // Backend will create thread if thread_id is null
   const response = await fetch(`${BACKEND_URL}/api/v1/chat`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
-  })
-  
+  });
+
   // Stream SSE response back to frontend
   return new Response(response.body, {
     headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
     },
-  })
+  });
 }
 ```
 
@@ -1129,13 +1154,13 @@ INSERT INTO checkpoints VALUES (
 );
 
 -- VERIFY: Thread exists AND has messages (no empty state)
-SELECT 
+SELECT
   thread_id,
   checkpoint->'channel_values'->>'user_id' as user_id,
   jsonb_array_length(checkpoint->'channel_values'->'messages') as message_count,
   checkpoint->'channel_values'->'messages'->0->>'content' as first_message,
   metadata->>'custom_title' as title
-FROM checkpoints 
+FROM checkpoints
 WHERE thread_id = '770e8400...';
 
 -- Returns:
@@ -1197,11 +1222,11 @@ INSERT INTO checkpoints VALUES (
 );
 
 -- VERIFY: Thread now has 4 messages
-SELECT 
+SELECT
   checkpoint_id,
   parent_checkpoint_id,
   jsonb_array_length(checkpoint->'channel_values'->'messages') as message_count
-FROM checkpoints 
+FROM checkpoints
 WHERE thread_id = '770e8400...'
 ORDER BY checkpoint_id DESC;
 
@@ -1217,7 +1242,7 @@ ORDER BY checkpoint_id DESC;
 
 ```sql
 -- CURRENT STATE: Thread has default title "New Chat"
-SELECT 
+SELECT
   thread_id,
   metadata->>'custom_title' as title,
   checkpoint->'channel_values'->'messages'->0->>'content' as first_message
@@ -1243,7 +1268,7 @@ SET metadata = jsonb_set(
 WHERE thread_id = '770e8400-e29b-41d4-a716-446655440002';
 
 -- VERIFY: All checkpoints now have custom title
-SELECT 
+SELECT
   checkpoint_id,
   metadata->>'custom_title' as custom_title,
   metadata->>'updated_at' as updated_at
@@ -1349,17 +1374,18 @@ Unlike traditional chat applications, Integration Forge does **NOT** have a dedi
 ✅ Every thread in the database has **at least 2 messages** (user + AI)  
 ✅ No orphaned threads from users clicking "New Chat" without sending  
 ✅ Cleaner `GET /api/v1/threads` response (no empty entries)  
-✅ Thread creation and first message are **atomic** (single operation)  
+✅ Thread creation and first message are **atomic** (single operation)
 
 **Database State:**
+
 ```sql
 -- Option A (Pre-create): Thread can have 0 messages
-SELECT COUNT(*) FROM checkpoints 
+SELECT COUNT(*) FROM checkpoints
 WHERE jsonb_array_length(checkpoint->'channel_values'->'messages') = 0;
 -- Returns: 47 (orphaned threads)
 
 -- Option B (Lazy): Thread ALWAYS has messages
-SELECT COUNT(*) FROM checkpoints 
+SELECT COUNT(*) FROM checkpoints
 WHERE jsonb_array_length(checkpoint->'channel_values'->'messages') = 0;
 -- Returns: 0 (no orphaned threads)
 ```
@@ -1373,6 +1399,7 @@ Each time the agent executes (or state updates), a **new checkpoint** is created
 - This enables **time-travel** (viewing past conversation states)
 
 **Example Timeline (Lazy Creation):**
+
 ```
 checkpoint_001 (first message pair - user + AI)
     ↓
@@ -1390,13 +1417,13 @@ def get_title(checkpoint_metadata, messages):
     # Priority 1: User-set custom title
     if checkpoint_metadata.get("custom_title"):
         return checkpoint_metadata["custom_title"]
-    
+
     # Priority 2: First 50 chars of first message
     # (Always available since threads have messages)
     first_message = next((m for m in messages if m.type == "human"), None)
     if first_message:
         return first_message.content[:50] + ("..." if len(first_message.content) > 50 else "")
-    
+
     # Priority 3: No fallback needed (threads always have messages)
     return "Untitled"  # Edge case only
 ```
@@ -1420,15 +1447,17 @@ if state_user_id != authenticated_user_id:
 ### 6. **Frontend State Management**
 
 **Key State:**
+
 ```typescript
 interface ChatStore {
-  currentThreadId: string | null  // ← null = new chat, string = existing thread
-  messages: Message[]
-  threads: ThreadSummary[]
+  currentThreadId: string | null; // ← null = new chat, string = existing thread
+  messages: Message[];
+  threads: ThreadSummary[];
 }
 ```
 
 **State Transitions:**
+
 ```
 User clicks "New Chat"
     ↓
@@ -1462,7 +1491,7 @@ async def chat(request: ChatRequest, user_id: str):
     - If thread_id is None: Create new thread + send message (atomic)
     - If thread_id exists: Send message to existing thread
     """
-    
+
     # LAZY CREATION: Generate thread_id if needed
     if request.thread_id is None:
         thread_id = str(uuid4())
@@ -1471,19 +1500,19 @@ async def chat(request: ChatRequest, user_id: str):
     else:
         thread_id = request.thread_id
         is_new_thread = False
-        
+
         # Verify ownership for existing threads
         existing_state = await graph.aget_state(
             config={"configurable": {"thread_id": thread_id}}
         )
-        
+
         if not existing_state.values:
             raise HTTPException(status_code=404, detail="Thread not found")
-        
+
         state_user_id = existing_state.values.get("user_id")
         if state_user_id != user_id:
             raise HTTPException(status_code=404, detail="Thread not found or access denied")
-    
+
     # Configure LangGraph
     config = {
         "configurable": {
@@ -1491,7 +1520,7 @@ async def chat(request: ChatRequest, user_id: str):
             "user_id": user_id,  # Inject for new threads
         }
     }
-    
+
     # Execute agent (creates checkpoint automatically)
     async for event in graph.astream_events(
         {"messages": [HumanMessage(content=request.message)]},
@@ -1500,14 +1529,14 @@ async def chat(request: ChatRequest, user_id: str):
     ):
         # Stream tokens, citations, etc.
         yield format_sse_event(event)
-    
+
     # If new thread, send thread_created event
     if is_new_thread:
         yield format_sse_event({
             "event": "thread_created",
             "data": {"thread_id": thread_id}
         })
-    
+
     # Optionally set custom title
     if request.title and is_new_thread:
         await update_thread_metadata(thread_id, {"custom_title": request.title})
@@ -1530,7 +1559,7 @@ class ChatRequest(BaseModel):
 ```python
 async def list_threads(user_id: str):
     """List all threads - only returns threads with messages."""
-    
+
     # Query only non-empty threads
     query = """
     WITH latest_checkpoints AS (
@@ -1548,7 +1577,7 @@ async def list_threads(user_id: str):
     SELECT * FROM latest_checkpoints
     ORDER BY checkpoint_id DESC
     """
-    
+
     # ... execute query and return results
 ```
 
@@ -1606,8 +1635,8 @@ DELETE FROM checkpoints
 WHERE jsonb_array_length(checkpoint->'channel_values'->'messages') = 0;
 
 -- Verify no empty threads remain
-SELECT COUNT(*) 
-FROM checkpoints 
+SELECT COUNT(*)
+FROM checkpoints
 WHERE jsonb_array_length(checkpoint->'channel_values'->'messages') = 0;
 -- Should return: 0
 ```
@@ -1670,8 +1699,8 @@ Generate public share links with expiration:
 ```sql
 UPDATE checkpoints
 SET metadata = jsonb_set(
-    metadata, 
-    '{share_token}', 
+    metadata,
+    '{share_token}',
     to_jsonb(generate_random_token())
 )
 WHERE thread_id = '...';
@@ -1692,28 +1721,28 @@ WHERE thread_id = '...';
 ✅ Message history persisted automatically via LangGraph  
 ✅ Ownership verified via `user_id` in checkpoint state  
 ✅ Titles: Custom (user-provided) or auto-generated (from first message)  
-✅ Frontend routing: `/chat` (new) → `/chat/{thread_id}` (after first message)  
+✅ Frontend routing: `/chat` (new) → `/chat/{thread_id}` (after first message)
 
 **Key Design Decisions:**
 
-| Aspect | Choice | Rationale |
-|--------|--------|-----------|
-| Thread Creation Timing | On first message (lazy) | Eliminates orphaned threads |
-| Thread ID in URL | After first message only | Cleaner UX (no empty threads) |
-| Title Generation | Custom or auto from first message | Flexibility + always available |
-| API Endpoints | Single `/chat` for new + existing | Simpler API surface |
-| Database Cleanup | Not needed | Lazy creation prevents orphans |
+| Aspect                 | Choice                            | Rationale                      |
+| ---------------------- | --------------------------------- | ------------------------------ |
+| Thread Creation Timing | On first message (lazy)           | Eliminates orphaned threads    |
+| Thread ID in URL       | After first message only          | Cleaner UX (no empty threads)  |
+| Title Generation       | Custom or auto from first message | Flexibility + always available |
+| API Endpoints          | Single `/chat` for new + existing | Simpler API surface            |
+| Database Cleanup       | Not needed                        | Lazy creation prevents orphans |
 
 **Comparison with Option A:**
 
-| Metric | Option A (Pre-create) | Option B (Lazy) ✅ |
-|--------|----------------------|-------------------|
-| Empty threads | Yes (orphaned) | No |
-| API calls (new chat) | 2 (create + send) | 1 (send creates) |
-| Database writes (new chat) | 2 (empty + with message) | 1 (with message) |
-| Thread list cleanliness | Mixed (empty + real) | Clean (only real) |
-| URL consistency | Always has thread_id | `/chat` → `/chat/{id}` |
-| Complexity | Lower (simple routing) | Slightly higher (routing) |
+| Metric                     | Option A (Pre-create)    | Option B (Lazy) ✅        |
+| -------------------------- | ------------------------ | ------------------------- |
+| Empty threads              | Yes (orphaned)           | No                        |
+| API calls (new chat)       | 2 (create + send)        | 1 (send creates)          |
+| Database writes (new chat) | 2 (empty + with message) | 1 (with message)          |
+| Thread list cleanliness    | Mixed (empty + real)     | Clean (only real)         |
+| URL consistency            | Always has thread_id     | `/chat` → `/chat/{id}`    |
+| Complexity                 | Lower (simple routing)   | Slightly higher (routing) |
 
 **Migration Path from Option A:**
 
@@ -1738,7 +1767,6 @@ WHERE thread_id = '...';
   - `backend/app/api/v1/chat.py` (add lazy creation logic)
   - `backend/app/schemas/chat.py` (make `thread_id` optional)
   - `backend/app/api/v1/threads.py` (filter empty threads in `list_threads`)
-  
 - **Frontend:**
   - `frontend/stores/chat-store.ts` (simplify `createNewChat`, modify `sendMessage`)
   - `frontend/app/(dashboard)/chat/page.tsx` (new file - new chat route)

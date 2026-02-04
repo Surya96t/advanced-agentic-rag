@@ -22,9 +22,14 @@ class ChatRequest(BaseSchema):
         max_length=2000,
         description="User's question or prompt"
     )
-    thread_id: UUID | None = Field(
+    thread_id: str | None = Field(
         default=None,
-        description="Thread ID for conversation continuity (auto-generated if not provided)"
+        description="Thread ID for conversation continuity (created lazily on first message if not provided)"
+    )
+    title: str | None = Field(
+        default=None,
+        max_length=200,
+        description="Optional custom title for the thread (only used for new threads)"
     )
     source_ids: list[UUID] = Field(
         default_factory=list,

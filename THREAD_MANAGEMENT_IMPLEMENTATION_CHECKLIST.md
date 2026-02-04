@@ -275,6 +275,7 @@ curl -X GET http://localhost:8000/api/v1/threads/<thread_id> \
   ```
 
 - [ ] **Capture `thread_created` event from SSE stream**
+
   ```typescript
   // In SSE event handler
   if (event.event === "thread_created") {
