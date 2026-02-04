@@ -20,6 +20,9 @@ from app.schemas.events import (
     CitationEvent,
     ValidationEvent,
     EndEvent,
+    ContextStatusEvent,
+    ConversationSummaryEvent,
+    QueryClassificationEvent,
 )
 from app.schemas.chat import ChatResponse
 from app.core.config import settings
@@ -30,6 +33,11 @@ from app.agents.nodes import (
     generator_node,
     validator_node,
 )
+# Import new conversational nodes
+from app.agents.nodes.context_loader import load_conversation_context
+from app.agents.nodes.classifier import classify_query
+from app.agents.nodes.simple_answer import generate_simple_answer
+from app.agents.nodes.router import route_after_classification
 from app.agents.state import AgentState, create_initial_state
 from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
@@ -45,26 +53,36 @@ logger = get_logger(__name__)
 
 def build_graph() -> StateGraph:
     """
-    Build the complete LangGraph StateGraph for agentic RAG.
+    Build the complete LangGraph StateGraph for conversational agentic RAG.
 
-    Graph Flow:
-    1. START → router
-    2. router → (COMMAND decides) → retriever (simple) OR query_expander (complex/ambiguous)
-    3. query_expander → retriever
-    4. retriever → generator
-    5. generator → validator
-    6. validator → (COMMAND decides) → END (pass) OR query_expander (retry)
+    Graph Flow (Conversational):
+    1. START → context_loader (load/trim conversation history)
+    2. context_loader → classifier (classify query type)
+    3. classifier → (COMMAND decides) → simple_answer OR router
+       - simple/conversational_followup → simple_answer → END
+       - complex_standalone → router (RAG pipeline)
+    4. router → (COMMAND decides) → retriever OR query_expander
+    5. query_expander → retriever
+    6. retriever → generator
+    7. generator → validator
+    8. validator → (COMMAND decides) → END OR query_expander (retry)
 
     Returns:
         Compiled StateGraph with checkpointing and tracing enabled
     """
-    logger.info("Building LangGraph StateGraph for agentic RAG")
+    logger.info("Building LangGraph StateGraph for conversational agentic RAG")
 
     # Create graph builder
     builder = StateGraph(AgentState)
 
-    # Add all nodes
-    logger.debug("Adding nodes to graph")
+    # Add conversational nodes (new)
+    logger.debug("Adding conversational nodes to graph")
+    builder.add_node("context_loader", load_conversation_context)
+    builder.add_node("classifier", classify_query)
+    builder.add_node("simple_answer", generate_simple_answer)
+
+    # Add existing RAG nodes
+    logger.debug("Adding RAG nodes to graph")
     builder.add_node("router", router_node)
     builder.add_node("query_expander", query_expander_node)
     builder.add_node("retriever", retriever_node)
@@ -74,9 +92,19 @@ def build_graph() -> StateGraph:
     # Add edges
     logger.debug("Adding edges to graph")
 
-    # Entry point
-    builder.add_edge(START, "router")
+    # Conversational flow (entry point)
+    builder.add_edge(START, "context_loader")
+    builder.add_edge("context_loader", "classifier")
 
+    # Classifier uses Command pattern to route:
+    # - simple/conversational_followup → simple_answer
+    # - complex_standalone → router
+    # (No explicit conditional edge needed, Command handles it)
+
+    # Simple answer path (bypasses RAG pipeline)
+    builder.add_edge("simple_answer", END)
+
+    # RAG pipeline (for complex queries)
     # Router uses Command pattern to decide routing
     # (No explicit conditional edge needed, Command handles it)
 
@@ -90,7 +118,7 @@ def build_graph() -> StateGraph:
     # - goto="query_expander" if retry needed
     # (No explicit conditional edge needed, Command handles it)
 
-    logger.info("Graph construction complete")
+    logger.info("Conversational graph construction complete")
     return builder
 
 
@@ -269,8 +297,8 @@ async def run_agent(
     logger.info(f"Running agent workflow for query: {query[:100]}...")
     logger.debug(f"Thread ID: {thread_id}, User ID: {user_id}")
 
-    # Create initial state
-    initial_state = create_initial_state(query)
+    # Create initial state with user_id for ownership tracking
+    initial_state = create_initial_state(query, user_id=user_id)
 
     # Configuration for LangGraph execution
     config = {
@@ -379,8 +407,8 @@ async def stream_agent(
     logger.info(f"Streaming agent workflow for query: {query[:100]}...")
     logger.debug(f"Thread ID: {thread_id}, User ID: {user_id}")
 
-    # Create initial state
-    initial_state = create_initial_state(query)
+    # Create initial state with user_id for ownership tracking
+    initial_state = create_initial_state(query, user_id=user_id)
 
     # Configuration
     config = {
@@ -486,18 +514,93 @@ async def stream_agent(
                     logger.warning(
                         f"Retriever node update missing 'sources' field. Keys: {list(node_update.keys())}")
 
+                # Context status events from context_loader
+                if node_name == "context_loader" and "context_window_tokens" in node_update:
+                    total_tokens = node_update.get("context_window_tokens", 0)
+                    max_tokens = settings.max_conversation_tokens
+                    message_count = len(node_update.get("messages", []))
+                    remaining = max(0, max_tokens - total_tokens)
+                    percentage = (total_tokens / max_tokens *
+                                  100) if max_tokens > 0 else 0
+
+                    yield {
+                        "event": SSEEventType.CONTEXT_STATUS.value,
+                        "data": ContextStatusEvent(
+                            total_tokens=total_tokens,
+                            max_tokens=max_tokens,
+                            remaining_tokens=remaining,
+                            message_count=message_count,
+                            percentage_used=round(percentage, 2),
+                        ).model_dump_json()
+                    }
+
+                    logger.info(
+                        f"📊 Context status: {total_tokens}/{max_tokens} tokens ({percentage:.1f}%)")
+
+                # Conversation summary events from context_loader
+                if node_name == "context_loader" and "conversation_summary" in node_update:
+                    summary = node_update.get("conversation_summary", "")
+                    if summary:  # Only emit if there's an actual summary
+                        # Estimate messages summarized vs kept
+                        messages = node_update.get("messages", [])
+                        messages_kept = len(messages)
+                        # This is an approximation; actual count would need to be passed from context_loader
+                        messages_summarized = node_update.get(
+                            "messages_summarized", 0)
+
+                        yield {
+                            "event": SSEEventType.CONVERSATION_SUMMARY.value,
+                            "data": ConversationSummaryEvent(
+                                summary=summary,
+                                # At least 1 if summary exists
+                                messages_summarized=max(
+                                    1, messages_summarized),
+                                messages_kept=messages_kept,
+                            ).model_dump_json()
+                        }
+
+                        logger.info(
+                            f"📝 Conversation summary generated ({len(summary)} chars)")
+
+                # Query classification events from classifier
+                if node_name == "classifier" and "query_type" in node_update:
+                    query_type = node_update.get("query_type", "unknown")
+                    needs_retrieval = node_update.get("needs_retrieval", True)
+                    pipeline_path = node_update.get("pipeline_path", "unknown")
+
+                    # Generate reasoning from query_type
+                    reasoning_map = {
+                        "simple": "Simple query (greeting/thanks) - no retrieval needed",
+                        "conversational_followup": "Follow-up to conversation - using context only",
+                        "complex_standalone": "Complex query requiring retrieval",
+                    }
+                    reasoning = reasoning_map.get(
+                        query_type, "Query classification determined")
+
+                    yield {
+                        "event": SSEEventType.QUERY_CLASSIFICATION.value,
+                        "data": QueryClassificationEvent(
+                            query_type=query_type,
+                            needs_retrieval=needs_retrieval,
+                            reasoning=reasoning,
+                            pipeline_path=pipeline_path,
+                        ).model_dump_json()
+                    }
+
+                    logger.info(
+                        f"🔍 Query classified: {query_type} (retrieval={needs_retrieval})")
+
                 # Validation events
-            # Validation events
-            if node_name == "validator" and "validation_result" in node_update:
-                validation = node_update["validation_result"]
-                yield {
-                    "event": SSEEventType.VALIDATION.value,
-                    "data": ValidationEvent(
-                        passed=validation.get("passed", False),
-                        score=validation.get("score", 0.0),
-                        issues=validation.get("issues", []),
-                    ).model_dump_json()
-                }
+                if node_name == "validator" and "validation_result" in node_update:
+                    validation = node_update["validation_result"]
+                    yield {
+                        "event": SSEEventType.VALIDATION.value,
+                        "data": ValidationEvent(
+                            passed=validation.get("passed", False),
+                            score=validation.get("score", 0.0),
+                            issues=validation.get("issues", []),
+                        ).model_dump_json()
+                    }
             elif mode == "custom":
                 # Handle custom events from nodes (e.g., token streaming)
                 if isinstance(data, dict):

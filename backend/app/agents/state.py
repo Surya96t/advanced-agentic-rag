@@ -72,8 +72,14 @@ class AgentState(TypedDict, total=False):
     Attributes:
         messages: Conversation history (required, uses add_messages reducer)
         original_query: User's original question (required)
+        query: Current working query (may be expanded/rewritten for better retrieval)
         expanded_queries: List of expanded/decomposed queries
         query_complexity: Classification of query type
+        query_type: Conversational classification ("simple" | "conversational_followup" | "complex_standalone")
+        needs_retrieval: Whether RAG retrieval is needed for this query
+        conversation_summary: Summary of older conversation messages
+        context_window_tokens: Current token count in conversation context
+        pipeline_path: Which pipeline path was taken ("simple" | "complex")
         retrieved_chunks: Search results from retrieval
         generated_response: LLM-generated answer
         validation_result: Quality validation results
@@ -90,10 +96,22 @@ class AgentState(TypedDict, total=False):
     # Conversation history (required field, uses LangChain's message reducer)
     messages: Annotated[list[AnyMessage], add_messages]
 
+    # User context (for ownership and RLS)
+    user_id: str
+
     # Query processing (original_query is required)
     original_query: str
+    query: str  # Current working query (may be expanded/rewritten)
     expanded_queries: list[str]
     query_complexity: Literal["simple", "complex", "ambiguous"]
+
+    # Conversational features (NEW)
+    query_type: Literal["simple",
+                        "conversational_followup", "complex_standalone"]
+    needs_retrieval: bool
+    conversation_summary: str
+    context_window_tokens: int
+    pipeline_path: Literal["simple", "complex"]
 
     # Retrieval results (uses custom reducer for deduplication)
     retrieved_chunks: Annotated[list[SearchResult], add_search_results]
@@ -113,30 +131,47 @@ class AgentState(TypedDict, total=False):
     feedback_requested: bool
 
 
-def create_initial_state(query: str) -> AgentState:
+def create_initial_state(query: str, user_id: str = "anonymous") -> AgentState:
     """
     Create initial state for a new agent run.
 
     Args:
         query: User's question
+        user_id: User identifier for ownership tracking (required for persistence)
 
     Returns:
-        AgentState with query set and default values
+        AgentState with query, user_id, and initial HumanMessage set
 
     Example:
-        >>> state = create_initial_state("How do I use Prisma?")
+        >>> state = create_initial_state("How do I use Prisma?", user_id="user_123")
         >>> state["original_query"]
+        'How do I use Prisma?'
+        >>> state["user_id"]
+        'user_123'
+        >>> state["messages"][0].content
         'How do I use Prisma?'
         >>> state["retry_count"]
         0
     """
+    # Import here to avoid circular dependency
+    from langchain_core.messages import HumanMessage
+
     return AgentState(
         original_query=query,
-        messages=[],
+        query=query,  # Set query for classifier and other nodes
+        user_id=user_id,  # CRITICAL: Set user_id for RLS and ownership
+        # Add user's message to history
+        messages=[HumanMessage(content=query)],
         expanded_queries=[],
         retrieved_chunks=[],
         retry_count=0,
         sources=[],
+        # Initialize conversational fields with defaults
+        query_type="complex_standalone",  # Default assumption until classifier runs
+        needs_retrieval=True,  # Default to retrieval unless classifier says otherwise
+        conversation_summary="",
+        context_window_tokens=0,
+        pipeline_path="complex",  # Default path
         metadata={
             "start_time": None,
             "end_time": None,

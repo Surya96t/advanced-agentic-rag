@@ -24,6 +24,12 @@ export interface Message {
   content: string
   citations?: Citation[]
   timestamp: Date
+  metadata?: {
+    usedConversationContext?: boolean
+    queryType?: 'simple' | 'conversational_followup' | 'complex_standalone'
+    needsRetrieval?: boolean
+    pipelinePath?: 'simple' | 'complex'
+  }
 }
 
 /**

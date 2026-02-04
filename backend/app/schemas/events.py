@@ -25,6 +25,10 @@ class SSEEventType(str, Enum):
     PROGRESS = "progress"
     VALIDATION = "validation"
     END = "end"
+    # Conversational agent events
+    CONTEXT_STATUS = "context_status"  # Context window usage info
+    CONVERSATION_SUMMARY = "conversation_summary"  # When messages are summarized
+    QUERY_CLASSIFICATION = "query_classification"  # Query type classification result
 
 
 class AgentStartEvent(BaseSchema):
@@ -243,6 +247,96 @@ class EndEvent(BaseSchema):
                     "thread_id": "invalid",
                     "success": False,
                     "error": "Invalid thread_id format"
+                }
+            ]
+        }
+    )
+
+
+# ============================================================================
+# Conversational Agent Events
+# ============================================================================
+
+
+class ContextStatusEvent(BaseSchema):
+    """Event emitted to show context window usage."""
+
+    total_tokens: int = Field(..., ge=0,
+                              description="Total tokens currently in context")
+    max_tokens: int = Field(..., ge=1000, description="Maximum allowed tokens")
+    remaining_tokens: int = Field(..., ge=0,
+                                  description="Remaining token budget")
+    message_count: int = Field(..., ge=0,
+                               description="Number of messages in context")
+    percentage_used: float = Field(..., ge=0.0, le=100.0,
+                                   description="Percentage of context used")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "total_tokens": 2500,
+                    "max_tokens": 8000,
+                    "remaining_tokens": 5500,
+                    "message_count": 12,
+                    "percentage_used": 31.25
+                }
+            ]
+        }
+    )
+
+
+class ConversationSummaryEvent(BaseSchema):
+    """Event emitted when conversation history is summarized."""
+
+    summary: str = Field(...,
+                         description="Summary of older conversation messages")
+    messages_summarized: int = Field(..., ge=1,
+                                     description="Number of messages that were summarized")
+    messages_kept: int = Field(..., ge=0,
+                               description="Number of recent messages kept")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "summary": "Previously discussed FastAPI setup, OAuth integration with Clerk, and database connection issues.",
+                    "messages_summarized": 30,
+                    "messages_kept": 10
+                }
+            ]
+        }
+    )
+
+
+class QueryClassificationEvent(BaseSchema):
+    """Event emitted after query classification."""
+
+    query_type: str = Field(
+        ...,
+        description="Classification type: 'simple', 'conversational_followup', or 'complex_standalone'"
+    )
+    needs_retrieval: bool = Field(...,
+                                  description="Whether RAG retrieval is needed")
+    reasoning: str = Field(...,
+                           description="Explanation of classification decision")
+    pipeline_path: str = Field(...,
+                               description="Pipeline path: 'simple' or 'complex'")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "query_type": "simple",
+                    "needs_retrieval": False,
+                    "reasoning": "Greeting detected, no retrieval needed",
+                    "pipeline_path": "simple"
+                },
+                {
+                    "query_type": "complex_standalone",
+                    "needs_retrieval": True,
+                    "reasoning": "Technical question about FastAPI requires documentation lookup",
+                    "pipeline_path": "complex"
                 }
             ]
         }

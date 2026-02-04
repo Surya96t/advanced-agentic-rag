@@ -230,13 +230,29 @@ async def validation_error_handler(
         errors=errors,
     )
 
+    # Convert errors to JSON-serializable format
+    # Pydantic validation errors may contain non-serializable objects (datetime, etc.)
+    serializable_errors = []
+    for error in errors:
+        serializable_error = {
+            "type": error.get("type"),
+            "loc": error.get("loc"),
+            "msg": error.get("msg"),
+            "input": str(error.get("input")) if error.get("input") is not None else None,
+        }
+        # Convert ctx dict if present (may contain datetime or other objects)
+        if "ctx" in error:
+            serializable_error["ctx"] = {
+                k: str(v) for k, v in error["ctx"].items()}
+        serializable_errors.append(serializable_error)
+
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content=ErrorResponse(
             error="ValidationError",
             message="Request validation failed",
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            details={"validation_errors": errors},
+            details={"validation_errors": serializable_errors},
         ).model_dump(),
     )
 

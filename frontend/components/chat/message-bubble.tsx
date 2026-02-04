@@ -9,7 +9,7 @@ import { Message, MessageContent } from '@/components/ai-elements/message'
 import { Suggestions, Suggestion } from '@/components/ai-elements/suggestion'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
-import { Bot, User, Loader2 } from 'lucide-react'
+import { Bot, User, Loader2, MessageCircle, Zap } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { CitationsList } from './citation'
 import { AgentStatus } from './agent-status'
@@ -98,6 +98,27 @@ export function MessageBubble({
           {/* Citations (AI messages only) */}
           {!isUser && message.citations && message.citations.length > 0 && (
             <CitationsList citations={message.citations} />
+          )}
+
+          {/* Conversational indicators (AI messages only) */}
+          {!isUser && message.metadata && (
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              {/* Used conversation context badge */}
+              {message.metadata.usedConversationContext && (
+                <div className="flex items-center gap-1 px-2 py-1 bg-muted/50 rounded-md text-xs text-muted-foreground">
+                  <MessageCircle className="w-3 h-3" />
+                  <span>Used conversation context</span>
+                </div>
+              )}
+
+              {/* Quick response badge (simple queries) */}
+              {message.metadata.queryType === 'simple' && (
+                <div className="flex items-center gap-1 px-2 py-1 bg-green-500/10 rounded-md text-xs text-green-700 dark:text-green-400">
+                  <Zap className="w-3 h-3" />
+                  <span>Quick response</span>
+                </div>
+              )}
+            </div>
           )}
 
           {/* Follow-up suggestions (latest AI message only) */}

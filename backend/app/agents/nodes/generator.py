@@ -8,7 +8,7 @@ using GPT-4, with support for token-by-token streaming.
 import time
 
 import tiktoken
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 from app.agents.state import AgentState
@@ -214,9 +214,23 @@ async def generator_node(state: AgentState) -> dict:
         logger.info(
             f"Formatted context from {len(chunks)} chunks ({len(context)} chars)")
 
+    # Build context-aware system prompt
+    system_prompt_parts = [SYSTEM_PROMPT]
+
+    # Add conversation summary if available
+    conversation_summary = state.get("conversation_summary", "")
+    if conversation_summary:
+        system_prompt_parts.append(
+            f"\n\nPrevious conversation context:\n{conversation_summary}"
+        )
+        logger.info(
+            f"Added conversation summary to system prompt ({len(conversation_summary)} chars)")
+
+    system_prompt = "\n".join(system_prompt_parts)
+
     # Build messages
     messages = [
-        SystemMessage(content=SYSTEM_PROMPT),
+        SystemMessage(content=system_prompt),
         HumanMessage(content=USER_PROMPT_TEMPLATE.format(
             query=query,
             context=context
@@ -281,8 +295,9 @@ async def generator_node(state: AgentState) -> dict:
         estimated_cost = (prompt_tokens * 0.00003) + \
             (completion_tokens * 0.00006)
 
-        # Return state update
+        # Return state update (MUST include messages to persist to conversation history!)
         return {
+            "messages": [AIMessage(content=full_response)],
             "generated_response": full_response,
             "metadata": {
                 "generation": {
@@ -300,9 +315,11 @@ async def generator_node(state: AgentState) -> dict:
     except Exception as e:
         logger.error(f"Generation failed: {e}", exc_info=True)
 
-        # Return error response
+        # Return error response (still need to add to messages!)
+        error_msg = f"I encountered an error while generating the response. Please try again."
         return {
-            "generated_response": f"I encountered an error while generating the response. Please try again.",
+            "messages": [AIMessage(content=error_msg)],
+            "generated_response": error_msg,
             "metadata": {
                 "generation": {
                     "error": str(e),

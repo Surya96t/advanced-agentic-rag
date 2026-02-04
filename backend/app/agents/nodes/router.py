@@ -192,3 +192,41 @@ def router_node(state: AgentState) -> Command[Literal["retriever", "query_expand
         },
         goto=next_node
     )
+
+
+def route_after_classification(state: AgentState) -> str:
+    """
+    Route based on query classification.
+
+    This is used in the conversational agent graph to route queries
+    after they've been classified by the classifier node.
+
+    Routing logic:
+    - simple queries (no retrieval needed) → "simple_answer"
+    - conversational_followup or complex_standalone → "retrieval"
+
+    Args:
+        state: Current agent state with query_type and needs_retrieval
+
+    Returns:
+        Next node name: "simple_answer" or "retrieval"
+
+    Example:
+        >>> state = {"query_type": "simple", "needs_retrieval": False}
+        >>> route_after_classification(state)
+        'simple_answer'
+        >>> state = {"query_type": "complex_standalone", "needs_retrieval": True}
+        >>> route_after_classification(state)
+        'retrieval'
+    """
+    query_type = state.get("query_type", "complex_standalone")
+    needs_retrieval = state.get("needs_retrieval", True)
+
+    # Simple queries go directly to simple_answer node
+    if query_type == "simple" or not needs_retrieval:
+        logger.info("Routing to simple_answer (no retrieval needed)")
+        return "simple_answer"
+
+    # All other queries go through retrieval pipeline
+    logger.info(f"Routing to retrieval ({query_type}, needs retrieval)")
+    return "retrieval"

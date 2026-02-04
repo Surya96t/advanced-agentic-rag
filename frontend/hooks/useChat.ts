@@ -1,11 +1,13 @@
 /**
  * Custom chat hook
  * Handles message sending and SSE streaming with retry and cancellation
+ * 
+ * @param threadId - Optional thread ID to use for this chat session (from URL params)
  */
 
 'use client'
 
-import { useCallback, useRef } from 'react'
+import { useCallback, useRef, useEffect } from 'react'
 import { toast } from 'sonner'
 import { useChatStore } from '@/stores/chat-store'
 import { useRateLimitStore } from '@/stores/rate-limit-store'
@@ -23,7 +25,18 @@ import type {
   ErrorEvent,
 } from '@/types/chat'
 
-export function useChat() {
+/**
+ * Generate a title from the user's message (first 50 chars)
+ */
+function generateTitleFromMessage(message: string): string {
+  const cleaned = message.trim()
+  if (cleaned.length <= 50) {
+    return cleaned
+  }
+  return cleaned.slice(0, 47) + '...'
+}
+
+export function useChat(threadId?: string) {
   const {
     messages,
     isLoading,
@@ -31,6 +44,7 @@ export function useChat() {
     currentAgent,
     agentHistory,
     streamingMetrics,
+    currentThreadId,
     addUserMessage,
     startStreamingMessage,
     appendToStreamingMessage,
@@ -46,6 +60,9 @@ export function useChat() {
     setLoading,
     setError,
     clearMessages,
+    setCurrentThreadId,
+    loadThreads,
+    updateThreadTitle,
   } = useChatStore()
 
   const { setRateLimit } = useRateLimitStore()
@@ -54,11 +71,22 @@ export function useChat() {
   const abortControllerRef = useRef<AbortController | null>(null)
   const sseClientRef = useRef<SSEClient | null>(null)
 
+  // Sync the thread ID from URL params to store
+  useEffect(() => {
+    if (threadId && threadId !== currentThreadId) {
+      console.log(`[useChat] Syncing threadId from URL: ${threadId}`)
+      setCurrentThreadId(threadId)
+    }
+  }, [threadId, currentThreadId, setCurrentThreadId])
+
   const sendMessage = useCallback(
     async (content: string) => {
       if (!content.trim() || isLoading) return
 
       try {
+        // Track if this is the first message in the thread (for auto-title generation)
+        const isFirstMessage = messages.length === 0
+        
         // Add user message to UI immediately
         addUserMessage(content)
         setLoading(true)
@@ -81,7 +109,11 @@ export function useChat() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: { message: content },
+          body: { 
+            message: content,
+            stream: true,
+            thread_id: currentThreadId || null  // null = new thread, UUID = existing thread
+          },
           maxRetries: 3,
           baseDelay: 1000,
           maxDelay: 10000,
@@ -226,6 +258,46 @@ export function useChat() {
                 const data = parseEventData<EndEvent>(event)
                 if (data) {
                   console.log('[SSE] Chat complete:', data.success ? 'success' : 'failed')
+                  console.log('[Thread] Current thread ID:', currentThreadId)
+                  console.log('[Thread] Response thread ID:', data.thread_id)
+                  
+                  // Capture thread_id for multi-turn conversations
+                  if (data.thread_id) {
+                    if (!currentThreadId) {
+                      console.log('[Thread] NEW THREAD created:', data.thread_id)
+                      setCurrentThreadId(data.thread_id)
+                      
+                      // Refresh thread list to show new conversation
+                      console.log('[Thread] Refreshing thread list...')
+                      loadThreads().then(() => {
+                        console.log('[Thread] Thread list refreshed successfully')
+                      }).catch(err => {
+                        console.error('[Thread] Failed to refresh thread list:', err)
+                      })
+                    } else if (currentThreadId !== data.thread_id) {
+                      console.warn('[Thread] Thread ID mismatch!', {
+                        current: currentThreadId,
+                        response: data.thread_id
+                      })
+                      setCurrentThreadId(data.thread_id)
+                    } else {
+                      console.log('[Thread] Continuing existing thread:', data.thread_id)
+                    }
+                    
+                    // Update thread title if this was the first message
+                    if (isFirstMessage && data.thread_id) {
+                      const newTitle = generateTitleFromMessage(content)
+                      console.log('[Thread] Updating title for first message:', newTitle)
+                      updateThreadTitle(data.thread_id, newTitle)
+                        .then(() => {
+                          console.log('[Thread] Title updated successfully')
+                        })
+                        .catch(err => {
+                          console.error('[Thread] Failed to update title:', err)
+                        })
+                    }
+                  }
+                  
                   // Ensure message is started
                   if (!messageStarted) {
                     startStreamingMessage()
@@ -293,7 +365,9 @@ export function useChat() {
       }
     },
     [
+      messages.length,
       isLoading,
+      currentThreadId,
       addUserMessage,
       startStreamingMessage,
       appendToStreamingMessage,
@@ -309,6 +383,9 @@ export function useChat() {
       setLoading,
       setError,
       setRateLimit,
+      setCurrentThreadId,
+      loadThreads,
+      updateThreadTitle,
     ]
   )
 
