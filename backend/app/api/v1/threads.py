@@ -187,7 +187,13 @@ async def get_thread_metadata_from_checkpoint(
             title = "New Chat"
             logger.debug("Using default title: New Chat")
 
-        preview = last_message.content[:100] if last_message else None
+        # Safely extract preview from last message
+        # Check if message has content attribute and it's a string before slicing
+        preview = None
+        if last_message:
+            content = getattr(last_message, "content", None)
+            if content and isinstance(content, str):
+                preview = content[:100]
 
         # Get timestamps from checkpoint metadata
         created_at = checkpoint_metadata.get(
@@ -209,8 +215,18 @@ async def get_thread_metadata_from_checkpoint(
 
     except Exception as e:
         logger.error(
-            f"Error extracting thread metadata for {thread_id}: {e}", exc_info=True)
-        return None
+            "Error extracting thread metadata - unable to verify ownership",
+            extra={
+                "thread_id": thread_id,
+                "user_id": user_id,
+                "error": str(e),
+                "error_type": type(e).__name__
+            },
+            exc_info=True
+        )
+        # Re-raise to force fail-closed behavior
+        # Callers will handle this by denying access
+        raise
 
 
 async def list_user_threads_from_db(
@@ -238,6 +254,10 @@ async def list_user_threads_from_db(
         # This is more efficient than loading every checkpoint individually
         # Note: checkpoints table doesn't have created_at, so we order by checkpoint_id
         # We filter by user_id in the checkpoint state (channel_values), not metadata
+        #
+        # IMPORTANT: We check if the thread has any meaningful content
+        # Since the graph uses custom state (query, generated_response, etc.),
+        # we check for either 'query' or 'generated_response' to determine if thread has content
         query = """
         WITH latest_checkpoints AS (
             SELECT DISTINCT ON (thread_id)
@@ -248,7 +268,10 @@ async def list_user_threads_from_db(
             FROM checkpoints
             WHERE checkpoint_ns = ''
               AND checkpoint->'channel_values'->>'user_id' = %s
-              AND jsonb_array_length(checkpoint->'channel_values'->'messages') > 0
+              AND (
+                checkpoint->'channel_values'->>'query' IS NOT NULL 
+                OR checkpoint->'channel_values'->>'generated_response' IS NOT NULL
+              )
             ORDER BY thread_id, checkpoint_id DESC
         )
         SELECT
@@ -287,7 +310,9 @@ async def list_user_threads_from_db(
     except Exception as e:
         logger.error(
             f"Error listing threads from database: {e}", exc_info=True)
-        return []
+        # Re-raise exception instead of masking it with empty list
+        # Let the calling endpoint handle the error appropriately
+        raise
 
 
 # ============================================================================
@@ -399,8 +424,26 @@ async def get_thread(
         messages = []
         for msg in messages_raw:
             if hasattr(msg, "type") and hasattr(msg, "content"):
+                # Map LangChain message types to API role types
+                msg_type = msg.type
+                if msg_type == "human":
+                    role = "user"
+                elif msg_type == "ai":
+                    role = "assistant"
+                elif msg_type == "system":
+                    role = "system"
+                elif msg_type == "tool":
+                    role = "tool"
+                elif msg_type in ("function", "function_call"):
+                    role = "function"
+                else:
+                    # Preserve unknown types for debugging
+                    role = msg_type
+                    logger.warning(
+                        f"Unknown message type '{msg_type}' in thread {thread_id}")
+
                 messages.append({
-                    "role": "user" if msg.type == "human" else "assistant",
+                    "role": role,
                     "content": msg.content,
                     "timestamp": getattr(msg, "timestamp", None),
                 })
@@ -513,6 +556,27 @@ async def create_thread(
             as_node="__start__",  # Initialize as the start node
         )
 
+        # Persist custom title to checkpoint metadata if provided
+        # This ensures get_thread_metadata_from_checkpoint can retrieve it
+        if thread_request.title:
+            conn = checkpointer.conn
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    """
+                    UPDATE checkpoints
+                    SET metadata = jsonb_set(
+                        COALESCE(metadata, '{}'::jsonb),
+                        '{custom_title}',
+                        to_jsonb(%s::text)
+                    )
+                    WHERE thread_id = %s
+                    """,
+                    (title, thread_id)
+                )
+                await conn.commit()
+            logger.debug(
+                f"Saved custom title '{title}' to checkpoint metadata")
+
         logger.info(
             f"Created and persisted thread {thread_id} with title '{title}'")
 
@@ -564,9 +628,26 @@ async def delete_thread(
         checkpointer = request.app.state.checkpointer
 
         # Verify ownership first
-        metadata = await get_thread_metadata_from_checkpoint(
-            thread_id, checkpointer, user_id
-        )
+        try:
+            metadata = await get_thread_metadata_from_checkpoint(
+                thread_id, checkpointer, user_id
+            )
+        except Exception as e:
+            # Fail closed: deny access if we can't verify ownership
+            logger.error(
+                "Failed to verify thread ownership for deletion - denying access",
+                extra={
+                    "user_id": user_id,
+                    "thread_id": thread_id,
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                },
+                exc_info=True
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Unable to verify thread access"
+            )
 
         if not metadata:
             raise HTTPException(
@@ -637,9 +718,26 @@ async def update_thread(
         checkpointer = request.app.state.checkpointer
 
         # Verify ownership first
-        metadata = await get_thread_metadata_from_checkpoint(
-            thread_id, checkpointer, user_id
-        )
+        try:
+            metadata = await get_thread_metadata_from_checkpoint(
+                thread_id, checkpointer, user_id
+            )
+        except Exception as e:
+            # Fail closed: deny access if we can't verify ownership
+            logger.error(
+                "Failed to verify thread ownership for update - denying access",
+                extra={
+                    "user_id": user_id,
+                    "thread_id": thread_id,
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                },
+                exc_info=True
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Unable to verify thread access"
+            )
 
         if not metadata:
             raise HTTPException(

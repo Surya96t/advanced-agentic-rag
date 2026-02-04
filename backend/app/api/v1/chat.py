@@ -126,6 +126,9 @@ async def sse_generator(
     # Initialize validator
     validator = TokenValidator()
 
+    # Track successful completion for thread_created event
+    stream_successful = False
+
     try:
         # Get checkpointer from app state
         checkpointer = request.app.state.checkpointer
@@ -199,6 +202,9 @@ async def sse_generator(
             # Small delay to allow disconnect detection
             await asyncio.sleep(0)
 
+        # Mark stream as successful if we completed without errors
+        stream_successful = True
+
     except asyncio.CancelledError:
         logger.info(
             "Stream cancelled",
@@ -233,8 +239,8 @@ async def sse_generator(
         yield f"event: {end_event['event']}\ndata: {end_event['data']}\n\n"
 
     finally:
-        # Send thread_created event for new threads (after successful completion)
-        if is_new_thread:
+        # Send thread_created event for new threads (only after successful completion)
+        if is_new_thread and stream_successful:
             thread_created_event = {
                 "event": "thread_created",
                 "data": json.dumps({"thread_id": thread_id})
@@ -317,7 +323,7 @@ async def chat(
             extra={"user_id": user_id, "thread_id": thread_id}
         )
     else:
-        thread_id = chat_request.thread_id
+        thread_id = str(chat_request.thread_id)  # Convert UUID to string
         is_new_thread = False
         logger.debug(
             "Using existing thread",
@@ -372,14 +378,21 @@ async def chat(
             raise
         except Exception as e:
             logger.error(
-                "Error verifying thread ownership",
-                extra={"user_id": user_id,
-                       "thread_id": thread_id, "error": str(e)},
+                "Error verifying thread ownership - denying access",
+                extra={
+                    "user_id": user_id,
+                    "thread_id": thread_id,
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                },
                 exc_info=True
             )
-            # If we can't verify, allow it (fail open) but log the issue
-            # This prevents blocking legitimate users if checkpointer has issues
-            pass
+            # Fail closed: deny access if we can't verify ownership
+            # This is more secure than allowing unverified access
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Unable to verify thread access"
+            )
 
     # Unpack rate limit info for headers
     limit, remaining, reset_time = rate_limit_info

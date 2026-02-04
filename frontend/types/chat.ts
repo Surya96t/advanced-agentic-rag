@@ -106,6 +106,10 @@ export interface EndEvent {
   error?: string
 }
 
+export interface ThreadCreatedEvent {
+  thread_id: string
+}
+
 export interface ValidationEvent {
   passed: boolean
   score: number
@@ -128,5 +132,6 @@ export type StreamEvent =
   | { type: 'agent_complete'; data: AgentCompleteEvent }
   | { type: 'agent_error'; data: AgentErrorEvent }
   | { type: 'validation'; data: ValidationEvent }
+  | { type: 'thread_created'; data: ThreadCreatedEvent }
   | { type: 'end'; data: EndEvent }
   | { type: 'error'; data: ErrorEvent }

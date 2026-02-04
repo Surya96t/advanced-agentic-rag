@@ -14,7 +14,7 @@ interface ContextStatusProps {
 }
 
 export function ContextStatus({ totalTokens, maxTokens, className }: ContextStatusProps) {
-  const percentage = (totalTokens / maxTokens) * 100
+  const percentage = maxTokens > 0 ? Math.max(0, Math.min((totalTokens / maxTokens) * 100, 100)) : 0
   const remaining = maxTokens - totalTokens
 
   // Color coding based on usage

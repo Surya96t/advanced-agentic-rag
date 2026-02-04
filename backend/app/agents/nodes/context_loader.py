@@ -53,7 +53,12 @@ async def load_conversation_context(state: AgentState) -> dict[str, Any]:
     # If under limit, return as-is
     if current_tokens <= settings.max_conversation_tokens:
         logger.info("  ↳ Within limit, no trimming needed")
-        return {"context_window_tokens": current_tokens, "conversation_summary": ""}
+        return {
+            "messages": messages,
+            "context_window_tokens": current_tokens,
+            "conversation_summary": "",
+            "messages_summarized": 0,
+        }
 
     logger.info("  ↳ Over limit, applying context management")
 

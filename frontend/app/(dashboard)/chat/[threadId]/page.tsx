@@ -22,15 +22,25 @@ export default function ChatThreadPage() {
   
   const { messages, isLoading, agentHistory, streamingMetrics, sendMessage, cancelStream } = useChat(threadId)
   const { isRateLimited } = useRateLimitStore()
-  const { loadThread, currentThreadId } = useChatStore()
+  const { loadThread } = useChatStore()
 
   // Load thread when component mounts or threadId changes
+  // CRITICAL: Only load thread once when component mounts or threadId from URL changes
+  // Do NOT react to store's currentThreadId changes to avoid race conditions
   useEffect(() => {
-    if (threadId && threadId !== currentThreadId) {
-      console.log(`[ChatThreadPage] Loading thread: ${threadId}`)
-      loadThread(threadId)
+    if (!threadId || threadId === 'undefined') {
+      console.log('[ChatThreadPage] Invalid threadId, skipping load')
+      return
     }
-  }, [threadId, currentThreadId, loadThread])
+    
+    console.log(`[ChatThreadPage] Loading thread: ${threadId}`)
+    loadThread(threadId)
+    
+    // Cleanup log
+    return () => {
+      console.log('[ChatThreadPage] Component unmounting, threadId:', threadId)
+    }
+  }, [threadId, loadThread]) // REMOVED currentThreadId from deps to prevent reload on store changes
 
   const hasMessages = messages.length > 0
 

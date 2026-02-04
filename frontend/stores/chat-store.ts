@@ -5,6 +5,39 @@
 import { create } from 'zustand'
 import { Message, Citation } from '@/types/chat'
 
+/**
+ * Generate a stable message ID based on content and timestamp
+ * This ensures messages have consistent IDs across reloads
+ * 
+ * @param role - Message role (user/assistant)
+ * @param content - Message content
+ * @param timestamp - Message timestamp
+ * @returns Deterministic UUID-like string
+ */
+function generateStableMessageId(role: string, content: string, timestamp: Date | string): string {
+  // Create a stable string combining all unique message properties
+  const timestampStr = timestamp instanceof Date ? timestamp.toISOString() : timestamp
+  const data = `${role}:${content}:${timestampStr}`
+  
+  // Simple hash function (FNV-1a)
+  let hash = 2166136261
+  for (let i = 0; i < data.length; i++) {
+    hash ^= data.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  
+  // Convert to unsigned 32-bit integer
+  hash = hash >>> 0
+  
+  // Format as UUID-like string (not a real UUID, but deterministic)
+  // Format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx (where 4 = version, y = variant)
+  const hex = hash.toString(16).padStart(8, '0')
+  const timestamp32 = new Date(timestampStr).getTime() & 0xFFFFFFFF
+  const timeHex = timestamp32.toString(16).padStart(8, '0')
+  
+  return `${hex}-${timeHex.slice(0, 4)}-4${timeHex.slice(4, 7)}-${hash.toString(16).slice(0, 4)}-${timeHex}${hex.slice(0, 4)}`
+}
+
 export interface AgentStep {
   name: string
   status: 'pending' | 'active' | 'complete' | 'error'
@@ -404,6 +437,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   /**
    * Create a new chat (lazy creation - no API call)
    * Thread will be created on first message send
+   * Note: Navigation to /chat should be handled by the caller
    */
   createNewChat: () => {
     console.log('[Store] Creating new chat (lazy creation)')
@@ -413,7 +447,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       agentHistory: [],
       streamingMessageId: null,
       error: null,
+      currentAgent: null,
+      isLoading: false,
     })
+    // Reset streaming metrics
+    get().resetStreamingMetrics()
   },
   
   loadThread: async (threadId: string) => {
@@ -435,17 +473,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
       
       // Convert backend message format to frontend format
       const formattedMessages: Message[] = messages.map((msg: {
+        id?: string;  // Backend-assigned ID (if present)
         role: 'user' | 'assistant';
         content: string;
         timestamp?: string;
         citations?: Citation[];
-      }) => ({
-        id: crypto.randomUUID(),
-        role: msg.role,
-        content: msg.content,
-        timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
-        citations: msg.citations || [],
-      }))
+      }) => {
+        // Use backend ID if present, otherwise generate stable ID
+        const messageId = msg.id || generateStableMessageId(
+          msg.role,
+          msg.content,
+          msg.timestamp || new Date().toISOString()
+        )
+        
+        return {
+          id: messageId,
+          role: msg.role,
+          content: msg.content,
+          timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+          citations: msg.citations || [],
+        }
+      })
       
       set({
         currentThreadId: threadId,
@@ -461,6 +509,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   
   deleteThread: async (threadId: string) => {
     try {
+      // Capture current thread ID before async operations to prevent race conditions
+      const prevCurrentThreadId = get().currentThreadId
+      
       const response = await fetch(`/api/threads/${threadId}`, {
         method: 'DELETE',
         headers: {
@@ -476,8 +527,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Refresh thread list
       await get().loadThreads()
       
-      // If deleted current thread, reset
-      if (get().currentThreadId === threadId) {
+      // If deleted thread was the current thread when deletion started, reset state
+      // Use captured value to avoid race condition with concurrent thread switches
+      if (prevCurrentThreadId === threadId) {
         set({
           currentThreadId: null,
           messages: [],
@@ -488,6 +540,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     } catch (error) {
       console.error('Failed to delete thread:', error)
       set({ error: 'Failed to delete conversation' })
+      throw error
     }
   },
   

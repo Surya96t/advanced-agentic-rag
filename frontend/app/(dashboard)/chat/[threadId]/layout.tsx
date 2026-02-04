@@ -1,6 +1,6 @@
 /**
- * Layout for individual chat thread pages
- * Maintains the same flex structure as the main chat route
+ * Layout for individual chat thread pages.
+ * Pass-through layout used for route segmentation; inherits styling from parent layout.
  */
 
 export default function ChatThreadLayout({

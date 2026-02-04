@@ -22,6 +22,7 @@ import type {
   AgentCompleteEvent,
   AgentErrorEvent,
   ValidationEvent,
+  ThreadCreatedEvent,
   EndEvent,
   ErrorEvent,
 } from '@/types/chat'
@@ -74,10 +75,17 @@ export function useChat(threadId?: string) {
   const sseClientRef = useRef<SSEClient | null>(null)
 
   // Sync the thread ID from URL params to store
+  // When threadId is present: sync it to store
+  // When threadId is undefined (navigating to /chat): clear store to start new chat
   useEffect(() => {
-    if (threadId && threadId !== currentThreadId) {
+    if (threadId !== undefined && threadId !== null && threadId !== currentThreadId) {
+      // Set thread ID when navigating to /chat/:threadId
       console.log(`[useChat] Syncing threadId from URL: ${threadId}`)
       setCurrentThreadId(threadId)
+    } else if (threadId === undefined && currentThreadId !== null) {
+      // Clear thread ID when navigating to /chat (new chat)
+      console.log('[useChat] Clearing threadId for new chat')
+      setCurrentThreadId(null)
     }
   }, [threadId, currentThreadId, setCurrentThreadId])
 
@@ -258,7 +266,7 @@ export function useChat(threadId?: string) {
 
               case 'thread_created': {
                 // Handle lazy thread creation - backend sends this event when creating a new thread
-                const data = event.data ? JSON.parse(event.data) : null
+                const data = parseEventData<ThreadCreatedEvent>(event)
                 if (data && data.thread_id) {
                   console.log('[SSE] Thread created event received:', data.thread_id)
                   setCurrentThreadId(data.thread_id)
@@ -273,6 +281,8 @@ export function useChat(threadId?: string) {
                   }).catch(err => {
                     console.error('[Thread] Failed to refresh thread list:', err)
                   })
+                } else {
+                  console.error('[SSE] Invalid thread_created event data:', event.data)
                 }
                 break
               }

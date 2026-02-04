@@ -25,8 +25,21 @@ export async function GET(
       )
     }
 
-    const data = await response.json()
-    return NextResponse.json(data)
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Backend error:', errorText)
+      return NextResponse.json(
+        { error: `Backend error: ${response.statusText}` },
+        { status: response.status }
+      )
+    }
+
+    // Handle 204 No Content or empty responses
+    const text = await response.text()
+    if (!text) {
+      return NextResponse.json({ success: true })
+    }
+    return NextResponse.json(JSON.parse(text))
   } catch (error) {
     console.error('Failed to fetch thread:', error)
     return NextResponse.json(
@@ -81,7 +94,18 @@ export async function PATCH(
 ) {
   try {
     const { id: threadId } = await params
-    const body = await request.json()
+    try {
+      const { id: threadId } = await params
+      
+      let body
+      try {
+        body = await request.json()
+      } catch {
+        return NextResponse.json(
+          { error: 'Invalid JSON in request body' },
+          { status: 400 }
+        )
+      }
 
     console.log('[BFF PATCH] Updating thread:', { threadId, body })
 

@@ -13,6 +13,7 @@ import {
   Pencil,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 
 import { NavMain } from "@/components/nav-main"
 import {
@@ -77,6 +78,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [mounted, setMounted] = React.useState(false)
   const [editingThreadId, setEditingThreadId] = React.useState<string | null>(null)
   const [editingTitle, setEditingTitle] = React.useState('')
+  const isSavingRef = React.useRef(false)
   const router = useRouter()
   const { threads, isLoadingThreads, currentThreadId, loadThreads, deleteThread, createNewChat, updateThreadTitle } = useChatStore()
   
@@ -93,7 +95,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     console.log('[Sidebar] Current thread ID:', currentThreadId)
   }, [threads, currentThreadId])
   
-  const handleNewChat = () => {
+  const handleNewChat = (e: React.MouseEvent) => {
+    // CRITICAL: Prevent event bubbling to avoid triggering thread clicks
+    e.preventDefault()
+    e.stopPropagation()
+    
     console.log('[Sidebar] New Chat clicked - using lazy creation')
     
     // Use new lazy creation method (no API call)
@@ -117,11 +123,22 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const handleDeleteThread = async (e: React.MouseEvent, threadId: string) => {
     e.stopPropagation()
     if (confirm('Delete this conversation?')) {
-      await deleteThread(threadId)
-      
-      // If we deleted the current thread, navigate to /chat
-      if (threadId === currentThreadId) {
-        router.push('/chat')
+      try {
+        await deleteThread(threadId)
+        
+        // Only navigate away if we deleted the current thread (and deletion succeeded)
+        if (threadId === currentThreadId) {
+          router.push('/chat')
+        }
+        
+        toast.success('Conversation deleted')
+      } catch (error) {
+        console.error('[Sidebar] Failed to delete thread:', error)
+        toast.error(
+          error instanceof Error 
+            ? `Failed to delete conversation: ${error.message}` 
+            : 'Failed to delete conversation'
+        )
       }
     }
   }
@@ -133,6 +150,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   }
   
   const handleSaveEdit = async (threadId: string) => {
+    // Prevent double-save if already saving
+    if (isSavingRef.current) {
+      return
+    }
+    
     const trimmedTitle = editingTitle.trim()
     
     // Validate title
@@ -153,12 +175,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     console.log('[Sidebar] Saving new title:', trimmedTitle)
     
     try {
+      isSavingRef.current = true
       await updateThreadTitle(threadId, trimmedTitle)
       setEditingThreadId(null)
       setEditingTitle('')
     } catch (error) {
       console.error('[Sidebar] Failed to save title:', error)
       // Keep edit mode open on error so user can retry
+    } finally {
+      isSavingRef.current = false
     }
   }
   
@@ -169,7 +194,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   
   const handleKeyDown = (e: React.KeyboardEvent, threadId: string) => {
     if (e.key === 'Enter') {
+      e.preventDefault() // Prevent form submission
       handleSaveEdit(threadId)
+      // Close edit mode immediately to prevent onBlur from triggering another save
+      setEditingThreadId(null)
     } else if (e.key === 'Escape') {
       handleCancelEdit()
     }
@@ -266,7 +294,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                       value={editingTitle}
                                       onChange={(e) => setEditingTitle(e.target.value)}
                                       onKeyDown={(e) => handleKeyDown(e, thread.id)}
-                                      onBlur={() => handleSaveEdit(thread.id)}
+                                      onBlur={() => {
+                                        // Only save on blur if not already saving (prevents double-save from Enter + blur)
+                                        if (!isSavingRef.current) {
+                                          handleSaveEdit(thread.id)
+                                        }
+                                      }}
                                       className="w-full px-2 py-1 text-sm bg-background border border-input rounded"
                                       autoFocus
                                       onClick={(e) => e.stopPropagation()}
@@ -282,18 +315,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                 </div>
                               </SidebarMenuButton>
                               {!isEditing && (
-                                <div className="flex gap-1 opacity-0 group-hover/thread:opacity-100 transition-opacity">
+                                <div className="flex gap-1 opacity-0 group-hover/thread:opacity-100 group-focus-within/thread:opacity-100 transition-opacity">
                                   <button
                                     onClick={(e) => handleStartEdit(e, thread.id, thread.title)}
-                                    className="p-2 hover:bg-accent rounded"
-                                    aria-label="Rename conversation"
+                                    className="p-2 hover:bg-accent rounded focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                                    aria-label={`Rename conversation: ${thread.title}`}
                                   >
                                     <Pencil className="h-3.5 w-3.5" />
                                   </button>
                                   <button
                                     onClick={(e) => handleDeleteThread(e, thread.id)}
-                                    className="p-2 hover:bg-destructive/10 rounded"
-                                    aria-label="Delete conversation"
+                                    className="p-2 hover:bg-destructive/10 rounded focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destructive"
+                                    aria-label={`Delete conversation: ${thread.title}`}
                                   >
                                     <Trash2 className="h-3.5 w-3.5 text-destructive" />
                                   </button>

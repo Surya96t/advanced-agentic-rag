@@ -8,7 +8,6 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import { MessageList } from '@/components/chat/message-list'
 import { MessageInput } from '@/components/chat/message-input'
 import { ChatEmptyState } from '@/components/chat/chat-empty-state'
@@ -18,28 +17,26 @@ import { useRateLimitStore } from '@/stores/rate-limit-store'
 import { useChatStore } from '@/stores/chat-store'
 
 export default function NewChatPage() {
-  const router = useRouter()
-  const { currentThreadId, clearMessages, setCurrentThreadId } = useChatStore()
   const { isRateLimited } = useRateLimitStore()
+  const { currentThreadId, setCurrentThreadId, clearMessages } = useChatStore()
+  // Don't pass threadId to useChat - we want a new chat
   const { messages, isLoading, agentHistory, streamingMetrics, sendMessage, cancelStream } = useChat()
 
-  // Clear messages and thread ID when component mounts
+  // CRITICAL: Ensure we're in new chat mode when this page mounts
+  // This prevents stale thread IDs from appearing on /chat
   useEffect(() => {
-    console.log('[NewChatPage] Initializing new chat (lazy creation)')
-    clearMessages()
-    setCurrentThreadId(null) // null = new thread will be created on first message
-  }, [clearMessages, setCurrentThreadId])
-
-  // If user somehow has a thread ID, redirect to thread page
-  // This happens after the first message is sent and thread_created event is received
-  useEffect(() => {
-    if (currentThreadId) {
-      console.log('[NewChatPage] Thread created, redirecting to:', currentThreadId)
-      router.push(`/chat/${currentThreadId}`)
+    console.log('[NewChatPage] Mounted - ensuring new chat state')
+    if (currentThreadId !== null) {
+      console.log('[NewChatPage] Found stale threadId, clearing:', currentThreadId)
+      setCurrentThreadId(null)
+      clearMessages()
     }
-  }, [currentThreadId, router])
-
-  const hasMessages = messages.length > 0
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  
+  // IMPORTANT: On /chat (no thread ID), we should ALWAYS show empty state
+  // Even if store has messages, they're from a previous thread
+  // Only show messages if we're currently in a new thread (after thread_created event)
+  const shouldShowMessages = currentThreadId !== null && messages.length > 0
 
   // Handle follow-up suggestion clicks
   const handleSuggestionClick = (suggestion: string) => {
@@ -57,7 +54,7 @@ export default function NewChatPage() {
       
       {/* Scrollable Messages Area - Takes all available space */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-        {hasMessages ? (
+        {shouldShowMessages ? (
           <MessageList 
             messages={messages} 
             agentHistory={agentHistory}
