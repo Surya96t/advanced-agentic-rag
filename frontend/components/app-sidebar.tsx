@@ -111,8 +111,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   
   const handleThreadClick = (threadId: string) => {
     console.log('[Sidebar] Thread clicked:', threadId)
-    if (!threadId || threadId === 'undefined') {
-      console.error('[Sidebar] Invalid thread ID:', threadId)
+    
+    // Validate threadId before navigation
+    if (!threadId) {
+      console.error('[Sidebar] Cannot navigate: threadId is null/undefined/empty')
       return
     }
     

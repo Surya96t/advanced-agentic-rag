@@ -18,9 +18,13 @@ import { useChatStore } from '@/stores/chat-store'
 
 export default function ChatThreadPage() {
   const params = useParams()
-  const threadId = params.threadId as string
+  const rawThreadId = params.threadId as string | undefined
   
-  const { messages, isLoading, agentHistory, streamingMetrics, sendMessage, cancelStream } = useChat(threadId)
+  // Normalize threadId - handle undefined, null, empty string, or literal "undefined"
+  // If threadId is the literal string "undefined", treat it as invalid
+  const threadId = rawThreadId && rawThreadId !== 'undefined' ? rawThreadId : undefined
+  
+  const { messages, isLoading, agentHistory, streamingMetrics, sendMessage, cancelStream } = useChat(threadId || '')
   const { isRateLimited } = useRateLimitStore()
   const { loadThread } = useChatStore()
 
@@ -28,8 +32,9 @@ export default function ChatThreadPage() {
   // CRITICAL: Only load thread once when component mounts or threadId from URL changes
   // Do NOT react to store's currentThreadId changes to avoid race conditions
   useEffect(() => {
-    if (!threadId || threadId === 'undefined') {
-      console.log('[ChatThreadPage] Invalid threadId, skipping load')
+    // Validate threadId before attempting to load
+    if (!threadId) {
+      console.warn('[ChatThreadPage] Invalid or missing threadId:', rawThreadId)
       return
     }
     
@@ -40,7 +45,7 @@ export default function ChatThreadPage() {
     return () => {
       console.log('[ChatThreadPage] Component unmounting, threadId:', threadId)
     }
-  }, [threadId, loadThread]) // REMOVED currentThreadId from deps to prevent reload on store changes
+  }, [threadId, loadThread, rawThreadId]) // Include rawThreadId to detect string "undefined"
 
   const hasMessages = messages.length > 0
 

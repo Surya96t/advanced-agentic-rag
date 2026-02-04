@@ -11,12 +11,15 @@ import { Message, Citation } from '@/types/chat'
  * 
  * @param role - Message role (user/assistant)
  * @param content - Message content
- * @param timestamp - Message timestamp
+ * @param timestamp - Message timestamp (use empty string if unknown for deterministic fallback)
  * @returns Deterministic UUID-like string
  */
 function generateStableMessageId(role: string, content: string, timestamp: Date | string): string {
   // Create a stable string combining all unique message properties
-  const timestampStr = timestamp instanceof Date ? timestamp.toISOString() : timestamp
+  // Handle missing/empty timestamps deterministically
+  const timestampStr = timestamp 
+    ? (timestamp instanceof Date ? timestamp.toISOString() : timestamp)
+    : ''
   const data = `${role}:${content}:${timestampStr}`
   
   // Simple hash function (FNV-1a)
@@ -32,7 +35,23 @@ function generateStableMessageId(role: string, content: string, timestamp: Date 
   // Format as UUID-like string (not a real UUID, but deterministic)
   // Format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx (where 4 = version, y = variant)
   const hex = hash.toString(16).padStart(8, '0')
-  const timestamp32 = new Date(timestampStr).getTime() & 0xFFFFFFFF
+  
+  // Use timestamp for time component if available, with validation for invalid dates
+  let timestamp32: number
+  if (timestampStr) {
+    const parsedTime = new Date(timestampStr).getTime()
+    // Check for NaN (invalid date) and fall back to hash-based value
+    if (!isNaN(parsedTime)) {
+      timestamp32 = parsedTime & 0xFFFFFFFF
+    } else {
+      // Invalid timestamp string - use hash for deterministic fallback
+      timestamp32 = hash & 0xFFFFFFFF
+    }
+  } else {
+    // No timestamp provided - use hash for deterministic value
+    timestamp32 = hash & 0xFFFFFFFF
+  }
+  
   const timeHex = timestamp32.toString(16).padStart(8, '0')
   
   return `${hex}-${timeHex.slice(0, 4)}-4${timeHex.slice(4, 7)}-${hash.toString(16).slice(0, 4)}-${timeHex}${hex.slice(0, 4)}`
@@ -480,10 +499,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         citations?: Citation[];
       }) => {
         // Use backend ID if present, otherwise generate stable ID
+        // Fallback to empty string (not current time) to ensure deterministic IDs
         const messageId = msg.id || generateStableMessageId(
           msg.role,
           msg.content,
-          msg.timestamp || new Date().toISOString()
+          msg.timestamp || ''  // Empty string = deterministic fallback (no timestamp)
         )
         
         return {

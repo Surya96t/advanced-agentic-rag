@@ -60,16 +60,37 @@ class TokenCounter:
             normalized_content = ""
         elif isinstance(content, list):
             # Handle multimodal content (list of blocks)
-            # Convert each element to string, filter out None values
+            # Extract only textual fields from dicts to avoid counting metadata/URLs
             parts = []
             for item in content:
-                if item is not None:
-                    parts.append(str(item))
+                if item is None:
+                    continue
+
+                if isinstance(item, dict):
+                    # Extract known textual fields from multimodal content blocks
+                    # Common fields: "text" (text blocks), "caption" (images), "alt" (images), "content"
+                    textual_fields = ["text", "content",
+                                      "caption", "alt", "description"]
+                    extracted_text = None
+
+                    for field in textual_fields:
+                        if field in item and isinstance(item.get(field), str):
+                            extracted_text = item[field]
+                            break
+
+                    if extracted_text:
+                        parts.append(extracted_text)
+                    # If no textual field found, skip this item (e.g., image_url blocks)
+                elif isinstance(item, str):
+                    # Plain string in list
+                    parts.append(item)
+                # Skip other types (e.g., binary data, complex objects)
+
             normalized_content = " ".join(parts)
         elif isinstance(content, str):
             normalized_content = content
         else:
-            # Fallback for other types
+            # Fallback for other types (should be rare)
             normalized_content = str(content)
 
         # Count message content
@@ -185,15 +206,25 @@ class TokenCounter:
         max_tokens = model_context_limits.get(self.model)
 
         # If no exact match, check for patterns in model name
+        # IMPORTANT: Check GPT-3.5 BEFORE generic "turbo" to avoid assigning 128K to GPT-3.5 models
         if max_tokens is None:
-            if "gpt-4o" in self.model or "turbo" in self.model:
+            if "gpt-3.5" in self.model or "3.5" in self.model:
+                # GPT-3.5 variants: check for 16k, otherwise default to 4k
+                if "16k" in self.model:
+                    max_tokens = 16384
+                else:
+                    max_tokens = 4096
+            elif "gpt-4o" in self.model:
                 max_tokens = 128000
             elif "32k" in self.model:
                 max_tokens = 32768
             elif "16k" in self.model:
                 max_tokens = 16384
+            elif "turbo" in self.model:
+                # Generic turbo models (likely GPT-4 turbo variants)
+                max_tokens = 128000
             else:
-                # Default fallback
+                # Default fallback for unknown models
                 max_tokens = 8192
 
         # Calculate remaining tokens, ensuring it's never negative

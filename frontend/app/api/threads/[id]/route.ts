@@ -25,15 +25,6 @@ export async function GET(
       )
     }
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('Backend error:', errorText)
-      return NextResponse.json(
-        { error: `Backend error: ${response.statusText}` },
-        { status: response.status }
-      )
-    }
-
     // Handle 204 No Content or empty responses
     const text = await response.text()
     if (!text) {
@@ -94,18 +85,16 @@ export async function PATCH(
 ) {
   try {
     const { id: threadId } = await params
+
+    let body
     try {
-      const { id: threadId } = await params
-      
-      let body
-      try {
-        body = await request.json()
-      } catch {
-        return NextResponse.json(
-          { error: 'Invalid JSON in request body' },
-          { status: 400 }
-        )
-      }
+      body = await request.json()
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body' },
+        { status: 400 }
+      )
+    }
 
     console.log('[BFF PATCH] Updating thread:', { threadId, body })
 

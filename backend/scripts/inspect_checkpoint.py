@@ -35,6 +35,9 @@ async def main():
             print(f"Thread ID: {row['thread_id']}\n")
 
             checkpoint = row['checkpoint']
+            if checkpoint is None:
+                print("Checkpoint is NULL")
+                return
             print("Checkpoint keys:", list(checkpoint.keys()))
             print()
 
