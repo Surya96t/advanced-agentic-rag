@@ -2,7 +2,6 @@
 
 import { FileText, X, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { formatFileSize } from "@/lib/document-utils";
@@ -68,96 +67,91 @@ export function ActiveUploads({ uploads, onRemove, onClearCompleted }: ActiveUpl
   const hasCompleted = uploads.some((upload) => upload.status === "success");
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle>Active Uploads ({uploads.length})</CardTitle>
-          {hasCompleted && (
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={onClearCompleted}
-              aria-label="Clear completed uploads"
+    <div className="mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-medium text-muted-foreground">
+          Active Uploads ({uploads.length})
+        </h3>
+        {hasCompleted && (
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={onClearCompleted}
+            aria-label="Clear completed uploads"
+            className="h-7 text-xs"
+          >
+            Clear Completed
+          </Button>
+        )}
+      </div>
+      <div className="space-y-0">
+        {uploads.map((upload) => {
+          const statusConfig = getStatusConfig(upload.status);
+          const StatusIcon = statusConfig.icon;
+
+          return (
+            <div
+              key={upload.fileId}
+              className="flex items-start gap-3 py-2 border-b last:border-b-0"
             >
-              Clear Completed
-            </Button>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          {uploads.map((upload) => {
-            const statusConfig = getStatusConfig(upload.status);
-            const StatusIcon = statusConfig.icon;
+              <FileText className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+              
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-sm truncate pr-2">{upload.file.name}</p>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 shrink-0 -mr-1"
+                    onClick={() => onRemove(upload.fileId)}
+                    aria-label={`Remove ${upload.file.name}`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
 
-            return (
-              <div
-                key={upload.fileId}
-                className={cn(
-                  "flex items-start gap-3 p-3 border rounded-lg transition-colors",
-                  upload.status === "success" && "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900",
-                  upload.status === "error" && "bg-destructive/5 border-destructive/20"
-                )}
-              >
-                <FileText className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
-                
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-medium truncate pr-2">{upload.file.name}</p>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 shrink-0"
-                      onClick={() => onRemove(upload.fileId)}
-                      aria-label={`Remove ${upload.file.name}`}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-
-                  {/* Progress bar or spinner for indeterminate state */}
-                  {upload.status !== "error" && (
-                    <>
-                      {upload.progress !== undefined ? (
-                        <Progress
-                          value={upload.progress}
-                          className={cn(
-                            "h-2 mb-1",
-                            upload.status === "success" && "*:bg-green-500"
-                          )}
-                        />
-                      ) : (
-                        // Indeterminate state during actual upload
-                        <div className="h-2 mb-1 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full bg-primary animate-pulse" style={{ width: "100%" }} />
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {/* Status and file size */}
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1.5">
-                      <StatusIcon
-                        className={cn("h-3.5 w-3.5", statusConfig.color, statusConfig.animate)}
+                {/* Progress bar or spinner for indeterminate state */}
+                {upload.status !== "error" && (
+                  <>
+                    {upload.progress !== undefined ? (
+                      <Progress
+                        value={upload.progress}
+                        className={cn(
+                          "h-1.5 mb-1",
+                          upload.status === "success" && "*:bg-green-500"
+                        )}
                       />
-                      <span className={statusConfig.color}>
-                        {upload.status === "uploading" && (upload.progress !== undefined ? `${upload.progress}%` : "Uploading...")}
-                        {upload.status === "pending" && statusConfig.label}
-                        {upload.status === "success" && statusConfig.label}
-                        {upload.status === "error" && upload.error}
-                      </span>
-                    </div>
-                    <span className="text-muted-foreground">
-                      {formatFileSize(upload.file.size)}
+                    ) : (
+                      // Indeterminate state during actual upload
+                      <div className="h-1.5 mb-1 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-primary animate-pulse" style={{ width: "100%" }} />
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Status and file size */}
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <StatusIcon
+                      className={cn("h-3 w-3", statusConfig.color, statusConfig.animate)}
+                    />
+                    <span className={statusConfig.color}>
+                      {upload.status === "uploading" && (upload.progress !== undefined ? `${upload.progress}%` : "Uploading...")}
+                      {upload.status === "pending" && statusConfig.label}
+                      {upload.status === "success" && statusConfig.label}
+                      {upload.status === "error" && upload.error}
                     </span>
                   </div>
+                  <span className="text-muted-foreground">
+                    {formatFileSize(upload.file.size)}
+                  </span>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      </CardContent>
-    </Card>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

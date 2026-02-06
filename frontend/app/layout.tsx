@@ -16,8 +16,15 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Integration Forge - AI-Powered RAG System",
-  description: "Conversational RAG interface for API documentation synthesis",
+  title: "Advanced RAG System",
+  description: "A production-grade Retrieval-Augmented Generation system with multi-stage chunking, hybrid search, and agentic workflows",
+  keywords: ["RAG", "Retrieval-Augmented Generation", "AI", "LangChain", "LangGraph", "Vector Search", "Semantic Search"],
+  authors: [{ name: "Your Name" }],
+  openGraph: {
+    title: "Advanced RAG System",
+    description: "Production-grade RAG system with multi-stage chunking and hybrid search",
+    type: "website",
+  },
 };
 
 export default function RootLayout({

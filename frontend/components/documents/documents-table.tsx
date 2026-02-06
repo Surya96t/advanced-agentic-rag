@@ -58,10 +58,10 @@ export function DocumentsTable({
 
   if (documents.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center border rounded-lg">
+      <div className="flex flex-col items-center justify-center py-16 text-center">
         <FileText className="h-12 w-12 text-muted-foreground mb-4" />
         <h3 className="text-lg font-semibold mb-2">No documents found</h3>
-        <p className="text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Upload your first document to get started
         </p>
       </div>
@@ -69,17 +69,17 @@ export function DocumentsTable({
   }
 
   return (
-    <div className="rounded-md border">
+    <div className="text-sm">
       <Table>
         <TableHeader>
-          <TableRow>
-            <TableHead className="w-12">
+          <TableRow className="hover:bg-transparent border-b">
+            <TableHead className="w-12 text-xs">
               <span className="sr-only">Select</span>
             </TableHead>
-            <TableHead>Name</TableHead>
-            <TableHead className="hidden sm:table-cell">Upload Date</TableHead>
-            <TableHead className="hidden md:table-cell">Chunks</TableHead>
-            <TableHead className="text-right w-20">Actions</TableHead>
+            <TableHead className="text-xs">Name</TableHead>
+            <TableHead className="hidden sm:table-cell text-xs">Upload Date</TableHead>
+            <TableHead className="hidden md:table-cell text-xs">Chunks</TableHead>
+            <TableHead className="text-right w-20 text-xs">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -91,8 +91,8 @@ export function DocumentsTable({
               <TableRow
                 key={doc.id}
                 className={cn(
-                  "hover:bg-muted/50 transition-colors",
-                  isSelected && "bg-muted/50"
+                  "hover:bg-accent/50 transition-colors border-b",
+                  isSelected && "bg-accent/50"
                 )}
               >
                 {/* Checkbox */}
@@ -105,22 +105,22 @@ export function DocumentsTable({
                 </TableCell>
 
                 {/* File name with icon */}
-                <TableCell className="font-medium">
+                <TableCell className="font-medium text-sm">
                   <div className="flex items-center gap-2">
-                    <Icon className={cn("h-4 w-4 shrink-0", color)} />
+                    <Icon className={cn("h-3.5 w-3.5 shrink-0", color)} />
                     <span className="truncate">{doc.filename}</span>
                   </div>
                 </TableCell>
 
                 {/* Upload date */}
-                <TableCell className="hidden sm:table-cell text-muted-foreground">
+                <TableCell className="hidden sm:table-cell text-muted-foreground text-xs">
                   {formatDate(doc.upload_date)}
                 </TableCell>
 
                 {/* Chunk count */}
-                <TableCell className="hidden md:table-cell">
+                <TableCell className="hidden md:table-cell text-xs">
                   {doc.chunk_count !== undefined ? (
-                    <Badge variant="secondary" className="font-mono">
+                    <Badge variant="secondary" className="font-mono text-xs">
                       {doc.chunk_count}
                     </Badge>
                   ) : (
@@ -134,10 +134,10 @@ export function DocumentsTable({
                     variant="ghost"
                     size="icon"
                     onClick={() => onDelete(doc)}
-                    className="hover:bg-destructive/10 hover:text-destructive"
+                    className="hover:bg-destructive/10 hover:text-destructive h-7 w-7"
                     aria-label={`Delete ${doc.filename}`}
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </TableCell>
               </TableRow>
@@ -154,20 +154,20 @@ export function DocumentsTable({
  */
 function DocumentsTableSkeleton() {
   return (
-    <div className="rounded-md border">
+    <div className="text-sm">
       <Table>
         <TableHeader>
-          <TableRow>
-            <TableHead className="w-12"></TableHead>
-            <TableHead>Name</TableHead>
-            <TableHead className="hidden sm:table-cell">Upload Date</TableHead>
-            <TableHead className="hidden md:table-cell">Chunks</TableHead>
-            <TableHead className="text-right w-20">Actions</TableHead>
+          <TableRow className="hover:bg-transparent border-b">
+            <TableHead className="w-12 text-xs"></TableHead>
+            <TableHead className="text-xs">Name</TableHead>
+            <TableHead className="hidden sm:table-cell text-xs">Upload Date</TableHead>
+            <TableHead className="hidden md:table-cell text-xs">Chunks</TableHead>
+            <TableHead className="text-right w-20 text-xs">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {Array.from({ length: 5 }).map((_, i) => (
-            <TableRow key={i}>
+            <TableRow key={i} className="border-b">
               <TableCell>
                 <Skeleton className="h-4 w-4" />
               </TableCell>

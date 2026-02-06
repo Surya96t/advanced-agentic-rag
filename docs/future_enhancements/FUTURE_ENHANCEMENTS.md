@@ -7,6 +7,7 @@ This document tracks potential improvements and features to implement in future 
 ## Response Generation & Quality
 
 ### 1. Brevity Detection and Format Constraints
+
 **Priority:** Medium  
 **Effort:** Low
 
@@ -16,6 +17,7 @@ Currently, the generator produces comprehensive, detailed responses regardless o
 **Options:**
 
 #### Option A: Format Detection in Router (Recommended)
+
 - Router detects format constraints from query
   - Patterns: "in X sentences", "briefly", "one paragraph", "summarize", "TL;DR"
   - Extracts constraint type and parameters
@@ -26,11 +28,13 @@ Currently, the generator produces comprehensive, detailed responses regardless o
   - Standard mode: Current comprehensive approach (default)
 
 **Benefits:**
+
 - Clean separation of concerns
 - Easy to extend with new format types
 - Maintains detailed responses as default for integration questions
 
 **Implementation Notes:**
+
 ```python
 # In router_node
 format_constraint = detect_format_constraint(query)
@@ -49,16 +53,19 @@ return Command(
 ```
 
 #### Option B: Brevity Check in Validator
+
 - Validator checks response length against user's constraint
 - Fails validation if response is too verbose when brevity requested
 - Triggers retry with explicit "be concise" instruction in generator prompt
 
 **Trade-offs:**
+
 - Pro: Catches format violations after generation
 - Con: Wastes LLM tokens generating then regenerating
 - Con: Adds complexity to validator logic
 
 #### Option C: Separate Generator Prompts
+
 - Maintain multiple generator prompt templates
   - Detailed tutorial prompt (current)
   - Concise factual prompt
@@ -66,6 +73,7 @@ return Command(
 - Router selects appropriate prompt based on query analysis
 
 **Trade-offs:**
+
 - Pro: Maximum control over output style
 - Con: Prompt maintenance overhead
 - Con: Doesn't handle nuanced format requests well
@@ -77,6 +85,7 @@ return Command(
 ## Performance & Scalability
 
 ### 2. Async Supabase Client Migration
+
 **Priority:** High  
 **Effort:** Medium
 
@@ -84,12 +93,14 @@ return Command(
 Current Supabase Python client uses synchronous httpx, causing blocking I/O errors in LangGraph Studio and async environments.
 
 **Current Workaround:**
+
 - Run `langgraph dev --allow-blocking` in development
 - Acceptable for development, but not ideal for production deployment
 
 **Solutions:**
 
 #### Option A: Wrap Sync Calls in asyncio.to_thread() (Quick Fix)
+
 ```python
 # In vector_search.py, hybrid_search.py, text_search.py
 import asyncio
@@ -102,26 +113,32 @@ async def search(query: str, ...):
 ```
 
 **Benefits:**
+
 - Quick to implement (1-2 hours)
 - Minimal code changes
 - Works with existing Supabase client
 
 **Trade-offs:**
+
 - Thread overhead for each call
 - Not true async (still blocking at thread level)
 
 #### Option B: Migrate to Async Supabase Client (Best Long-term)
+
 Research and implement async Supabase client:
+
 - Check if `supabase-py` has async support
 - Evaluate alternative async PostgreSQL clients (asyncpg + PostgREST)
 - Refactor all retrieval layer to use async/await throughout
 
 **Benefits:**
+
 - True async, non-blocking I/O
 - Better performance under load
 - Production-ready for ASGI deployment
 
 **Trade-offs:**
+
 - Larger refactor (4-8 hours)
 - May require changing database client library
 - Potential breaking changes in retrieval layer
@@ -133,17 +150,21 @@ Research and implement async Supabase client:
 ## Checkpointing & State Management
 
 ### 3. PostgreSQL Checkpointing Integration
+
 **Priority:** Medium  
 **Effort:** Medium
 
 **Current State:**
+
 - Lazy import of `AsyncPostgresSaver` implemented
 - `get_checkpointer()` helper function created
 - Graph compiles without checkpointer at module level
 - Checkpointing deferred to runtime
 
 **Remaining Work:**
+
 1. **Add Checkpointer Setup Function**
+
    ```python
    async def setup_checkpointer():
        """Initialize and set up PostgreSQL checkpointer tables."""
@@ -163,6 +184,7 @@ Research and implement async Supabase client:
    - Document connection string requirements
 
 **Implementation Pattern:**
+
 ```python
 # In FastAPI lifespan
 @asynccontextmanager
@@ -173,15 +195,16 @@ async def lifespan(app: FastAPI):
         app.state.graph = _builder.compile(checkpointer=checkpointer)
     else:
         app.state.graph = graph  # Use module-level compiled graph
-    
+
     yield
-    
+
     # Shutdown
     if settings.enable_checkpointing:
         await checkpointer.close()
 ```
 
 **Benefits:**
+
 - Conversation continuity across sessions
 - Human-in-the-loop workflows (pause/resume)
 - Better debugging with state snapshots
@@ -194,14 +217,17 @@ async def lifespan(app: FastAPI):
 ## Agent Intelligence
 
 ### 4. Query Complexity Detection Improvements
+
 **Priority:** Low  
 **Effort:** Low
 
 **Current Approach:**
+
 - Rule-based detection using keywords and patterns
 - Works well for obvious cases
 
 **Potential Improvements:**
+
 - Use LLM to classify query complexity (more accurate but slower/costlier)
 - Add complexity scoring (0.0-1.0) instead of just 3 categories
 - Learn from user feedback to improve classification
@@ -211,10 +237,12 @@ async def lifespan(app: FastAPI):
 ## Observability
 
 ### 5. Enhanced LangSmith Integration
+
 **Priority:** Low  
 **Effort:** Low
 
 **Ideas:**
+
 - Add custom tags per node execution
 - Track retry loops and failure patterns
 - Monitor validation scores over time
@@ -225,14 +253,17 @@ async def lifespan(app: FastAPI):
 ## Testing
 
 ### 6. Comprehensive Integration Test Suite
+
 **Priority:** High  
 **Effort:** Medium
 
 **Current State:**
+
 - Basic integration tests created
 - Schema alignment issues identified
 
 **Remaining Work:**
+
 - Fix schema mismatches between agent output and response models
 - Add tests for edge cases:
   - Empty retrieval results

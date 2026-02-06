@@ -39,7 +39,7 @@ import { useChatStore } from "@/stores/chat-store"
 import { formatDistanceToNow } from "date-fns"
 import { cn } from "@/lib/utils"
 
-// Navigation data for Integration Forge
+// Navigation data for Advanced RAG System
 const data = {
   user: {
     name: "Loading...",
@@ -206,19 +206,19 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   }
 
   return (
-    <Sidebar collapsible="icon" {...props}>
+    <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
         {/* App Logo/Branding */}
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <Link href="/dashboard" aria-label="Integration Forge - Go to dashboard">
+              <Link href="/dashboard" aria-label="Advanced RAG System - Go to dashboard">
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                   <Layers className="size-4" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">Integration Forge</span>
-                  <span className="truncate text-xs">RAG Agent</span>
+                  <span className="truncate font-semibold">RAG System</span>
+                  <span className="truncate text-xs">AI Assistant</span>
                 </div>
               </Link>
             </SidebarMenuButton>
