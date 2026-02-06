@@ -5,7 +5,6 @@ import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import { UploadZone } from "@/components/documents/upload-zone";
 import { ActiveUploads, type UploadingFile } from "@/components/documents/active-uploads";
-import { DocumentsToolbar } from "@/components/documents/documents-toolbar";
 import { DocumentsTable } from "@/components/documents/documents-table";
 import { DocumentsMobileCards } from "@/components/documents/documents-mobile-cards";
 import {
@@ -47,10 +46,10 @@ export default function DocumentsPage() {
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Search/Sort state
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState<SortField>("date");
-  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
+  // Search/Sort state (keep for filtering even without toolbar)
+  const [searchQuery] = useState("");
+  const [sortBy] = useState<SortField>("date");
+  const [sortOrder] = useState<SortOrder>("desc");
 
   // Dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -203,20 +202,6 @@ export default function DocumentsPage() {
   };
 
   /**
-   * Select all documents
-   */
-  const handleSelectAll = () => {
-    setSelectedIds(new Set(filteredAndSortedDocuments.map((doc) => doc.id)));
-  };
-
-  /**
-   * Deselect all documents
-   */
-  const handleDeselectAll = () => {
-    setSelectedIds(new Set());
-  };
-
-  /**
    * Open single delete dialog
    */
   const handleDeleteClick = (doc: Document) => {
@@ -324,14 +309,6 @@ export default function DocumentsPage() {
     }
   };
 
-  /**
-   * Handle search/sort changes
-   */
-  const handleSortChange = (field: SortField, order: SortOrder) => {
-    setSortBy(field);
-    setSortOrder(order);
-  };
-
   // Apply search and sort
   const filteredAndSortedDocuments = sortDocuments(
     searchDocuments(documents, searchQuery),
@@ -343,28 +320,28 @@ export default function DocumentsPage() {
   const selectedDocuments = documents.filter((doc) => selectedIds.has(doc.id));
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-6xl">
-      {/* Page header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Documents</h1>
-        <p className="text-muted-foreground">
-          Upload and manage your API documentation knowledge base
-        </p>
-      </div>
-
-      {/* Upload zone (collapsible) */}
-      <div className="mb-6">
-        <UploadZone
-          onFilesSelected={handleFilesSelected}
-          isDragging={isDragging}
-          onDragStateChange={setIsDragging}
-          disabled={uploadingFiles.some((f) => f.status === "uploading")}
-        />
+    <div className="w-full max-w-6xl mx-auto px-6 py-12">
+      {/* Upload section - Two column layout */}
+      <div className="mb-4 pb-6 border-b">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+          <div>
+            <h1 className="text-4xl font-semibold tracking-tight mb-3">Documents</h1>
+            <p className="text-muted-foreground text-base">
+              Upload and manage your documentation knowledge base. Supported formats include text files, markdown, and PDFs.
+            </p>
+          </div>
+          <UploadZone
+            onFilesSelected={handleFilesSelected}
+            isDragging={isDragging}
+            onDragStateChange={setIsDragging}
+            disabled={uploadingFiles.some((f) => f.status === "uploading")}
+          />
+        </div>
       </div>
 
       {/* Active uploads (conditional) */}
       {uploadingFiles.length > 0 && (
-        <div className="mb-6">
+        <div className="mb-8">
           <ActiveUploads
             uploads={uploadingFiles}
             onRemove={handleRemoveUpload}
@@ -372,23 +349,6 @@ export default function DocumentsPage() {
           />
         </div>
       )}
-
-      {/* Toolbar (search, sort, bulk actions) */}
-      <div className="mb-6">
-        <DocumentsToolbar
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          sortBy={sortBy}
-          sortOrder={sortOrder}
-          onSortChange={handleSortChange}
-          totalCount={filteredAndSortedDocuments.length}
-          selectedCount={selectedIds.size}
-          onSelectAll={handleSelectAll}
-          onDeselectAll={handleDeselectAll}
-          onBulkDelete={handleBulkDeleteClick}
-          isLoading={loading}
-        />
-      </div>
 
       {/* Documents table (desktop) / cards (mobile) */}
       <div className="hidden md:block">

@@ -1,62 +1,73 @@
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
-import { FileText, MessageSquare, Upload } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 
+/**
+ * Dashboard Page
+ * 
+ * Ultra-minimal, centered design
+ */
 export default function DashboardPage() {
   return (
-    <div className="container py-8">
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold tracking-tight">Welcome to Integration Forge</h1>
-        <p className="mt-2 text-lg text-muted-foreground">
-          AI-powered RAG system for API documentation synthesis
-        </p>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Documents Card */}
+    <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
+      <div className="w-full max-w-3xl px-6">
+        {/* Header */}
+        <div className="mb-20 text-center">
+          <h1 className="text-4xl font-semibold tracking-tight mb-3">Dashboard</h1>
+          <p className="text-muted-foreground">
+            Upload documents and start chatting with your data
+          </p>
+        </div>      {/* Quick Actions - Side by Side */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-20">
+        {/* Documents Link */}
         <Link
           href="/documents"
-          className="group relative overflow-hidden rounded-lg border p-6 transition-colors hover:bg-muted/50"
+          className="group flex items-start justify-between py-5 px-4 -mx-4 rounded-lg transition-colors hover:bg-accent/50"
         >
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-            <FileText className="h-6 w-6 text-primary" />
+          <div className="w-full">
+            <h3 className="text-2xl font-semibold mb-2 pb-3 border-b">Documents</h3>
+            <p className="text-sm text-muted-foreground mt-3">
+              Upload and manage your documentation
+            </p>
           </div>
-          <h3 className="mb-2 text-xl font-semibold">Documents</h3>
-          <p className="text-sm text-muted-foreground">
-            Upload, view, search, and manage your API documentation
-          </p>
+          <ArrowRight className="h-5 w-5 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 group-hover:translate-x-1 mt-1 ml-4 shrink-0" />
         </Link>
 
-        {/* Chat Card */}
+        {/* Chat Link */}
         <Link
           href="/chat"
-          className="group relative overflow-hidden rounded-lg border p-6 transition-colors hover:bg-muted/50"
+          className="group flex items-start justify-between py-5 px-4 -mx-4 rounded-lg transition-colors hover:bg-accent/50"
         >
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-            <MessageSquare className="h-6 w-6 text-primary" />
+          <div className="w-full">
+            <h3 className="text-2xl font-semibold mb-2 pb-3 border-b">Chat</h3>
+            <p className="text-sm text-muted-foreground mt-3">
+              Ask questions about your documents
+            </p>
           </div>
-          <h3 className="mb-2 text-xl font-semibold">Chat Interface</h3>
-          <p className="text-sm text-muted-foreground">
-            Ask questions and get AI-powered answers from your docs
-          </p>
+          <ArrowRight className="h-5 w-5 text-muted-foreground opacity-0 transition-all group-hover:opacity-100 group-hover:translate-x-1 mt-1 ml-4 shrink-0" />
         </Link>
       </div>
 
-      {/* Quick Start */}
-      <div className="mt-12 rounded-lg border bg-muted/30 p-6">
-        <h2 className="mb-4 text-2xl font-semibold">Quick Start</h2>
-        <ol className="space-y-2 text-muted-foreground">
-          <li>1. Upload your API documentation (PDF, Markdown, or TXT)</li>
-          <li>2. Wait for processing and vectorization</li>
-          <li>3. Start chatting to get AI-powered insights</li>
-        </ol>
-        <div className="mt-6">
-          <Button asChild>
-            <Link href="/documents">
-              <Upload className="mr-2 h-4 w-4" />
-              Get Started
-            </Link>
-          </Button>
+        {/* Metrics */}
+        <div>
+          <h2 className="text-lg font-semibold mb-1 pb-3 border-b">Overview</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 pt-6">
+            <div>
+              <p className="text-3xl font-semibold mb-1.5">0</p>
+              <p className="text-sm text-muted-foreground">Documents</p>
+            </div>
+            <div>
+              <p className="text-3xl font-semibold mb-1.5">0</p>
+              <p className="text-sm text-muted-foreground">Conversations</p>
+            </div>
+            <div>
+              <p className="text-3xl font-semibold mb-1.5">0</p>
+              <p className="text-sm text-muted-foreground">Queries</p>
+            </div>
+            <div>
+              <p className="text-3xl font-semibold mb-1.5">0</p>
+              <p className="text-sm text-muted-foreground">Chunks</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
