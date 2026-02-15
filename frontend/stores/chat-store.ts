@@ -3,6 +3,7 @@
  */
 
 import { create } from 'zustand'
+import { revalidateThreads } from '@/app/actions'
 import { Message, Citation } from '@/types/chat'
 
 /**
@@ -360,9 +361,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ currentThreadId: threadId }),
   
   loadThreads: async () => {
-    set({ isLoadingThreads: true })
+    // Only show loading state if we have no threads (initial load)
+    // This prevents the "flash" when refreshing in the background
+    if (get().threads.length === 0) {
+      set({ isLoadingThreads: true })
+    }
+    
     console.log('[Store] Loading threads...')
     try {
+      // Load threads from backend
+      // Note: Client-side fetch ignores 'next' options like revalidate/tags
+      // Caching should be handled by the API route or browser cache headers
       const response = await fetch('/api/threads', {
         headers: {
           'Content-Type': 'application/json',
@@ -375,9 +384,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
       
       const threads = await response.json()
-      console.log('[Store] Received threads:', threads.length, threads)
-      console.log('[Store] First thread raw:', threads.length > 0 ? threads[0] : 'none')
-      console.log('[Store] First thread keys:', threads.length > 0 ? Object.keys(threads[0]) : 'none')
+      
+      // Log thread titles for debugging "New Chat" issue
+      if (threads.length > 0) {
+        const titles = threads.slice(0, 3).map((t: any) => `${t.thread_id.slice(0,8)}:${t.title}`)
+        console.log('[Store] Loaded threads titles (first 3):', titles)
+      }
       
       // Convert date strings to Date objects and map backend field names
       const threadsWithDates = threads.map((thread: { 
@@ -475,6 +487,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
   
   loadThread: async (threadId: string) => {
     try {
+      // CRITICAL: Don't overwrite messages during active streaming or when already on this thread
+      // When redirecting from /chat to /chat/[threadId], the stream is ongoing
+      // and messages are being added in real-time. Fetching from backend now
+      // would return empty/partial messages and clear the streaming state.
+      const currentState = get()
+      
+      // Skip loading if:
+      // 1. Stream is active (streamingMessageId !== null) - for any thread
+      // 2. Messages already exist AND we're already viewing this thread (no reload needed)
+      // BUT allow loading when navigating to a DIFFERENT thread
+      if (currentState.streamingMessageId !== null || 
+          (currentState.messages.length > 0 && currentState.currentThreadId === threadId)) {
+        console.log('[loadThread] Skipping load - stream active or already on this thread', {
+          streaming: currentState.streamingMessageId !== null,
+          messageCount: currentState.messages.length,
+          currentThreadId: currentState.currentThreadId,
+          requestedThreadId: threadId,
+          isSameThread: currentState.currentThreadId === threadId
+        })
+        // Just update the threadId to match the URL, keep existing messages
+        // Only do this if we're staying on the same thread
+        if (currentState.currentThreadId === threadId) {
+          set({ currentThreadId: threadId })
+        }
+        return
+      }
+
+      // Clear previous messages immediately if switching threads to prevent stale UI
+      if (currentState.currentThreadId !== threadId) {
+        set({ messages: [], currentThreadId: threadId, isLoading: true })
+      } else {
+        set({ isLoading: true })
+      }
+      
       const response = await fetch(`/api/threads/${threadId}`, {
         headers: {
           'Content-Type': 'application/json',
@@ -520,10 +566,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         messages: formattedMessages,
         agentHistory: [],
         streamingMessageId: null,
+        isLoading: false,
       })
     } catch (error) {
       console.error('Failed to load thread:', error)
-      set({ error: 'Failed to load conversation' })
+      set({ error: 'Failed to load conversation', isLoading: false })
     }
   },
   
@@ -543,6 +590,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (!response.ok) {
         throw new Error('Failed to delete thread')
       }
+      
+      // Invalidate threads cache after deletion
+      await revalidateThreads()
       
       // Refresh thread list
       await get().loadThreads()
@@ -588,8 +638,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
       
       console.log('[Store] Thread title updated successfully')
-      
-      // Refresh thread list to get updated title
+            // Invalidate threads cache after update
+      await revalidateThreads()
+            // Refresh thread list to get updated title
       await get().loadThreads()
     } catch (error) {
       console.error('Failed to update thread title:', error)

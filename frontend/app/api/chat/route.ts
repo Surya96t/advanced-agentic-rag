@@ -66,33 +66,21 @@ export async function POST(request: NextRequest) {
           return
         }
 
-        const decoder = new TextDecoder()
-        let isClosed = false
-
         try {
           while (true) {
             const { done, value } = await reader.read()
             
             if (done) {
-              if (!isClosed) {
-                controller.close()
-                isClosed = true
-              }
+              controller.close()
               break
             }
 
-            // Forward raw SSE chunks
-            const chunk = decoder.decode(value, { stream: true })
-            if (!isClosed) {
-              controller.enqueue(new TextEncoder().encode(chunk))
-            }
+            // Forward raw SSE chunks (no decoding/encoding needed)
+            controller.enqueue(value)
           }
         } catch (error) {
           console.error('Stream error:', error)
-          if (!isClosed) {
-            controller.error(error)
-            isClosed = true
-          }
+          controller.error(error)
         } finally {
           try {
             reader.releaseLock()

@@ -9,7 +9,11 @@ export async function GET() {
   try {
     const response = await apiFetch('/api/v1/threads', {
       method: 'GET',
-    })
+      next: { 
+        revalidate: 30, // Cache for 30 seconds
+        tags: ['threads'] 
+      }
+    } as RequestInit & { next?: { revalidate?: number; tags?: string[] } })
 
     if (!response.ok) {
       const errorText = await response.text()

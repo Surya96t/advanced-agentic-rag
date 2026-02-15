@@ -133,6 +133,19 @@ async def sse_generator(
         # Get checkpointer from app state
         checkpointer = request.app.state.checkpointer
 
+        # Send thread_created event for new threads IMMEDIATELY (before streaming)
+        # This allows frontend to redirect to /chat/[threadId] before tokens arrive
+        if is_new_thread:
+            thread_created_event = {
+                "event": "thread_created",
+                "data": json.dumps({"thread_id": str(thread_id)})
+            }
+            yield f"event: {thread_created_event['event']}\ndata: {thread_created_event['data']}\n\n"
+            logger.info(
+                "Thread created event sent",
+                extra={"user_id": user_id, "thread_id": str(thread_id)}
+            )
+
         async for event in stream_agent(query, thread_id, user_id, checkpointer=checkpointer):
             # Check for client disconnect
             if await request.is_disconnected():
@@ -239,18 +252,7 @@ async def sse_generator(
         yield f"event: {end_event['event']}\ndata: {end_event['data']}\n\n"
 
     finally:
-        # Send thread_created event for new threads (only after successful completion)
-        if is_new_thread and stream_successful:
-            thread_created_event = {
-                "event": "thread_created",
-                "data": json.dumps({"thread_id": thread_id})
-            }
-            yield f"event: {thread_created_event['event']}\ndata: {thread_created_event['data']}\n\n"
-            logger.info(
-                "Thread created event sent",
-                extra={"user_id": user_id, "thread_id": thread_id}
-            )
-
+        # thread_created event now sent at stream start (not here)
         # Finalize and log metrics
         metrics.finalize()
         logger.debug(
@@ -337,11 +339,14 @@ async def chat(
 
         # Import here to avoid circular dependency
         from langgraph.checkpoint.base import CheckpointTuple
-        from app.agents.graph import graph
+        from app.agents.graph import get_graph
 
         try:
+            # Get the graph instance WITH the checkpointer to access state
+            graph_instance = get_graph(checkpointer)
+            
             # Get the current state to verify ownership
-            existing_state = await graph.aget_state(
+            existing_state = await graph_instance.aget_state(
                 config={"configurable": {
                     "thread_id": thread_id, "checkpoint_ns": ""}},
                 subgraphs=False
@@ -393,6 +398,12 @@ async def chat(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Unable to verify thread access"
             )
+
+    # Note: No need to manually initialize thread state for new threads
+    # The stream_agent() function automatically creates initial state with user_id
+    # via create_initial_state(), which ensures RLS policies work correctly.
+    # Manual initialization with aupdate_state() causes database connection issues
+    # (pipeline mode conflicts) when streaming immediately after.
 
     # Unpack rate limit info for headers
     limit, remaining, reset_time = rate_limit_info

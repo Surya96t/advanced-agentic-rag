@@ -91,7 +91,7 @@ export function DocumentsMobileCards({
               <div className="flex-1 min-w-0">
                 <h3 className="font-medium text-sm truncate mb-1">{doc.filename}</h3>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>{formatDate(doc.upload_date)}</span>
+                  <span>{formatDate(doc.created_at)}</span>
                   {doc.chunk_count !== undefined && (
                     <>
                       <span>•</span>

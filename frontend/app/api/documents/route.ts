@@ -37,10 +37,9 @@ export async function GET() {
     
     // Transform backend response to match frontend expectations
     const transformedDocuments = response.documents.map((doc) => ({
-      id: doc.id,
-      filename: doc.title, // Backend uses 'title', frontend expects 'filename'
-      upload_date: doc.created_at, // Backend uses 'created_at', frontend expects 'upload_date'
-      chunk_count: doc.chunk_count,
+      ...doc,
+      filename: doc.title, // Backend uses 'title' or 'filename'
+      upload_date: doc.upload_date || doc.created_at, // Preserve compatibility
     }))
     
     return NextResponse.json({

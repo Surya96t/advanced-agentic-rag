@@ -85,6 +85,12 @@ coverage/
 logs/
 *.log
 
+# Debug output files (may contain sensitive data)
+*debug_output*.txt
+debug_*.txt
+*.debug.log
+*.debug.txt
+
 # Supabase
 .supabase/
 

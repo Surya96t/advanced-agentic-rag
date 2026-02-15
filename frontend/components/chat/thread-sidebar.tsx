@@ -23,10 +23,11 @@ export function ThreadSidebar() {
     deleteThread,
   } = useChatStore()
 
-  // Load threads on mount
+  // Load threads on mount (only once, not on store changes)
   useEffect(() => {
     loadThreads()
-  }, [loadThreads])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Empty deps - load only on mount
 
   const handleNewChat = async () => {
     try {

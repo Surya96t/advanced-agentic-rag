@@ -15,6 +15,7 @@ import { useRateLimitStore } from '@/stores/rate-limit-store'
 import { SSEClient } from '@/lib/sse-client'
 import { parseEventData } from '@/lib/sse-parser'
 import { sanitizeToken, isCitationSafe } from '@/lib/sanitizer'
+import { revalidateThreads } from '@/app/actions'
 import type {
   TokenEvent,
   CitationEvent,
@@ -78,16 +79,20 @@ export function useChat(threadId?: string) {
   // When threadId is present: sync it to store
   // When threadId is undefined (navigating to /chat): clear store to start new chat
   useEffect(() => {
-    if (threadId !== undefined && threadId !== null && threadId !== currentThreadId) {
-      // Set thread ID when navigating to /chat/:threadId
-      console.log(`[useChat] Syncing threadId from URL: ${threadId}`)
-      setCurrentThreadId(threadId)
-    } else if (threadId === undefined && currentThreadId !== null) {
-      // Clear thread ID when navigating to /chat (new chat)
-      console.log('[useChat] Clearing threadId for new chat')
-      setCurrentThreadId(null)
+    // CRITICAL: We normally rely on loadThread() to set the thread ID and messages together
+    // to avoid a state where ID is set but messages are stale.
+    // However, for new chats (threadId=undefined), we must clear the state explicitly.
+    
+    if (threadId === undefined && currentThreadId !== null) {
+      // Only clear if we are NOT in the middle of a redirect or new thread creation
+      // We check if messages are empty to verify it's truly a "new" chat state
+      // If messages exist, we might have just created a thread and are waiting for redirect
+      if (messages.length === 0) {
+        console.log('[useChat] Clearing threadId for new chat')
+        setCurrentThreadId(null)
+      }
     }
-  }, [threadId, currentThreadId, setCurrentThreadId])
+  }, [threadId, currentThreadId, setCurrentThreadId, messages.length])
 
   const sendMessage = useCallback(
     async (content: string) => {
@@ -275,12 +280,16 @@ export function useChat(threadId?: string) {
                   console.log('[SSE] Redirecting to /chat/' + data.thread_id)
                   router.push(`/chat/${data.thread_id}`)
                   
-                  // Refresh thread list to show new conversation
-                  loadThreads().then(() => {
-                    console.log('[Thread] Thread list refreshed after creation')
-                  }).catch(err => {
-                    console.error('[Thread] Failed to refresh thread list:', err)
-                  })
+                  // Invalidate cache for threads list (will auto-reload on next access)
+                  revalidateThreads()
+                    .then(() => {
+                      console.log('[Thread] Thread cache invalidated')
+                      // Trigger a background reload
+                      loadThreads()
+                    })
+                    .catch(err => {
+                      console.error('[Thread] Failed to invalidate thread cache:', err)
+                    })
                 } else {
                   console.error('[SSE] Invalid thread_created event data:', event.data)
                 }
@@ -299,34 +308,43 @@ export function useChat(threadId?: string) {
                     if (!currentThreadId) {
                       console.log('[Thread] NEW THREAD created:', data.thread_id)
                       setCurrentThreadId(data.thread_id)
-                      
-                      // Refresh thread list to show new conversation
-                      console.log('[Thread] Refreshing thread list...')
-                      loadThreads().then(() => {
-                        console.log('[Thread] Thread list refreshed successfully')
-                      }).catch(err => {
-                        console.error('[Thread] Failed to refresh thread list:', err)
-                      })
                     } else if (currentThreadId !== data.thread_id) {
                       console.warn('[Thread] Thread ID mismatch!', {
                         current: currentThreadId,
                         response: data.thread_id
                       })
-                      setCurrentThreadId(data.thread_id)
                     } else {
                       console.log('[Thread] Continuing existing thread:', data.thread_id)
                     }
+
+                    // Handle Title Update (First Message) vs Regular Refresh
+                    // We avoid firing both to prevent race conditions where we fetch "New Chat" 
+                    // before the title update completes.
                     
-                    // Update thread title if this was the first message
                     if (isFirstMessage && data.thread_id) {
                       const newTitle = generateTitleFromMessage(content)
-                      console.log('[Thread] Updating title for first message:', newTitle)
+                      console.log('[Thread] First message detected. Updating title to:', newTitle)
+                      
+                      // This will trigger its own refresh after update completes
                       updateThreadTitle(data.thread_id, newTitle)
                         .then(() => {
-                          console.log('[Thread] Title updated successfully')
+                          console.log('[Thread] Title updated and list refreshed')
                         })
                         .catch(err => {
                           console.error('[Thread] Failed to update title:', err)
+                          // Fallback refresh if title update fails
+                          revalidateThreads().then(() => loadThreads())
+                        })
+                    } else {
+                      // Not first message - just refresh to show updated message count/preview
+                      console.log('[Thread] Stream ended - refreshing thread list...')
+                      revalidateThreads()
+                        .then(() => {
+                          console.log('[Thread] Thread cache invalidated')
+                          loadThreads() // Silent reload (no spinner)
+                        })
+                        .catch(err => {
+                          console.error('[Thread] Failed to refresh thread list:', err)
                         })
                     }
                   }

@@ -128,41 +128,47 @@ async def get_thread_metadata_from_checkpoint(
 
         # Extract metadata - query database directly for fresh metadata
         # This ensures we get the latest custom_title that was just updated
-        conn = checkpointer.conn
-        async with conn.cursor() as cur:
-            await cur.execute(
-                """
-                SELECT metadata
-                FROM checkpoints
-                WHERE thread_id = %s
-                ORDER BY checkpoint_id DESC
-                LIMIT 1
-                """,
-                (thread_id,)
-            )
-            result = await cur.fetchone()
-            if result:
-                # Unpack the tuple - first element is the metadata JSONB
-                (metadata_raw,) = result
-                if metadata_raw is None:
-                    checkpoint_metadata = {}
-                elif isinstance(metadata_raw, str):
-                    # Parse JSON string to dict
-                    import json
-                    try:
-                        checkpoint_metadata = json.loads(metadata_raw)
-                    except json.JSONDecodeError:
-                        logger.error(
-                            f"Failed to parse metadata JSON for thread {thread_id}")
+        # Use a dedicated connection to avoid concurrency/pipeline issues
+        from psycopg import AsyncConnection
+        from app.core.config import settings
+        
+        async with await AsyncConnection.connect(settings.supabase_connection_string) as conn:
+            async with conn.cursor() as cur:
+                # Fetch metadata from latest checkpoint AND persistent title from any checkpoint
+                await cur.execute(
+                    """
+                    SELECT 
+                        (SELECT metadata FROM checkpoints WHERE thread_id = %s ORDER BY checkpoint_id DESC LIMIT 1) as latest_metadata,
+                        (SELECT metadata->>'custom_title' FROM checkpoints WHERE thread_id = %s AND metadata->>'custom_title' IS NOT NULL ORDER BY checkpoint_id DESC LIMIT 1) as persistent_title
+                    """,
+                    (thread_id, thread_id)
+                )
+                result = await cur.fetchone()
+                
+                persistent_title = None
+                if result:
+                    # Unpack result
+                    metadata_raw, persistent_title = result
+                    
+                    if metadata_raw is None:
                         checkpoint_metadata = {}
-                elif isinstance(metadata_raw, dict):
-                    checkpoint_metadata = metadata_raw
+                    elif isinstance(metadata_raw, str):
+                        # Parse JSON string to dict
+                        import json
+                        try:
+                            logger.warning(f"Bad metadata json for thread {thread_id}")
+                        except json.JSONDecodeError:
+                            logger.error(
+                                f"Failed to parse metadata JSON for thread {thread_id}")
+                            checkpoint_metadata = {}
+                    elif isinstance(metadata_raw, dict):
+                        checkpoint_metadata = metadata_raw
+                    else:
+                        logger.warning(
+                            f"Unexpected metadata type for thread {thread_id}: {type(metadata_raw)}")
+                        checkpoint_metadata = {}
                 else:
-                    logger.warning(
-                        f"Unexpected metadata type for thread {thread_id}: {type(metadata_raw)}")
                     checkpoint_metadata = {}
-            else:
-                checkpoint_metadata = {}
 
         # Extract message info
         first_message = next(
@@ -172,8 +178,10 @@ async def get_thread_metadata_from_checkpoint(
         )
         last_message = messages[-1] if messages else None
 
-        # Get title - prefer custom_title from metadata, fallback to first message
-        custom_title = checkpoint_metadata.get("custom_title")
+        # Get title - prefer persistent_title from ANY checkpoint, fallback to current metadata
+        custom_title = persistent_title
+        if not custom_title:
+            custom_title = checkpoint_metadata.get("custom_title")
 
         if custom_title:
             title = custom_title
@@ -237,30 +245,32 @@ async def list_user_threads_from_db(
     List all threads for a user by querying the checkpointer database.
 
     This queries the PostgreSQL checkpoints table directly for efficiency.
+    It creates a dedicated connection to avoid concurrency issues with the
+    shared checkpointer connection.
 
     Args:
         user_id: User identifier
-        checkpointer: LangGraph checkpointer instance
+        checkpointer: LangGraph checkpointer instance (used only for type/config reference if needed, currently unused for connection)
 
     Returns:
         List of ThreadMetadata objects, sorted by updated_at descending
     """
     try:
-        # Access the underlying database connection from the checkpointer
-        # PostgresSaver stores the connection in self.conn
-        conn = checkpointer.conn
+        # Create a dedicated connection for this read operation
+        # This prevents "NoneType object has no attribute '_fetch_gen'" errors
+        # caused by sharing the checkpointer's single connection across concurrent requests
+        from psycopg import AsyncConnection
+        from app.core.config import settings
+        
+        # Determine connection string (fallback to checkpointer's if available, else settings)
+        conn_string = settings.supabase_connection_string
 
-        # Query for all unique thread_ids with their latest checkpoints
-        # This is more efficient than loading every checkpoint individually
-        # Note: checkpoints table doesn't have created_at, so we order by checkpoint_id
-        # We filter by user_id in the checkpoint state (channel_values), not metadata
-        #
-        # IMPORTANT: We check if the thread has any meaningful content
-        # Since the graph uses custom state (query, generated_response, etc.),
-        # we check for either 'query' or 'generated_response' to determine if thread has content
+        # Query for all unique thread_ids with their latest checkpoints, 
+        # but also fetch the custom_title from ANY checkpoint in the thread
+        # (since new checkpoints created by LangGraph might miss the metadata update)
         query = """
-        WITH latest_checkpoints AS (
-            SELECT DISTINCT ON (thread_id)
+        WITH user_checkpoints AS (
+            SELECT 
                 thread_id,
                 checkpoint,
                 metadata,
@@ -272,37 +282,118 @@ async def list_user_threads_from_db(
                 checkpoint->'channel_values'->>'query' IS NOT NULL 
                 OR checkpoint->'channel_values'->>'generated_response' IS NOT NULL
               )
+        ),
+        latest_checkpoints AS (
+            SELECT DISTINCT ON (thread_id)
+                thread_id,
+                checkpoint,
+                metadata,
+                checkpoint_id
+            FROM user_checkpoints
+            ORDER BY thread_id, checkpoint_id DESC
+        ),
+        thread_titles AS (
+            SELECT DISTINCT ON (thread_id)
+                thread_id,
+                metadata->>'custom_title' as persistent_title
+            FROM checkpoints
+            WHERE checkpoint_ns = ''
+              AND metadata->>'custom_title' IS NOT NULL
             ORDER BY thread_id, checkpoint_id DESC
         )
         SELECT
-            thread_id,
-            checkpoint,
-            metadata,
-            checkpoint_id
-        FROM latest_checkpoints
-        ORDER BY checkpoint_id DESC
+            lc.thread_id,
+            lc.checkpoint,
+            lc.metadata,
+            lc.checkpoint_id,
+            tt.persistent_title
+        FROM latest_checkpoints lc
+        LEFT JOIN thread_titles tt ON lc.thread_id = tt.thread_id
+        ORDER BY lc.checkpoint_id DESC
         """
 
         # Import dict_row for dictionary-style results
         from psycopg.rows import dict_row
 
-        async with conn.cursor(row_factory=dict_row) as cur:
-            await cur.execute(query, (user_id,))
-            rows = await cur.fetchall()
+        async with await AsyncConnection.connect(conn_string) as conn:
+            async with conn.cursor(row_factory=dict_row) as cur:
+                await cur.execute(query, (user_id,))
+                rows = await cur.fetchall()
 
         logger.info(f"Query returned {len(rows)} rows")
 
         threads = []
         for row in rows:
-            thread_id = row['thread_id']
-            logger.debug(f"Processing thread: {thread_id}")
+            try:
+                thread_id = row['thread_id']
+                
+                # Parse checkpoint directly without re-querying
+                # This is much faster and avoids connection issues
+                checkpoint = row['checkpoint']
+                metadata_raw = row['metadata']
+                
+                # 1. Parse Metadata
+                checkpoint_metadata = {}
+                if metadata_raw:
+                    if isinstance(metadata_raw, dict):
+                        checkpoint_metadata = metadata_raw
+                    elif isinstance(metadata_raw, str):
+                        try:
+                            import json
+                            checkpoint_metadata = json.loads(metadata_raw)
+                        except json.JSONDecodeError:
+                            logger.warn(f"Bad metadata json for thread {thread_id}")
+                
+                # 2. Parse State/Messages
+                state = checkpoint.get("channel_values", {})
+                messages = state.get("messages", [])
+                
+                # 3. Extract Details (Title, Preview, Counts)
+                first_message = next(
+                    (msg for msg in messages if hasattr(msg, "type") and msg.type == "human"), 
+                    None
+                )
+                last_message = messages[-1] if messages else None
+                
+                # Title logic
+                # Prefer persistent title from ANY checkpoint first (query result)
+                # Then fallback to metadata from the LATEST checkpoint
+                custom_title = row.get("persistent_title")
+                if not custom_title:
+                    custom_title = checkpoint_metadata.get("custom_title")
+                
+                if custom_title:
+                    title = custom_title
+                elif first_message:
+                    # Handle LangChain message object or dict
+                    content = getattr(first_message, "content", "") if hasattr(first_message, "content") else str(first_message)
+                    title = content[:50] + "..." if len(content) > 50 else content
+                else:
+                    title = "New Chat"
+                
+                # Preview logic
+                preview = None
+                if last_message:
+                    content = getattr(last_message, "content", None)
+                    if content and isinstance(content, str):
+                        preview = content[:100]
 
-            # Get thread metadata (already filtered by user_id in query)
-            metadata = await get_thread_metadata_from_checkpoint(
-                thread_id, checkpointer, user_id
-            )
-            if metadata:
-                threads.append(metadata)
+                # Timestamps
+                created_at = checkpoint_metadata.get("created_at", datetime.utcnow().isoformat())
+                updated_at = checkpoint_metadata.get("updated_at", datetime.utcnow().isoformat())
+
+                threads.append(ThreadMetadata(
+                    thread_id=thread_id,
+                    title=title,
+                    preview=preview,
+                    message_count=len(messages),
+                    created_at=datetime.fromisoformat(created_at.replace("Z", "+00:00")),
+                    updated_at=datetime.fromisoformat(updated_at.replace("Z", "+00:00")),
+                    user_id=user_id,
+                ))
+            except Exception as e:
+                logger.error(f"Error processing thread row {row.get('thread_id')}: {e}")
+                continue
 
         logger.info(f"Found {len(threads)} threads for user {user_id}")
         return threads
@@ -310,8 +401,6 @@ async def list_user_threads_from_db(
     except Exception as e:
         logger.error(
             f"Error listing threads from database: {e}", exc_info=True)
-        # Re-raise exception instead of masking it with empty list
-        # Let the calling endpoint handle the error appropriately
         raise
 
 
@@ -559,21 +648,25 @@ async def create_thread(
         # Persist custom title to checkpoint metadata if provided
         # This ensures get_thread_metadata_from_checkpoint can retrieve it
         if thread_request.title:
-            conn = checkpointer.conn
-            async with conn.cursor() as cur:
-                await cur.execute(
-                    """
-                    UPDATE checkpoints
-                    SET metadata = jsonb_set(
-                        COALESCE(metadata, '{}'::jsonb),
-                        '{custom_title}',
-                        to_jsonb(%s::text)
+            from psycopg import AsyncConnection
+            from app.core.config import settings
+            conn_string = settings.supabase_connection_string
+            
+            async with await AsyncConnection.connect(conn_string) as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute(
+                        """
+                        UPDATE checkpoints
+                        SET metadata = jsonb_set(
+                            COALESCE(metadata, '{}'::jsonb),
+                            '{custom_title}',
+                            to_jsonb(%s::text)
+                        )
+                        WHERE thread_id = %s
+                        """,
+                        (title, thread_id)
                     )
-                    WHERE thread_id = %s
-                    """,
-                    (title, thread_id)
-                )
-                await conn.commit()
+                    await conn.commit()
             logger.debug(
                 f"Saved custom title '{title}' to checkpoint metadata")
 
@@ -747,23 +840,28 @@ async def update_thread(
 
         # Update metadata in ALL checkpoints for this thread
         # This ensures the title persists across all checkpoint retrievals
-        conn = checkpointer.conn
-        async with conn.cursor() as cur:
-            # Update the metadata JSONB column for ALL checkpoints in this thread
-            # We store custom_title in metadata to preserve it across checkpoints
-            await cur.execute(
-                """
-                UPDATE checkpoints
-                SET metadata = jsonb_set(
-                    COALESCE(metadata, '{}'::jsonb),
-                    '{custom_title}',
-                    to_jsonb(%s::text)
+        # Use a dedicated connection to avoid concurrency/pipeline issues
+        from psycopg import AsyncConnection
+        from app.core.config import settings
+        conn_string = settings.supabase_connection_string
+
+        async with await AsyncConnection.connect(conn_string) as conn:
+            async with conn.cursor() as cur:
+                # Update the metadata JSONB column for ALL checkpoints in this thread
+                # We store custom_title in metadata to preserve it across checkpoints
+                await cur.execute(
+                    """
+                    UPDATE checkpoints
+                    SET metadata = jsonb_set(
+                        COALESCE(metadata, '{}'::jsonb),
+                        '{custom_title}',
+                        to_jsonb(%s::text)
+                    )
+                    WHERE thread_id = %s
+                    """,
+                    (update_request.title, thread_id)
                 )
-                WHERE thread_id = %s
-                """,
-                (update_request.title, thread_id)
-            )
-            await conn.commit()
+                await conn.commit()
 
         # Return updated metadata
         metadata.title = update_request.title

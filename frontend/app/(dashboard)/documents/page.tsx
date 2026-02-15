@@ -386,7 +386,7 @@ export default function DocumentsPage() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium">{documentToDelete.filename}</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Uploaded {formatDate(documentToDelete.upload_date)}
+                  Uploaded {formatDate(documentToDelete.created_at)}
                 </p>
               </div>
             </div>

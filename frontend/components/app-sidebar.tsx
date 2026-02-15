@@ -84,12 +84,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   
   React.useEffect(() => {
     setMounted(true)
-    // Load threads when component mounts
+    // Load threads when component mounts (only once)
     console.log('[Sidebar] Component mounted, loading threads...')
     loadThreads()
-  }, [loadThreads])
-  
-  // Log when threads change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Empty deps - load only on mount, not on store changes
   React.useEffect(() => {
     console.log('[Sidebar] Threads updated:', threads.length, 'threads')
     console.log('[Sidebar] Current thread ID:', currentThreadId)

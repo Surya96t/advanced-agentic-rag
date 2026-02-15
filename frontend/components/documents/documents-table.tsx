@@ -114,7 +114,7 @@ export function DocumentsTable({
 
                 {/* Upload date */}
                 <TableCell className="hidden sm:table-cell text-muted-foreground text-xs">
-                  {formatDate(doc.upload_date)}
+                  {formatDate(doc.created_at)}
                 </TableCell>
 
                 {/* Chunk count */}
