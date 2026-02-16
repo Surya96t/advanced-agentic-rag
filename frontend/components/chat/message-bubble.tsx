@@ -73,7 +73,7 @@ export function MessageBubble({
       {/* Message using AI Elements */}
       <Message from={isUser ? 'user' : 'assistant'} className="flex-1 min-w-0 overflow-hidden">
         <MessageContent className="overflow-hidden">
-          {/* Agent Status (Chain of Thought) - shown for latest AI message */}
+          {/* Agent Status (Chain of Thought) - shown for AI messages with agent history */}
           {!isUser && agentHistory && agentHistory.length > 0 && (
             <div className="mb-4 space-y-2">
               <AgentStatus agentHistory={agentHistory} />

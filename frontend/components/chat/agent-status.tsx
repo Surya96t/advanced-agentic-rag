@@ -76,8 +76,7 @@ function getAgentDuration(agentHistory: AgentStep[], agentKey: string): string |
 }
 
 export function AgentStatus({ agentHistory, className }: AgentStatusProps) {
-  // DEBUG: Log agent history to verify what we are receiving
-  console.log('AgentStatus history:', JSON.stringify(agentHistory, null, 2))
+
   
   // Show pipeline if we have any agent activity
   if (agentHistory.length === 0) return null
