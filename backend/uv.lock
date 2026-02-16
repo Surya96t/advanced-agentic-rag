@@ -930,6 +930,7 @@ name = "integration-forge-backend"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "cachetools" },
     { name = "chardet" },
     { name = "cohere" },
     { name = "cryptography" },
@@ -949,6 +950,7 @@ dependencies = [
     { name = "openai" },
     { name = "postgrest" },
     { name = "psycopg", extra = ["binary"] },
+    { name = "psycopg-pool" },
     { name = "pydantic", extra = ["email"] },
     { name = "pydantic-settings" },
     { name = "pyjwt" },
@@ -990,6 +992,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = "==26.1.0" },
+    { name = "cachetools", specifier = ">=6.2.4" },
     { name = "chardet", specifier = "==5.2.0" },
     { name = "cohere", specifier = "==5.20.1" },
     { name = "cryptography", specifier = "==46.0.3" },
@@ -1010,6 +1013,7 @@ requires-dist = [
     { name = "openai", specifier = "==2.15.0" },
     { name = "postgrest", specifier = "==2.27.2" },
     { name = "psycopg", extras = ["binary"], specifier = "==3.3.2" },
+    { name = "psycopg-pool", specifier = ">=3.3.0" },
     { name = "pydantic", extras = ["email"], specifier = "==2.12.5" },
     { name = "pydantic-settings", specifier = "==2.12.0" },
     { name = "pyjwt", specifier = "==2.10.1" },

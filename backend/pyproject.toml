@@ -47,6 +47,8 @@ dependencies = [
     "python-jose[cryptography]>=3.5.0",
     "redis>=7.1.0",
     "hiredis>=3.3.0",
+    "psycopg-pool>=3.3.0",
+    "cachetools>=6.2.4",
 ]
 
 [project.optional-dependencies]
