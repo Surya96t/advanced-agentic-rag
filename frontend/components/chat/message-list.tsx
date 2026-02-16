@@ -46,17 +46,21 @@ export function MessageList({
     <div className="px-4 py-4 w-full">
       <div className="space-y-4 max-w-4xl mx-auto w-full overflow-hidden">
         {messages.map((message, index) => {
-          // For the latest AI message during streaming, pass agent history and metrics
-          const isCurrentlyStreaming = isLoading && index === messages.length - 1 && message.role === 'assistant'
+          const isLatestAI = index === lastAIMessageIndex
+          const isStreaming = isLoading && isLatestAI
+          
+          // Show agent history for the latest AI message (even after completion)
+          // This allows users to review the chain of thought
+          const showAgentHistory = isLatestAI && agentHistory.length > 0
           
           return (
             <MessageBubble 
               key={message.id} 
               message={message}
-              isLatestAI={!isLoading && index === lastAIMessageIndex}
-              isStreaming={isCurrentlyStreaming}
-              agentHistory={isCurrentlyStreaming ? agentHistory : []}
-              streamingMetrics={isCurrentlyStreaming ? streamingMetrics : undefined}
+              isLatestAI={!isLoading && isLatestAI}
+              isStreaming={isStreaming}
+              agentHistory={showAgentHistory ? agentHistory : []}
+              streamingMetrics={isStreaming ? streamingMetrics : undefined}
               onSuggestionClick={onSuggestionClick}
             />
           )

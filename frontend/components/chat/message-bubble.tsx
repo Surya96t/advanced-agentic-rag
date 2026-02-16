@@ -73,11 +73,12 @@ export function MessageBubble({
       {/* Message using AI Elements */}
       <Message from={isUser ? 'user' : 'assistant'} className="flex-1 min-w-0 overflow-hidden">
         <MessageContent className="overflow-hidden">
-          {/* Agent Status (Chain of Thought) - show at top when streaming */}
-          {!isUser && isStreaming && agentHistory.length > 0 && (
+          {/* Agent Status (Chain of Thought) - shown for AI messages with agent history */}
+          {!isUser && agentHistory && agentHistory.length > 0 && (
             <div className="mb-4 space-y-2">
               <AgentStatus agentHistory={agentHistory} />
-              {streamingMetrics && (
+              {/* Only show metrics while actively streaming */}
+              {isStreaming && streamingMetrics && (
                 <StreamingStatus
                   tokenCount={streamingMetrics.tokenCount}
                   tokensPerSecond={streamingMetrics.tokensPerSecond}
