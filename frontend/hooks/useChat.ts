@@ -190,6 +190,25 @@ export function useChat(threadId?: string) {
               case 'token': {
                 const data = parseEventData<TokenEvent>(event)
                 if (data) {
+                  // Ensure generator is marked as active when we receive tokens
+                  // This fixes the issue where UI might get stuck showing 'retriever'
+                  // We access store directly to get current state without hook dependency cycle
+                  const state = useChatStore.getState()
+                  const currentAgentState = state.currentAgent
+                  
+                  if (currentAgentState !== 'generator') {
+                    console.log('[SSE] Token received, forcing active agent to: generator')
+                    setCurrentAgent('generator')
+                    
+                    // Also ensure generator is in the history with start time
+                    const history = state.agentHistory
+                    const generatorExists = history.some(a => a.name === 'generator')
+                    
+                    if (!generatorExists) {
+                      startAgent('generator')
+                    }
+                  }
+
                   // Sanitize token before display
                   const sanitizedToken = sanitizeToken(data.token)
                   
