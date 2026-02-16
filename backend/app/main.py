@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.database.client import SupabaseClient
+from app.database.pool import DatabasePool  # Added import
 from app.schemas.base import ErrorResponse, HealthResponse
 from app.utils.errors import AppError
 from app.utils.logger import get_logger
@@ -50,8 +51,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         # Initialize Supabase client (for side effects)
         SupabaseClient.get_client()
-        logger.info("Database client initialized successfully")
+        logger.info("Database client HTTP initialized successfully")
 
+        # Initialize connection pool for raw SQL
+        await DatabasePool.open()
+        
         # Verify database connection
         is_healthy = SupabaseClient.health_check()
         if not is_healthy:
@@ -104,6 +108,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             logger.info("Checkpointer connection closed")
         except Exception as e:
             logger.error(f"Error closing checkpointer: {e}")
+
+    # Close connection pool
+    try:
+        await DatabasePool.close()
+    except Exception as e:
+         logger.error(f"Error closing database pool: {e}")
 
     SupabaseClient.close()
     logger.info("Application shutdown complete")
@@ -261,7 +271,7 @@ async def validation_error_handler(
             message="Request validation failed",
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             details={"validation_errors": serializable_errors},
-        ).model_dump(),
+        ).model_dump(mode="json"),
     )
 
 
@@ -298,7 +308,7 @@ async def generic_error_handler(request: Request, exc: Exception) -> JSONRespons
             message=error_message,
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             details={},
-        ).model_dump(),
+        ).model_dump(mode="json"),
     )
 
 

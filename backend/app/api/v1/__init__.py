@@ -11,7 +11,7 @@ Phase 6: Will add authentication middleware to protect endpoints
 from fastapi import APIRouter
 
 # Import routers as we create them
-from app.api.v1 import chat, documents, ingest, threads, users
+from app.api.v1 import chat, documents, ingest, threads, users, stats
 
 # Create main v1 router
 router = APIRouter()
@@ -23,6 +23,7 @@ router.include_router(ingest.router, tags=["ingestion"])
 router.include_router(documents.router, tags=["documents"])
 router.include_router(chat.router, tags=["chat"])
 router.include_router(threads.router, tags=["threads"])
+router.include_router(stats.router, tags=["stats"])
 
 # TODO: Add health router when we extract it from main.py
 # from app.api.v1 import health
