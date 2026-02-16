@@ -19,7 +19,11 @@ async function getStats(): Promise<DashboardStats> {
       documents_count: 0,
       chunks_count: 0,
       conversations_count: 0,
-      queries_count: 0
+      queries_count: 0,
+      total_tokens: 0,
+      total_cost: 0,
+      avg_latency_seconds: 0,
+      error_rate: 0
     }
   }
 }
@@ -32,11 +36,21 @@ async function getStats(): Promise<DashboardStats> {
 export default async function DashboardPage() {
   const stats = await getStats()
 
+  // Formatters
+  const formatCurrency = (val: number) => 
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 4 }).format(val)
+  
+  const formatCompact = (val: number) => 
+    new Intl.NumberFormat('en-US', { notation: "compact", maximumFractionDigits: 1 }).format(val)
+
+  const formatPercent = (val: number) => 
+    new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 1 }).format(val)
+
   return (
     <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
-      <div className="w-full max-w-3xl px-6">
+      <div className="w-full max-w-4xl px-6">
         {/* Header */}
-        <div className="mb-20 text-center">
+        <div className="mb-16 text-center">
           <h1 className="text-4xl font-semibold tracking-tight mb-3">Dashboard</h1>
           <p className="text-muted-foreground">
             Upload documents and start chatting with your data
@@ -76,11 +90,17 @@ export default async function DashboardPage() {
 
         {/* Metrics */}
         <div>
-          <h2 className="text-lg font-semibold mb-1 pb-3 border-b">Overview</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 pt-6">
+          <h2 className="text-lg font-semibold mb-1 pb-3 border-b">System Overview</h2>
+          
+          {/* Row 1: Volume Counts */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 pt-6 pb-8 border-b border-dashed">
             <div>
               <p className="text-3xl font-semibold mb-1.5">{stats.documents_count}</p>
               <p className="text-sm text-muted-foreground">Documents</p>
+            </div>
+            <div>
+              <p className="text-3xl font-semibold mb-1.5">{stats.chunks_count}</p>
+              <p className="text-sm text-muted-foreground">Chunks</p>
             </div>
             <div>
               <p className="text-3xl font-semibold mb-1.5">{stats.conversations_count}</p>
@@ -88,11 +108,29 @@ export default async function DashboardPage() {
             </div>
             <div>
               <p className="text-3xl font-semibold mb-1.5">{stats.queries_count}</p>
-              <p className="text-sm text-muted-foreground">Queries</p>
+              <p className="text-sm text-muted-foreground">Total Queries</p>
+            </div>
+          </div>
+
+          {/* Row 2: Performance & Cost (New) */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 pt-6">
+            <div>
+              <p className="text-3xl font-semibold mb-1.5 text-green-600 dark:text-green-500">
+                {formatPercent(1 - stats.error_rate)}
+              </p>
+              <p className="text-sm text-muted-foreground">Success Rate</p>
             </div>
             <div>
-              <p className="text-3xl font-semibold mb-1.5">{stats.chunks_count}</p>
-              <p className="text-sm text-muted-foreground">Chunks</p>
+              <p className="text-3xl font-semibold mb-1.5">{formatCompact(stats.total_tokens)}</p>
+              <p className="text-sm text-muted-foreground">Total Tokens</p>
+            </div>
+            <div>
+              <p className="text-3xl font-semibold mb-1.5">{stats.avg_latency_seconds.toFixed(2)}s</p>
+              <p className="text-sm text-muted-foreground">Avg Latency</p>
+            </div>
+            <div>
+              <p className="text-3xl font-semibold mb-1.5">{formatCurrency(stats.total_cost)}</p>
+              <p className="text-sm text-muted-foreground">Est. Cost</p>
             </div>
           </div>
         </div>

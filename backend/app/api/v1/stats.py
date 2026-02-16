@@ -1,14 +1,14 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.deps import UserID
 from app.database.client import SupabaseClient
 from app.database.pool import DatabasePool
 from app.utils.logger import get_logger
 from app.core.config import settings
-from langsmith import AsyncClient
+from app.core.langsmith_service import langsmith_service, LangSmithMetrics
 import asyncio
 from cachetools import TTLCache
 import time
@@ -17,24 +17,26 @@ router = APIRouter(prefix="/api/v1/stats", tags=["stats"])
 logger = get_logger(__name__)
 
 # Initialize caches
-# LangSmith Queries: Cache for 5 minutes (300s), max 100 users
-# Reason: External API call, slow (1-3s), data doesn't change implicitly (only on user action)
-queries_cache = TTLCache(maxsize=100, ttl=300)
-
 # DB Stats: Cache for 30 seconds, max 100 users
 # Reason: Internal DB, fast (<100ms), but good to debounce rapid refreshes
 db_stats_cache = TTLCache(maxsize=100, ttl=30)
-
 
 
 class DashboardStats(BaseModel):
     """
     Validation schema for dashboard statistics response.
     """
+    # Database stats
     documents_count: int
     chunks_count: int
     conversations_count: int
-    queries_count: int
+    
+    # Observability stats (LangSmith)
+    queries_count: int = Field(..., description="Total number of queries run")
+    total_tokens: int = Field(0, description="Total tokens consumed")
+    total_cost: float = Field(0.0, description="Total estimated cost in USD")
+    avg_latency_seconds: float = Field(0.0, description="Average response latency in seconds")
+    error_rate: float = Field(0.0, description="Percentage of failed runs (0.0-1.0)")
 
 # --- Helper Functions for Parallel Execution ---
 
@@ -109,62 +111,6 @@ async def get_db_stats(user_id: str) -> tuple[int, int, int]:
         return (0, 0, 0)
 
 
-async def count_user_queries_cached(user_id: str) -> int:
-    """Get LangSmith query count with aggressive TTL caching."""
-    
-    # HIT: Return valid cached value
-    if user_id in queries_cache:
-        val = queries_cache[user_id]
-        return val
-
-    # MISS: Fetch from API
-    if not settings.langsmith_api_key:
-        logger.warning("LangSmith API key not set")
-        return 0
-        
-    start_time = time.time()
-    try:
-        logger.info(f"Fetching LangSmith stats for user {user_id}...")
-        
-        # Use simple client to fetch just the count if possible, 
-        # but list_runs is the standard way.
-        # Pass API key explicitly from settings
-        client = AsyncClient(api_key=settings.langsmith_api_key, api_url="https://api.smith.langchain.com")
-        filter_str = f'and(eq(metadata_key, "user_id"), eq(metadata_value, "{user_id}"))'
-        
-        runs = []
-        # Optimization: Fetch ONLY 100 items per page (API max)
-        # We cap at 100 for now to avoid pagination overhead on dashboard
-        async for run in client.list_runs(
-            project_name=settings.langsmith_project,
-            is_root=True,
-            filter=filter_str,
-            limit=100, 
-            select=["id"] 
-        ):
-            runs.append(run)
-            
-        count = len(runs)
-        logger.info(f"LangSmith stats fetched: {count} runs")
-        
-        # Log slow calls
-        duration = time.time() - start_time
-        if duration > 1.0:
-            logger.warning(f"LangSmith stats query took {duration:.2f}s")
-            
-        # Only cache positive results to avoid caching transient failures as "0"
-        # Since this is for a dashboard, if we fail to fetch, we'd rather try again 
-        # on next refresh than show 0 for 5 minutes.
-        if count > 0:
-            queries_cache[user_id] = count
-            
-        return count
-        
-    except Exception as e:
-        logger.error(f"Failed to count queries from LangSmith: {e}")
-        # Build filter manually just in case
-        return 0
-
 @router.get("/", response_model=DashboardStats)
 async def get_dashboard_stats(
     user_id: UserID
@@ -177,10 +123,10 @@ async def get_dashboard_stats(
     """
     try:
         # 1. Fetch DB Stats (Fast, cached 30s)
-        # 2. Fetch Query Stats (Slow, cached 5m)
+        # 2. Fetch LangSmith Stats via Service (Slow, cached 5m internal to service)
         
         db_task = asyncio.create_task(get_db_stats(user_id))
-        ls_task = asyncio.create_task(count_user_queries_cached(user_id))
+        ls_task = asyncio.create_task(langsmith_service.get_user_metrics(user_id))
         
         # Run main tasks in parallel
         # Note: exceptions return as instances in results list
@@ -197,17 +143,22 @@ async def get_dashboard_stats(
             logger.error(f"DB Stats Task failed: {db_res}")
 
         # Unpack LS Stats
-        queries = 0
-        if isinstance(ls_res, int):
-            queries = ls_res
+        ls_metrics = LangSmithMetrics() # Default empty
+        if isinstance(ls_res, LangSmithMetrics):
+            ls_metrics = ls_res
         elif isinstance(ls_res, Exception):
-            logger.error(f"LS Stats Task failed: {ls_res}")
+            logger.error(f"LS Service Task failed: {ls_res}")
             
         return DashboardStats(
             documents_count=docs,
             chunks_count=chunks,
             conversations_count=convs,
-            queries_count=queries
+            # Mapped from service metrics
+            queries_count=ls_metrics.total_queries,
+            total_tokens=ls_metrics.total_tokens,
+            total_cost=ls_metrics.total_cost,
+            avg_latency_seconds=ls_metrics.avg_latency_seconds,
+            error_rate=ls_metrics.error_rate
         )
 
     except Exception as e:
