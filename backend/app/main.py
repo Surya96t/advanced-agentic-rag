@@ -261,7 +261,7 @@ async def validation_error_handler(
             message="Request validation failed",
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             details={"validation_errors": serializable_errors},
-        ).model_dump(),
+        ).model_dump(mode="json"),
     )
 
 
@@ -298,7 +298,7 @@ async def generic_error_handler(request: Request, exc: Exception) -> JSONRespons
             message=error_message,
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             details={},
-        ).model_dump(),
+        ).model_dump(mode="json"),
     )
 
 
