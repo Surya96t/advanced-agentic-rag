@@ -1,4 +1,4 @@
-# GitHub Copilot Instructions
+# GitHub Copilot Instructions for Advanced RAG System
 
 ## Project Overview
 

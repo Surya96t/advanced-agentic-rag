@@ -39,12 +39,14 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify(backendRequest),
     })
 
-    // Log all headers from backend for debugging
-    const backendHeaders: Record<string, string> = {}
-    response.headers.forEach((value, key) => {
-      backendHeaders[key] = value
-    })
-    console.log('[API Route] Backend response headers:', backendHeaders)
+    // Log headers in development only for debugging
+    if (process.env.NODE_ENV === 'development') {
+      const backendHeaders: Record<string, string> = {}
+      response.headers.forEach((value, key) => {
+        backendHeaders[key] = value
+      })
+      console.log('[API Route] Backend response headers:', backendHeaders)
+    }
 
     if (!response.ok) {
       const errorText = await response.text()

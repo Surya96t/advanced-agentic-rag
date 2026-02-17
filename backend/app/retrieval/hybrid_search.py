@@ -53,14 +53,22 @@ class HybridSearcher:
     - rank_i = position in result list i (1-indexed)
     - Σ sums over all result lists (vector + text)
 
-    Score Interpretation:
-    - The maximum possible RRF score (rank 1 in both lists) is approx 0.033.
-    - Typical good matches range from 0.01 to 0.03.
+    Score Interpretation (After Alpha-Weighting):
+    The API returns alpha-weighted RRF scores: alpha * RRF_vector + (1-alpha) * RRF_text
+    
+    With k=60 and default alpha=0.5 (balanced):
+    - Maximum possible score (rank 1 in both lists): 1/61 ≈ 0.0164
+    - Typical good matches: 0.005 to 0.015
     - Scores are NOT cosine similarity (0.0-1.0). Low absolute values are normal.
+    
+    Note: Alpha adjusts vector vs text weighting but maximum stays ~0.0164 regardless of alpha
+    because the formula is a weighted average of the two RRF components.
 
-    Example:
+    Example (alpha=0.5):
     Chunk appears at rank 3 in vector, rank 5 in text:
-    RRF = 1/(60+3) + 1/(60+5) = 0.0159 + 0.0154 = 0.0313
+    RRF_vector = 1/(60+3) = 0.0159
+    RRF_text = 1/(60+5) = 0.0154
+    Final = 0.5 * 0.0159 + 0.5 * 0.0154 = 0.0157
 
     Why RRF works:
     - Handles different score scales (cosine vs ts_rank)

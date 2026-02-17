@@ -87,9 +87,10 @@ async def check_user_rate_limit(
     allowed, limit, remaining = limiter.check_rate_limit(
         user_id, endpoint="default")
 
-    # DEBUG: Log the rate limit check result
-    logger.info(
-        f"[Rate Limit Check] user_id={user_id}, allowed={allowed}, limit={limit}, remaining={remaining}"
+    # Debug: Log the rate limit check result
+    logger.debug(
+        "Rate limit check: user_id=%s, allowed=%s, limit=%d, remaining=%d",
+        user_id, allowed, limit, remaining
     )
 
     # Calculate reset time (window end)

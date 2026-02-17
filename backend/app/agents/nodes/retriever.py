@@ -143,6 +143,10 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
         min_similarity=0.01,
         hybrid_alpha=0.5,  # Balanced vector + text
     )
+    
+    # Fallback minimum similarity when reranker is unavailable
+    # Apply stricter threshold to avoid returning low-quality results
+    MIN_SIMILARITY_FALLBACK = 0.1
 
     # Step 1: Search each query
     search_start = time.time()
@@ -207,9 +211,12 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
 
     # Skip reranking if reranker is not available
     if reranker is None:
-        logger.warning("Reranker not available, using hybrid search scores")
+        logger.warning("Reranker not available, using hybrid search scores with stricter filtering")
+        # Filter by minimum similarity threshold before selecting top results
+        filtered_results = [r for r in deduplicated if r.score >= MIN_SIMILARITY_FALLBACK]
         reranked_results = sorted(
-            deduplicated, key=lambda x: x.score, reverse=True)[:5]
+            filtered_results, key=lambda x: x.score, reverse=True)[:5]
+        logger.info(f"Fallback filtering: {len(deduplicated)} → {len(filtered_results)} (>= {MIN_SIMILARITY_FALLBACK}) → top 5")
     else:
         logger.info("Re-ranking results with FlashRank")
         rerank_config = RerankConfig(top_k=5)  # Keep top-5 after re-ranking
@@ -225,10 +232,12 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
                 f"Re-ranking complete: {len(reranked_results)} top results selected")
 
         except Exception as e:
-            logger.error(f"Re-ranking failed: {e}, using hybrid scores")
-            # Fallback: use hybrid search scores
+            logger.error(f"Re-ranking failed: {e}, using hybrid scores with stricter filtering")
+            # Fallback: filter by minimum similarity threshold then use hybrid search scores
+            filtered_results = [r for r in deduplicated if r.score >= MIN_SIMILARITY_FALLBACK]
             reranked_results = sorted(
-                deduplicated, key=lambda x: x.score, reverse=True)[:5]
+                filtered_results, key=lambda x: x.score, reverse=True)[:5]
+            logger.info(f"Fallback filtering: {len(deduplicated)} → {len(filtered_results)} (>= {MIN_SIMILARITY_FALLBACK})")
 
     rerank_time = time.time() - rerank_start
     logger.info(f"  ↳ Re-ranking took {rerank_time:.3f}s")
