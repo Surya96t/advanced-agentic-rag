@@ -531,10 +531,36 @@ async def get_thread(
                     logger.warning(
                         f"Unknown message type '{msg_type}' in thread {thread_id}")
 
+                # Extract citations from additional_kwargs OR response_metadata
+                citations = []
+                additional_kwargs = getattr(msg, "additional_kwargs", {})
+                response_metadata = getattr(msg, "response_metadata", {})
+                
+                # Check both locations for citations
+                raw_citations = []
+                if additional_kwargs and "citations" in additional_kwargs:
+                    raw_citations = additional_kwargs["citations"]
+                elif response_metadata and "citations" in response_metadata:
+                    raw_citations = response_metadata["citations"]
+                
+                if raw_citations:
+                    # Map stored citation structure to API citation structure
+                    for c in raw_citations:
+                        citations.append({
+                            "chunk_id": c.get("chunk_id", ""),
+                            "document_title": c.get("document_title", "Unknown"),
+                            "content": c.get("content", ""),
+                            # Map generator's 'score' (RRF) to similarity_score
+                            "similarity_score": c.get("score", 0.0),
+                            "original_score": c.get("original_score"),
+                            "document_id": c.get("document_id", "unknown"),  # Ensuring required fields
+                        })
+
                 messages.append({
                     "role": role,
                     "content": msg.content,
                     "timestamp": getattr(msg, "timestamp", None),
+                    "citations": citations,
                 })
 
         return ThreadDetail(
