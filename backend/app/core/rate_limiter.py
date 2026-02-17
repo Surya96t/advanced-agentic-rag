@@ -70,7 +70,9 @@ class RedisRateLimiter:
         """
         # If rate limiting is disabled, allow all requests
         if not settings.rate_limit_enabled:
-            logger.debug(f"Rate limiting disabled for user {user_id}")
+            logger.info(
+                f"[Rate Limiter] Rate limiting is DISABLED (settings.rate_limit_enabled=False) for user {user_id}"
+            )
             return (True, 0, 0)
 
         try:

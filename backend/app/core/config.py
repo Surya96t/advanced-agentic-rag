@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     """
 
     # Application Settings
-    app_name: str = "Integration Forge"
+    app_name: str = "RAG Assistant"
     app_version: str = "0.1.0"
     environment: Literal["development",
                          "staging", "production"] = "development"

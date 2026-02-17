@@ -53,6 +53,11 @@ class HybridSearcher:
     - rank_i = position in result list i (1-indexed)
     - Σ sums over all result lists (vector + text)
 
+    Score Interpretation:
+    - The maximum possible RRF score (rank 1 in both lists) is approx 0.033.
+    - Typical good matches range from 0.01 to 0.03.
+    - Scores are NOT cosine similarity (0.0-1.0). Low absolute values are normal.
+
     Example:
     Chunk appears at rank 3 in vector, rank 5 in text:
     RRF = 1/(60+3) + 1/(60+5) = 0.0159 + 0.0154 = 0.0313

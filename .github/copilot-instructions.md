@@ -1,8 +1,8 @@
-# GitHub Copilot Instructions for "Integration Forge"
+# GitHub Copilot Instructions
 
 ## Project Overview
 
-**Integration Forge** is a production-grade advanced RAG (Retrieval-Augmented Generation) system that helps developers synthesize integration code from siloed API documentation.
+This is a production-grade advanced RAG (Retrieval-Augmented Generation) system for intelligent document retrieval and question answering.
 
 **Tech Stack:**
 

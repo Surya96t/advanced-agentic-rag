@@ -47,8 +47,9 @@ def get_reranker() -> FlashRankReranker:
     """Get or create reranker singleton."""
     global _reranker
     if _reranker is None:
-        # Using rank-T5-flan as it's more reliable than ms-marco-MiniLM-L-6-v2
-        _reranker = FlashRankReranker(model_name="rank-T5-flan")
+        # Using ms-marco-MiniLM-L-12-v2 for better score calibration (0-1 range)
+        # rank-T5-flan tends to output raw logits or low probabilities (~0.4-0.5 for good matches)
+        _reranker = FlashRankReranker(model_name="ms-marco-MiniLM-L-12-v2")
     return _reranker
 
 
@@ -126,18 +127,20 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
 
     # Initialize searcher and reranker
     searcher = get_hybrid_searcher()
-    # TODO: Fix FlashRank model download issue
-    # For now, we'll skip reranking and rely on hybrid search scores
-    # reranker = get_reranker()
-    reranker = None  # TEMPORARY: Disabled until FlashRank model download is fixed
+    # Re-enable FlashRank for re-ranking to improve result quality
+    try:
+        reranker = get_reranker()
+        logger.info("FlashRank reranker initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize FlashRank reranker: {e}")
+        reranker = None
 
     # Search configuration
-    # TEMPORARY: Using min_similarity=0.3 to filter low-quality results
-    # since reranker is disabled. When FlashRank is re-enabled, set back to 0.0
     search_config = SearchConfig(
-        top_k=10,  # Get 10 results per query
-        # Temporary threshold to avoid poor matches (normally 0.0 with reranker)
-        min_similarity=0.3,
+        top_k=20,  # High recall for re-ranking candidate pool
+        # Lower similarity threshold allowed because reranker will filter noise
+        # 0.01 captures almost everything for re-ranking
+        min_similarity=0.01,
         hybrid_alpha=0.5,  # Balanced vector + text
     )
 

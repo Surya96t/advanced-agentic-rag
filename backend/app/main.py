@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     # Startup
     logger.info(
-        "Starting Integration Forge backend",
+        "Starting RAG assistant backend",
         environment=settings.environment,
         version="0.1.0",
     )
@@ -98,7 +98,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     # Shutdown
-    logger.info("Shutting down Integration Forge backend")
+    logger.info("Shutting down RAG assistant backend")
 
     # Clean up checkpointer context manager
     if checkpointer_cm is not None:
@@ -121,8 +121,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="Integration Forge API",
-    description="Advanced RAG system for synthesizing integration code from API documentation",
+    title="RAG Assistant API",
+    description="Advanced RAG system for intelligent document retrieval and question answering",
     version="0.1.0",
     docs_url="/docs" if settings.environment != "production" else None,
     redoc_url="/redoc" if settings.environment != "production" else None,
@@ -137,6 +137,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"],
 )
 
 
@@ -369,7 +370,7 @@ async def root() -> dict[str, str]:
         API metadata
     """
     return {
-        "name": "Integration Forge API",
+        "name": "RAG Assistant API",
         "version": "0.1.0",
         "environment": settings.environment,
         "docs": "/docs" if settings.environment != "production" else "disabled",

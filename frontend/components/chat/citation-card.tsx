@@ -21,7 +21,9 @@ export function CitationCard({ citation, index }: CitationCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
 
-  const score = citation.original_score ?? 0
+  // Use the reranked/final score first (mapped to similarity_score in frontend), fallback to original_score
+  // In RRF/Reranking, the final 'score' is the high-quality one
+  const score = citation.similarity_score ?? citation.original_score ?? 0
   const scorePercentage = Math.round(score * 100)
 
   // Color-coded pill by relevance
