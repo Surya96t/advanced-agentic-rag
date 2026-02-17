@@ -55,8 +55,7 @@ export async function POST(request: NextRequest) {
 
     // Revalidate the cache tag
     try {
-      // @ts-ignore - Handle potential signature mismatch in Next.js 15+ canary
-      revalidateTag(tag)
+      revalidateTag(tag, 'default')
       
       console.log(`[Revalidate] Cache invalidated for tag: ${tag}`)
 

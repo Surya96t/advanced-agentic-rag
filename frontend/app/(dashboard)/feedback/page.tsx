@@ -30,13 +30,11 @@ import {
 import { Label } from "@/components/ui/label"
 
 const feedbackSchema = z.object({
-  feedback_type: z.enum(["bug", "feature_request", "general", "other"], {
-    required_error: "Please select a feedback type.",
-  }),
+  feedback_type: z.enum(["bug", "feature_request", "general", "other"]),
   message: z.string().min(10, {
     message: "Feedback must be at least 10 characters.",
   }),
-  rating: z.coerce.number().min(1).max(5),
+  rating: z.number().min(1).max(5),
 })
 
 type FeedbackFormValues = z.infer<typeof feedbackSchema>
@@ -107,7 +105,6 @@ export default function FeedbackPage() {
                           onValueChange={field.onChange}
                           value={field.value}
                           className="grid grid-cols-2 gap-3 sm:grid-cols-4"
-                        >
                         >
                           <FormItem>
                             <FormControl>

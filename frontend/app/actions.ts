@@ -7,5 +7,5 @@ import { revalidateTag } from 'next/cache'
  * This is used by the client to refresh the sidebar after thread operations.
  */
 export async function revalidateThreads() {
-  revalidateTag('threads')
+  revalidateTag('threads', 'default')
 }
