@@ -13,6 +13,9 @@ from fastapi import Depends, HTTPException, status
 from app.core.auth import get_current_user
 from app.core.rate_limiter import get_rate_limiter
 from app.database.client import SupabaseClient, get_db
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 async def get_current_user_id(user_id: Annotated[str, Depends(get_current_user)]) -> str:
@@ -83,6 +86,12 @@ async def check_user_rate_limit(
     # TODO: Extract actual endpoint name from request context
     allowed, limit, remaining = limiter.check_rate_limit(
         user_id, endpoint="default")
+
+    # Debug: Log the rate limit check result
+    logger.debug(
+        "Rate limit check: user_id=%s, allowed=%s, limit=%d, remaining=%d",
+        user_id, allowed, limit, remaining
+    )
 
     # Calculate reset time (window end)
     reset_time = int(time.time()) + 3600  # 1 hour from now

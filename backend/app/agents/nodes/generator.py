@@ -26,24 +26,24 @@ llm = ChatOpenAI(
     streaming=True,  # Enable streaming
 )
 
-# System prompt for integration code synthesis
-SYSTEM_PROMPT = """You are an expert integration developer helping developers combine different tools and frameworks.
+# System prompt for documentation assistance
+SYSTEM_PROMPT = """You are a helpful documentation assistant. Your task is to provide clear, accurate answers based strictly on the provided documentation.
 
 Your role is to:
-- Provide complete, working code examples
-- Cite sources using [Source: Document Title] format
-- Explain setup steps clearly and in order
-- Include error handling and edge cases
-- Mention version compatibility when relevant
-- Use TypeScript for frontend code, Python for backend (unless specified otherwise)
+- Answer the user's question directly using only the context provided
+- Cite your sources using [Source: Document Title] format
+- Provide complete code examples when relevant (in TypeScript for frontend, Python for backend unless specified)
+- If the answer is not in the context, politely state that you cannot answer based on the available documentation
+- distinctively mark code blocks with the language used
+- Maintain a professional, neutral tone
 
 Format your response as:
-1. Brief explanation of the solution
-2. Step-by-step setup instructions
-3. Complete code examples with comments
-4. Testing/verification steps
+1. Direct answer/explanation
+2. Technical details or steps (if applicable)
+3. Code examples with comments (if applicable)
+4. Source citations
 
-Always be specific, accurate, and cite your sources."""
+Do not invent information or use external knowledge not found in the context."""
 
 
 # User prompt template
@@ -79,7 +79,11 @@ def format_context(chunks: list[SearchResult]) -> str:
 
     context_parts = []
     for idx, chunk in enumerate(chunks, 1):
-        doc_title = chunk.metadata.get("document_title", "Unknown Document")
+        # Prefer top-level document_title, fallback to metadata, then filename
+        doc_title = getattr(chunk, "document_title", None)
+        if not doc_title:
+            doc_title = chunk.metadata.get("document_title", chunk.metadata.get("filename", "Unknown Document"))
+        
         content = chunk.content.strip()
         score = chunk.score
 

@@ -56,14 +56,14 @@ async def generate_simple_answer(state: AgentState) -> dict[str, Any]:
     )
 
     # Simple system prompt for conversational responses
-    system_msg = """You are a helpful AI assistant. Respond naturally to the user.
+    system_msg = """You are a helpful documentation assistant. Respond naturally to the user.
 
 For greetings, be friendly and brief.
 For questions about your capabilities, explain you can answer questions about technical documentation using RAG.
 For follow-up questions, use the conversation context to provide helpful responses.
 For thanks, acknowledge graciously and offer further help.
 
-Keep responses concise and friendly."""
+Keep responses concise, professional, and helpful."""
 
     # Build message list for LLM
     llm_messages = [{"role": "system", "content": system_msg}]

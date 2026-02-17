@@ -67,7 +67,8 @@ class FlashRankReranker(Reranker):
             model_name: Model to use for re-ranking. Options:
                 - "ms-marco-TinyBERT-L-2-v2" (fastest, 4MB)
                 - "ms-marco-MiniLM-L-6-v2" (balanced, 22MB) [default]
-                - "ms-marco-MiniLM-L-12-v2" (best quality, 33MB)
+                - "ms-marco-MiniLM-L-12-v2" (best quality, 33MB, calibrated scores)
+                - "rank-T5-flan" (good ranking but uncalibrated scores ~0.4-0.5)
             cache_dir: Directory to cache downloaded models (optional)
 
         Raises:

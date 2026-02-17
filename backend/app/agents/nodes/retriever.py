@@ -47,8 +47,9 @@ def get_reranker() -> FlashRankReranker:
     """Get or create reranker singleton."""
     global _reranker
     if _reranker is None:
-        # Using rank-T5-flan as it's more reliable than ms-marco-MiniLM-L-6-v2
-        _reranker = FlashRankReranker(model_name="rank-T5-flan")
+        # Using ms-marco-MiniLM-L-12-v2 for better score calibration (0-1 range)
+        # rank-T5-flan tends to output raw logits or low probabilities (~0.4-0.5 for good matches)
+        _reranker = FlashRankReranker(model_name="ms-marco-MiniLM-L-12-v2")
     return _reranker
 
 
@@ -126,20 +127,26 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
 
     # Initialize searcher and reranker
     searcher = get_hybrid_searcher()
-    # TODO: Fix FlashRank model download issue
-    # For now, we'll skip reranking and rely on hybrid search scores
-    # reranker = get_reranker()
-    reranker = None  # TEMPORARY: Disabled until FlashRank model download is fixed
+    # Re-enable FlashRank for re-ranking to improve result quality
+    try:
+        reranker = get_reranker()
+        logger.info("FlashRank reranker initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize FlashRank reranker: {e}")
+        reranker = None
 
     # Search configuration
-    # TEMPORARY: Using min_similarity=0.3 to filter low-quality results
-    # since reranker is disabled. When FlashRank is re-enabled, set back to 0.0
     search_config = SearchConfig(
-        top_k=10,  # Get 10 results per query
-        # Temporary threshold to avoid poor matches (normally 0.0 with reranker)
-        min_similarity=0.3,
+        top_k=20,  # High recall for re-ranking candidate pool
+        # Lower similarity threshold allowed because reranker will filter noise
+        # 0.01 captures almost everything for re-ranking
+        min_similarity=0.01,
         hybrid_alpha=0.5,  # Balanced vector + text
     )
+    
+    # Fallback minimum similarity when reranker is unavailable
+    # Apply stricter threshold to avoid returning low-quality results
+    MIN_SIMILARITY_FALLBACK = 0.1
 
     # Step 1: Search each query
     search_start = time.time()
@@ -204,9 +211,12 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
 
     # Skip reranking if reranker is not available
     if reranker is None:
-        logger.warning("Reranker not available, using hybrid search scores")
+        logger.warning("Reranker not available, using hybrid search scores with stricter filtering")
+        # Filter by minimum similarity threshold before selecting top results
+        filtered_results = [r for r in deduplicated if r.score >= MIN_SIMILARITY_FALLBACK]
         reranked_results = sorted(
-            deduplicated, key=lambda x: x.score, reverse=True)[:5]
+            filtered_results, key=lambda x: x.score, reverse=True)[:5]
+        logger.info(f"Fallback filtering: {len(deduplicated)} → {len(filtered_results)} (>= {MIN_SIMILARITY_FALLBACK}) → top 5")
     else:
         logger.info("Re-ranking results with FlashRank")
         rerank_config = RerankConfig(top_k=5)  # Keep top-5 after re-ranking
@@ -222,10 +232,12 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
                 f"Re-ranking complete: {len(reranked_results)} top results selected")
 
         except Exception as e:
-            logger.error(f"Re-ranking failed: {e}, using hybrid scores")
-            # Fallback: use hybrid search scores
+            logger.error(f"Re-ranking failed: {e}, using hybrid scores with stricter filtering")
+            # Fallback: filter by minimum similarity threshold then use hybrid search scores
+            filtered_results = [r for r in deduplicated if r.score >= MIN_SIMILARITY_FALLBACK]
             reranked_results = sorted(
-                deduplicated, key=lambda x: x.score, reverse=True)[:5]
+                filtered_results, key=lambda x: x.score, reverse=True)[:5]
+            logger.info(f"Fallback filtering: {len(deduplicated)} → {len(filtered_results)} (>= {MIN_SIMILARITY_FALLBACK})")
 
     rerank_time = time.time() - rerank_start
     logger.info(f"  ↳ Re-ranking took {rerank_time:.3f}s")

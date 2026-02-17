@@ -39,6 +39,15 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify(backendRequest),
     })
 
+    // Log headers in development only for debugging
+    if (process.env.NODE_ENV === 'development') {
+      const backendHeaders: Record<string, string> = {}
+      response.headers.forEach((value, key) => {
+        backendHeaders[key] = value
+      })
+      console.log('[API Route] Backend response headers:', backendHeaders)
+    }
+
     if (!response.ok) {
       const errorText = await response.text()
       console.error('Backend error:', errorText)
@@ -98,11 +107,10 @@ export async function POST(request: NextRequest) {
       'Connection': 'keep-alive',
     })
     
-    const rateLimitHeaders = ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset']
-    rateLimitHeaders.forEach(headerName => {
-      const value = response.headers.get(headerName)
-      if (value) {
-        headers.set(headerName, value)
+    // Copy all rate limit headers (case-insensitive check)
+    response.headers.forEach((value, key) => {
+      if (key.toLowerCase().startsWith('x-ratelimit-')) {
+        headers.set(key, value)
       }
     })
 

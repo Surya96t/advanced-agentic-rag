@@ -27,34 +27,32 @@ llm = ChatOpenAI(
 
 
 # Prompt templates
-DECOMPOSITION_PROMPT = """You are a technical documentation expert. Break down this complex query into 2-3 focused sub-questions.
+DECOMPOSITION_PROMPT = """You are a technical research assistant. Break down this complex query into 2-3 focused sub-questions for retrieval.
 
 ORIGINAL QUERY: {query}
 
 Generate sub-questions that:
 - Cover different aspects of the main question
-- Are specific and searchable
-- Together answer the original question
-- Focus on technical implementation details
+- Are specific and searchable in technical documentation
+- Together help answer the original question
 
 Return ONLY valid JSON in this exact format (no markdown, no explanation):
 {{"sub_queries": ["query1", "query2", "query3"]}}
 
-Example for "How do I integrate Clerk with Prisma?":
-{{"sub_queries": ["How does Clerk authentication work?", "How does Prisma connect to databases?", "Best practices for combining auth providers with ORMs?"]}}"""
+Example for "How do I configure authentication with the database?":
+{{"sub_queries": ["Authentication system configuration", "Database connection setup", "Integrating authentication with database"]}}"""
 
 
-HYDE_PROMPT = """You are a technical documentation expert. Generate a detailed hypothetical answer to this vague query.
+HYDE_PROMPT = """You are a technical research assistant. Generate a detailed hypothetical answer to this vague query to help with search retrieval.
 
 QUERY: {query}
 
 Write a 200-word technical answer that includes:
 - Specific technical terms and concepts
-- Common solutions and approaches
-- Tool/framework names that might be relevant
-- Code-related terminology
+- Potential solution keywords
+- Relevant framework or tool terminology
 
-This hypothetical answer will be used to find similar documentation, so be specific and technical.
+This hypothetical answer will be used to find similar documentation.
 
 Return ONLY the hypothetical answer text (no JSON, no preamble)."""
 
@@ -76,10 +74,10 @@ async def decompose_query(query: str) -> list[str]:
         Exception: If LLM call fails or JSON parsing fails
 
     Example:
-        >>> await decompose_query("How do I integrate Clerk with Prisma?")
-        ["How does Clerk authentication work?", 
-         "How does Prisma connect to databases?",
-         "Best practices for combining auth with ORMs?"]
+        >>> await decompose_query("How do I configure authentication with the database?")
+        ["Authentication system configuration", 
+         "Database connection setup",
+         "Integrating authentication with database"]
     """
     logger.info(f"Decomposing complex query: {query[:100]}...")
 
@@ -172,12 +170,12 @@ async def query_expander_node(state: AgentState) -> dict:
 
     Example:
         >>> state = {
-        ...     "original_query": "How do I integrate Clerk with Prisma?",
+        ...     "original_query": "How do I configure authentication with the database?",
         ...     "query_complexity": "complex"
         ... }
         >>> result = await query_expander_node(state)
         >>> result["expanded_queries"]
-        ["How does Clerk work?", "How does Prisma connect?", "Auth + ORM patterns?"]
+        ["Authentication system configuration", "Database connection setup", "Integrating authentication with database"]
     """
     start_time = time.time()
     query = state.get("original_query")
