@@ -374,3 +374,71 @@ class DocumentChunk(TimestampMixin):
                 "updated_at": "2026-01-19T10:07:00Z"
             }
         }
+
+
+# ============================================================================
+# FEEDBACK MODEL - User feedback tracking
+# ============================================================================
+
+
+class FeedbackType(str, Enum):
+    """
+    Type of feedback submitted by the user.
+
+    Options:
+    - BUG: Something is broken
+    - FEATURE_REQUEST: New functionality desired
+    - GENERAL: General comments
+    - OTHER: Everything else
+    """
+    BUG = "bug"
+    FEATURE_REQUEST = "feature_request"
+    GENERAL = "general"
+    OTHER = "other"
+
+
+class Feedback(TimestampMixin):
+    """
+    Represents user feedback submitted through the application.
+
+    Fields:
+    - id: UUID primary key
+    - user_id: User who submitted the feedback
+    - feedback_type: Category of feedback
+    - message: The actual feedback content
+    - rating: 1-5 star rating
+    """
+    id: UUID = Field(
+        default_factory=uuid4,
+        description="Unique identifier for this feedback"
+    )
+    user_id: str = Field(
+        description="Clerk user ID who submitted the feedback"
+    )
+    feedback_type: FeedbackType = Field(
+        description="Type of feedback (bug, feature, etc.)"
+    )
+    message: str = Field(
+        min_length=10,
+        description="Feedback content"
+    )
+    rating: int = Field(
+        ge=1,
+        le=5,
+        description="Rating from 1 to 5"
+    )
+
+    class Config:
+        """Pydantic configuration."""
+        json_schema_extra = {
+            "example": {
+                "id": "770e8400-e29b-41d4-a716-446655440003",
+                "user_id": "user_2bXYZ123",
+                "feedback_type": "feature_request",
+                "message": "It would be great to have dark mode support.",
+                "rating": 5,
+                "created_at": "2026-02-17T12:00:00Z",
+                "updated_at": "2026-02-17T12:00:00Z"
+            }
+        }
+

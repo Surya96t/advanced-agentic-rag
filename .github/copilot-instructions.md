@@ -66,6 +66,35 @@ This is a production-grade advanced RAG (Retrieval-Augmented Generation) system 
 - All vector searches must use hybrid approach (dense + sparse)
 - All LLM calls must be traced with LangSmith
 
+### **Environment & Execution Rules**
+
+- **Terminal Usage:**
+  - ✅ **ALWAYS check current directory** (`pwd`) before running commands
+  - ✅ **ALWAYS use relative paths** from the project root when possible
+
+- **Backend (Python/FastAPI):**
+  - **Directory:** `/backend`
+  - **Virtual Environment:** MUST activate `.venv` before running Python commands
+    ```bash
+    cd backend
+    source .venv/bin/activate
+    ```
+  - **Package Manager:** Use `uv` for dependency management and script execution
+  - **Running Scripts:** comprehensive `uv run` usage
+    - ❌ `python scripts/test.py`
+    - ✅ `uv run scripts/test.py`
+  - **Running Server:**
+    - `uv run uvicorn app.main:app --reload`
+
+- **Frontend (Next.js):**
+  - **Directory:** `/frontend`
+  - **Package Manager:** Use `pnpm` (Project uses `pnpm-lock.yaml`)
+  - **Commands:**
+    - Install: `pnpm install`
+    - Dev Server: `pnpm dev`
+    - Linting: `pnpm lint`
+    - Build: `pnpm build`
+
 ---
 
 ## Next Steps
