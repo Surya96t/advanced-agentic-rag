@@ -295,9 +295,31 @@ async def generator_node(state: AgentState) -> dict:
         estimated_cost = (prompt_tokens * 0.00003) + \
             (completion_tokens * 0.00006)
 
+        # Format chunks into citations for persistence
+        citations = []
+        for chunk in chunks:
+            citations.append({
+                "chunk_id": str(chunk.chunk_id),
+                "document_id": str(chunk.document_id),
+                "document_title": chunk.metadata.get("document_title", "Unknown Document"),
+                "content": chunk.content,  # Full content for persistence
+                "preview": chunk.content[:200],  # Preview for quick display if needed
+                "score": chunk.score,
+                "original_score": chunk.original_score,
+                "source": chunk.metadata.get("source", "unknown"),
+            })
+
+        logger.info(f"Persisting {len(citations)} citations to message history")
+
         # Return state update (MUST include messages to persist to conversation history!)
+        # attach citations to additional_kwargs for retrieval
+        # Also attach to response_metadata as a fallback for persistence
         return {
-            "messages": [AIMessage(content=full_response)],
+            "messages": [AIMessage(
+                content=full_response, 
+                additional_kwargs={"citations": citations},
+                response_metadata={"citations": citations}
+            )],
             "generated_response": full_response,
             "metadata": {
                 "generation": {
