@@ -1,6 +1,33 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@keyframes travel-1 {
+  0%       { transform: translateX(-100%); opacity: 1; }
+  33.33%   { transform: translateX(100%);  opacity: 1; }
+  33.34%   { opacity: 0; transform: translateX(100%); }
+  100%     { opacity: 0; transform: translateX(-100%); }
+}
+
+@keyframes travel-2 {
+  0%       { opacity: 0; transform: translateX(-100%); }
+  33.33%   { opacity: 0; transform: translateX(-100%); }
+  33.34%   { opacity: 1; transform: translateX(-100%); }
+  66.66%   { transform: translateX(100%);  opacity: 1; }
+  66.67%   { opacity: 0; transform: translateX(100%); }
+  100%     { opacity: 0; transform: translateX(-100%); }
+}
+
+@keyframes travel-3 {
+  0%       { opacity: 0; transform: translateX(-100%); }
+  66.66%   { opacity: 0; transform: translateX(-100%); }
+  66.67%   { opacity: 1; transform: translateX(-100%); }
+  100%     { transform: translateX(100%);  opacity: 1; }
+}
+
+.animate-travel-1 { animation: travel-1 3s infinite linear; }
+.animate-travel-2 { animation: travel-2 3s infinite linear; }
+.animate-travel-3 { animation: travel-3 3s infinite linear; }
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
