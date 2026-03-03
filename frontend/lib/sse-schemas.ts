@@ -21,12 +21,12 @@ export const TokenEventSchema = z.object({
 export const CitationEventSchema = z.object({
   chunk_id: z.string(),
   document_title: z.string(),
-  content: z.string().optional(),
-  preview: z.string().optional(),
-  similarity_score: z.number().optional(),
+  content: z.string().nullish(),
+  preview: z.string().nullish(),       // backend sends null when no preview — must use nullish()
+  similarity_score: z.number().nullish(),
   /** RRF-fused score sent as "score" by the backend */
   score: z.number().optional(),
-  original_score: z.number().optional(),
+  original_score: z.number().nullish(), // backend sends null when no original score — must use nullish()
   source: z.string().optional(),
 })
 
@@ -59,9 +59,12 @@ export const ThreadCreatedEventSchema = z.object({
 })
 
 export const EndEventSchema = z.object({
-  thread_id: z.string(),
+  done: z.boolean().optional(),
+  total_time_ms: z.number().nullish(),
+  token_count: z.number().nullish(),
+  thread_id: z.string().nullish(),
   success: z.boolean(),
-  error: z.string().optional(),
+  error: z.string().nullish(),
 })
 
 export const ErrorEventSchema = z.object({

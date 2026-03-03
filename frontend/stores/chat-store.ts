@@ -543,13 +543,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
         content: string;
         timestamp?: string;
         citations?: Citation[];
-      }) => {
-        // Use backend ID if present, otherwise generate stable ID
-        // Fallback to empty string (not current time) to ensure deterministic IDs
+      }, index: number) => {
+        // Use backend ID if present, otherwise generate stable ID.
+        // When no timestamp is available, use the position-in-thread as the
+        // fallback seed so messages with identical content don't collide.
         const messageId = msg.id || generateStableMessageId(
           msg.role,
           msg.content,
-          msg.timestamp || ''  // Empty string = deterministic fallback (no timestamp)
+          msg.timestamp || `position:${index}`  // Position-based fallback prevents hash collisions
         )
         
         return {

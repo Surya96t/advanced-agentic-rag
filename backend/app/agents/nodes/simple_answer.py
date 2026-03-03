@@ -9,7 +9,6 @@ from typing import Any
 
 from langchain_core.messages import AIMessage
 from langchain_openai import ChatOpenAI
-from langgraph.config import get_stream_writer
 
 from app.agents.state import AgentState
 from app.core.config import settings
@@ -109,29 +108,11 @@ Keep responses concise, professional, and helpful."""
     logger.info(f"Generating simple response for: '{query[:50]}...'")
 
     try:
-        # Get stream writer for emitting custom token events
-        writer = None
-        try:
-            writer = get_stream_writer()
-        except Exception:
-            # No stream writer available (not in streaming mode)
-            pass
-
-        # Stream response from LLM token-by-token
-        full_response = ""
-
-        async for chunk in llm.astream(llm_messages):
-            if chunk.content:
-                token = chunk.content
-                full_response += token
-
-                # Emit token event for real-time streaming (if writer available)
-                if writer:
-                    writer({
-                        "type": "token",
-                        "token": token,
-                        "model": settings.openai_model,
-                    })
+        # LangGraph 'messages' stream mode auto-streams AIMessageChunks from ainvoke.
+        # No manual writer needed — token events are emitted by the framework,
+        # filtered in stream_agent() to the 'simple_answer' node.
+        response = await llm.ainvoke(llm_messages)
+        full_response = response.content
 
         logger.info(
             f"  ↳ Generated simple response ({len(full_response)} chars)")

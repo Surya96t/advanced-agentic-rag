@@ -338,11 +338,15 @@ async def chat(
         checkpointer = getattr(request.app.state, "checkpointer", None)
 
         if checkpointer is None:
-            # No checkpointer available (e.g., test environment without lifespan startup).
-            # Skip ownership verification — there is no persistent state to query.
-            logger.warning(
-                "No checkpointer available, skipping thread ownership verification",
+            # Checkpointer unavailable — cannot verify thread ownership.
+            # Fail closed: deny the request rather than skipping authorization.
+            logger.error(
+                "Checkpointer unavailable; denying access to existing thread",
                 extra={"user_id": user_id, "thread_id": thread_id}
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Thread ownership verification unavailable; please retry.",
             )
         else:
             # Import here to avoid circular dependency

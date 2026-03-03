@@ -288,16 +288,11 @@ export function useChat(threadId?: string) {
                   console.log('[SSE] Redirecting to /chat/' + data.thread_id)
                   router.push(`/chat/${data.thread_id}`)
                   
-                  // Invalidate cache for threads list (will auto-reload on next access)
-                  revalidateThreads()
-                    .then(() => {
-                      console.log('[Thread] Thread cache invalidated')
-                      // Trigger a background reload
-                      loadThreads()
-                    })
-                    .catch(err => {
-                      console.error('[Thread] Failed to invalidate thread cache:', err)
-                    })
+                  // Do NOT call loadThreads() here — the title hasn't been saved yet
+                  // (the thread still has its default "New Chat" title at this point).
+                  // The 'end' handler calls updateThreadTitle() → loadThreads() after the
+                  // title is persisted, which is the single correct refresh point.
+                  // Loading here races with that refresh and can overwrite the correct title.
                 } else {
                   console.error('[SSE] Invalid thread_created event data:', event.data)
                 }

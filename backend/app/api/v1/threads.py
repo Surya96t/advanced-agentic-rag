@@ -315,7 +315,17 @@ async def list_user_threads_from_db(
         # Import dict_row for dictionary-style results
         from psycopg.rows import dict_row
 
-        async with await AsyncConnection.connect(conn_string) as conn:
+        # autocommit=True: this is a pure SELECT — no transaction needed.
+        # Eliminates the COMMIT call in __aexit__ which crashes when Supavisor
+        # drops an idle connection mid-request.
+        # connect_timeout: fail fast (10s) instead of hanging indefinitely.
+        # statement_timeout: kill the query if Postgres stalls beyond 30s.
+        async with await AsyncConnection.connect(
+            conn_string,
+            autocommit=True,
+            connect_timeout=10,
+            options="-c statement_timeout=30000",
+        ) as conn:
             async with conn.cursor(row_factory=dict_row) as cur:
                 await cur.execute(query, (user_id,))
                 rows = await cur.fetchall()
@@ -678,7 +688,12 @@ async def create_thread(
             from app.core.config import settings
             conn_string = settings.supabase_connection_string
             
-            async with await AsyncConnection.connect(conn_string) as conn:
+            async with await AsyncConnection.connect(
+                conn_string,
+                autocommit=True,
+                connect_timeout=10,
+                options="-c statement_timeout=30000",
+            ) as conn:
                 async with conn.cursor() as cur:
                     await cur.execute(
                         """
@@ -871,7 +886,12 @@ async def update_thread(
         from app.core.config import settings
         conn_string = settings.supabase_connection_string
 
-        async with await AsyncConnection.connect(conn_string) as conn:
+        async with await AsyncConnection.connect(
+            conn_string,
+            autocommit=True,
+            connect_timeout=10,
+            options="-c statement_timeout=30000",
+        ) as conn:
             async with conn.cursor() as cur:
                 # Update the metadata JSONB column for ALL checkpoints in this thread
                 # We store custom_title in metadata to preserve it across checkpoints

@@ -50,7 +50,7 @@ def analyze_query_complexity(query: str) -> tuple[Literal["simple", "complex", "
 
     Returns:
         Tuple of (classification, confidence) where confidence ∈ (0, 1].
-        Values ≤ CONFIDENCE_THRESHOLD (0.85) trigger an async LLM fallback in
+        Values < CONFIDENCE_THRESHOLD (0.85) trigger an async LLM fallback in
         router_node to confirm or override the classification.
 
     Example:
@@ -197,9 +197,9 @@ async def router_node(state: AgentState) -> Command[Literal["retriever", "query_
     complexity, confidence = analyze_query_complexity(query)
 
     # LLM fallback when heuristic confidence is too low
-    if confidence <= CONFIDENCE_THRESHOLD:
+    if confidence < CONFIDENCE_THRESHOLD:
         logger.info(
-            f"Heuristic confidence {confidence:.2f} ≤ {CONFIDENCE_THRESHOLD}, "
+            f"Heuristic confidence {confidence:.2f} < {CONFIDENCE_THRESHOLD}, "
             f"invoking LLM to confirm classification (heuristic: {complexity})"
         )
         llm_complexity = await _llm_classify_complexity(query)

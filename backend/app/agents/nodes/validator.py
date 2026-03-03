@@ -7,6 +7,7 @@ are configurable via settings (validation_pass_threshold,
 validation_retry_threshold, validation_max_retries).
 """
 
+import asyncio
 import time
 from typing import Literal
 
@@ -49,6 +50,10 @@ class LLMValidation(BaseModel):
     reasoning: str = Field(
         description="Brief explanation of the quality assessment"
     )
+    validation_skipped: bool = Field(
+        default=False,
+        description="True when the LLM validator was unavailable and result is a safe fallback"
+    )
 
 
 _validator_llm = ChatOpenAI(
@@ -90,19 +95,35 @@ async def _llm_validate(
         f"CONTEXT (first 800 chars of top sources):\n{context_preview[:800]}\n\n"
         f"RESPONSE:\n{response[:2000]}"
     )
-    try:
-        result: LLMValidation = await _validator_llm.ainvoke(
-            [SystemMessage(content=system), HumanMessage(content=user_msg)]
-        )
-        return result
-    except Exception as e:
-        logger.warning(f"LLM validator call failed: {e}, defaulting to pass")
-        return LLMValidation(
-            passed=True,
-            score=PASS_THRESHOLD,
-            issues=[],
-            reasoning=f"Validator unavailable ({e}); defaulting to pass.",
-        )
+    _msgs = [SystemMessage(content=system), HumanMessage(content=user_msg)]
+
+    # Attempt the LLM call with one retry for transient errors (network, timeout).
+    for attempt in range(2):
+        try:
+            result: LLMValidation = await _validator_llm.ainvoke(_msgs)
+            return result
+        except Exception as e:
+            if attempt == 0:
+                # First failure — wait briefly and retry once
+                logger.warning(
+                    f"LLM validator attempt {attempt + 1} failed: {type(e).__name__}; retrying"
+                )
+                await asyncio.sleep(1.0)
+            else:
+                # Second failure — log as error, return safe fallback
+                logger.error(
+                    "LLM validator unavailable after 2 attempts; defaulting to pass",
+                    exc_info=True,
+                )
+                return LLMValidation(
+                    passed=True,
+                    score=PASS_THRESHOLD,
+                    issues=[],
+                    reasoning="Validator unavailable; response accepted by default.",
+                    validation_skipped=True,
+                )
+    # Unreachable — satisfies type checker
+    raise RuntimeError("Unexpected exit from retry loop")  # pragma: no cover
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -148,6 +169,7 @@ async def validator_node(state: AgentState) -> Command[Literal["query_expander",
         "score": llm_result.score,
         "issues": llm_result.issues,
         "reasoning": llm_result.reasoning,
+        "validation_skipped": llm_result.validation_skipped,
     }
 
     # ── Decision logic ────────────────────────────────────────────────────────
