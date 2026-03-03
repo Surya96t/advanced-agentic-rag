@@ -7,6 +7,8 @@ native full-text search (tsvector/tsquery) and the GIN index.
 
 from uuid import UUID
 
+import asyncio
+
 from supabase import Client
 
 from app.schemas.retrieval import SearchConfig, SearchResult
@@ -120,7 +122,7 @@ class TextSearcher:
             start_db = time.time()
             logger.debug("Executing text search query")
 
-            result = self.db.rpc(
+            rpc_call = self.db.rpc(
                 "search_chunks_by_text",
                 {
                     "query_text": query,
@@ -128,7 +130,8 @@ class TextSearcher:
                     "filter_user_id": user_id,
                     "ranking_function": config.text_rank_function,
                 }
-            ).execute()
+            )
+            result = await asyncio.to_thread(rpc_call.execute)
             db_time = time.time() - start_db
             logger.info(f"Text search database query took {db_time:.2f}s")
 

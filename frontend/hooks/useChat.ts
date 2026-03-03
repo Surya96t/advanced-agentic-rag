@@ -13,20 +13,9 @@ import { toast } from 'sonner'
 import { useChatStore } from '@/stores/chat-store'
 import { useRateLimitStore } from '@/stores/rate-limit-store'
 import { SSEClient } from '@/lib/sse-client'
-import { parseEventData } from '@/lib/sse-parser'
+import { parseSSEEvent } from '@/lib/sse-parser'
 import { sanitizeToken, isCitationSafe } from '@/lib/sanitizer'
 import { revalidateThreads } from '@/app/actions'
-import type {
-  TokenEvent,
-  CitationEvent,
-  AgentStartEvent,
-  AgentCompleteEvent,
-  AgentErrorEvent,
-  ValidationEvent,
-  ThreadCreatedEvent,
-  EndEvent,
-  ErrorEvent,
-} from '@/types/chat'
 
 /**
  * Generate a title from the user's message (first 50 chars)
@@ -173,7 +162,7 @@ export function useChat(threadId?: string) {
             // Parse and handle event
             switch (event.event) {
               case 'agent_start': {
-                const data = parseEventData<AgentStartEvent>(event)
+                const data = parseSSEEvent('agent_start', event)
                 if (data) {
                   console.log('[SSE] Agent started:', data.agent)
                   // Use new startAgent method to track in history
@@ -188,7 +177,7 @@ export function useChat(threadId?: string) {
               }
 
               case 'token': {
-                const data = parseEventData<TokenEvent>(event)
+                const data = parseSSEEvent('token', event)
                 if (data) {
                   // Ensure generator is marked as active when we receive tokens
                   // This fixes the issue where UI might get stuck showing 'retriever'
@@ -223,7 +212,7 @@ export function useChat(threadId?: string) {
               }
 
               case 'citation': {
-                const data = parseEventData<CitationEvent>(event)
+                const data = parseSSEEvent('citation', event)
                 if (data) {
                   console.log('[Citation Event]', data) // DEBUG
                   
@@ -255,7 +244,7 @@ export function useChat(threadId?: string) {
               }
 
               case 'agent_complete': {
-                const data = parseEventData<AgentCompleteEvent>(event)
+                const data = parseSSEEvent('agent_complete', event)
                 if (data) {
                   console.log('[SSE] Agent completed:', data.agent)
                   // Mark agent as complete in history (keeps it visible)
@@ -265,7 +254,7 @@ export function useChat(threadId?: string) {
               }
 
               case 'agent_error': {
-                const data = parseEventData<AgentErrorEvent>(event)
+                const data = parseSSEEvent('agent_error', event)
                 if (data) {
                   console.error('[SSE] Agent error:', data.error)
                   // Mark agent as error in history
@@ -276,7 +265,7 @@ export function useChat(threadId?: string) {
               }
 
               case 'validation': {
-                const data = parseEventData<ValidationEvent>(event)
+                const data = parseSSEEvent('validation', event)
                 if (data) {
                   console.log('[SSE] Validation:', data.passed ? 'PASSED' : 'FAILED', `(score: ${data.score})`)
                   // Store quality score in metrics
@@ -290,7 +279,7 @@ export function useChat(threadId?: string) {
 
               case 'thread_created': {
                 // Handle lazy thread creation - backend sends this event when creating a new thread
-                const data = parseEventData<ThreadCreatedEvent>(event)
+                const data = parseSSEEvent('thread_created', event)
                 if (data && data.thread_id) {
                   console.log('[SSE] Thread created event received:', data.thread_id)
                   setCurrentThreadId(data.thread_id)
@@ -316,7 +305,7 @@ export function useChat(threadId?: string) {
               }
 
               case 'end': {
-                const data = parseEventData<EndEvent>(event)
+                const data = parseSSEEvent('end', event)
                 if (data) {
                   console.log('[SSE] Chat complete:', data.success ? 'success' : 'failed')
                   console.log('[Thread] Current thread ID:', currentThreadId)
@@ -384,7 +373,7 @@ export function useChat(threadId?: string) {
               }
 
               case 'error': {
-                const data = parseEventData<ErrorEvent>(event)
+                const data = parseSSEEvent('error', event)
                 if (data) {
                   console.error('[SSE] Error:', data.error)
                   throw new Error(data.error)

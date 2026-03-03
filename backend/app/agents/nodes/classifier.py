@@ -93,31 +93,43 @@ async def classify_query(state: AgentState) -> Command:
         api_key=settings.openai_api_key,
     ).with_structured_output(QueryClassification)
 
-    classification_prompt = f"""Classify this user query to determine how to handle it.
+    classification_prompt = f"""Classify this user query to determine the best handling strategy.
 
-Context (recent messages):
+---
+CATEGORY DEFINITIONS & EXAMPLES
+
+simple — Greetings, thanks, chitchat, meta questions. No retrieval needed.
+  Q: "hi there"                       → simple, needs_retrieval=false
+  Q: "hello!"                         → simple, needs_retrieval=false
+  Q: "thanks, that helped"            → simple, needs_retrieval=false
+  Q: "great, thanks!"                 → simple, needs_retrieval=false
+  Q: "what can you help me with?"     → simple, needs_retrieval=false
+  Q: "are you an AI?"                 → simple, needs_retrieval=false
+
+conversational_followup — Refers to or continues the prior turn. Retrieval depends on whether new info is needed.
+  Q: "tell me more about that"        → conversational_followup, needs_retrieval=true
+  Q: "can you give an example?"       → conversational_followup, needs_retrieval=true
+  Q: "what about edge cases?"         → conversational_followup, needs_retrieval=true
+  Q: "how does that compare to X?"    → conversational_followup, needs_retrieval=true
+  Q: "can you go deeper on step 2?"   → conversational_followup, needs_retrieval=true
+  Q: "ok, so what would happen if…"   → conversational_followup, needs_retrieval=false
+
+complex_standalone — Self-contained technical question requiring full documentation lookup.
+  Q: "how do I implement JWT auth in FastAPI?"          → complex_standalone, needs_retrieval=true
+  Q: "explain async/await in Python"                   → complex_standalone, needs_retrieval=true
+  Q: "what are Convex mutations and how do I use them?" → complex_standalone, needs_retrieval=true
+  Q: "show me how to set up pgvector with Supabase"    → complex_standalone, needs_retrieval=true
+  Q: "how does LangGraph handle state checkpointing?"  → complex_standalone, needs_retrieval=true
+  Q: "walk me through building a RAG pipeline"         → complex_standalone, needs_retrieval=true
+
+---
+CONVERSATION CONTEXT (last few turns):
 {context_str}
 
-Current query: {query}
+CURRENT QUERY TO CLASSIFY:
+{query}
 
-Classification rules:
-1. "simple" - Greetings, thanks, meta questions, very short responses → no retrieval
-   Examples: "hi", "hello", "thanks", "what can you help with?"
-   
-2. "conversational_followup" - Refers to previous messages ("tell me more", "what about X?") → minimal retrieval
-   Examples: "tell me more about that", "what else?", "can you give an example?"
-   
-3. "complex_standalone" - Technical questions, new topics, requires documentation → full retrieval
-   Examples: "how do I implement OAuth in FastAPI?", "explain async/await in Python"
-
-More examples:
-- "hi" → simple, no retrieval
-- "thanks!" → simple, no retrieval
-- "tell me more about that" → conversational_followup, maybe retrieval
-- "how do I implement OAuth in FastAPI?" → complex_standalone, needs retrieval
-- "what about error handling?" (after discussing FastAPI) → conversational_followup, needs retrieval
-
-Classify the current query."""
+Respond with a QueryClassification object."""
 
     try:
         result: QueryClassification = await llm.ainvoke(

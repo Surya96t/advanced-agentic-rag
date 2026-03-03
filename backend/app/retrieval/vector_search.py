@@ -29,6 +29,7 @@ and c                            results.append(
                 )rity. It leverages the existing HNSW index for fast retrieval.
 """
 
+import asyncio
 from typing import Any
 from uuid import UUID
 
@@ -147,14 +148,15 @@ class VectorSearcher:
             start_db = time.time()
             logger.debug("Executing vector search query")
 
-            result = self.db.rpc(
+            rpc_call = self.db.rpc(
                 "search_chunks_by_embedding",
                 {
                     "query_embedding": query_embedding,
                     "match_count": config.top_k,
                     "filter_user_id": user_id,
                 }
-            ).execute()
+            )
+            result = await asyncio.to_thread(rpc_call.execute)
             db_time = time.time() - start_db
             logger.info(f"Database search took {db_time:.2f}s")
 
@@ -261,14 +263,15 @@ class VectorSearcher:
 
         try:
             # Call stored procedure with embedding
-            result = self.db.rpc(
+            rpc_call = self.db.rpc(
                 "search_chunks_by_embedding",
                 {
                     "query_embedding": embedding,
                     "match_count": config.top_k,
                     "filter_user_id": user_id,
                 }
-            ).execute()
+            )
+            result = await asyncio.to_thread(rpc_call.execute)
 
             # Parse and filter results
             if not result.data:

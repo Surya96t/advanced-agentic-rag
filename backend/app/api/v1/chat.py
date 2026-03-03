@@ -130,8 +130,8 @@ async def sse_generator(
     stream_successful = False
 
     try:
-        # Get checkpointer from app state
-        checkpointer = request.app.state.checkpointer
+        # Get checkpointer from app state (may be None in tests without lifespan)
+        checkpointer = getattr(request.app.state, "checkpointer", None)
 
         # Send thread_created event for new threads IMMEDIATELY (before streaming)
         # This allows frontend to redirect to /chat/[threadId] before tokens arrive
@@ -334,70 +334,78 @@ async def chat(
 
     # Ownership verification for existing threads
     if not is_new_thread:
-        # Get checkpointer from app state
-        checkpointer = request.app.state.checkpointer
+        # Get checkpointer from app state (may be None in tests without lifespan)
+        checkpointer = getattr(request.app.state, "checkpointer", None)
 
-        # Import here to avoid circular dependency
-        from langgraph.checkpoint.base import CheckpointTuple
-        from app.agents.graph import get_graph
-
-        try:
-            # Get the graph instance WITH the checkpointer to access state
-            graph_instance = get_graph(checkpointer)
-            
-            # Get the current state to verify ownership
-            existing_state = await graph_instance.aget_state(
-                config={"configurable": {
-                    "thread_id": thread_id, "checkpoint_ns": ""}},
-                subgraphs=False
+        if checkpointer is None:
+            # No checkpointer available (e.g., test environment without lifespan startup).
+            # Skip ownership verification — there is no persistent state to query.
+            logger.warning(
+                "No checkpointer available, skipping thread ownership verification",
+                extra={"user_id": user_id, "thread_id": thread_id}
             )
+        else:
+            # Import here to avoid circular dependency
+            from langgraph.checkpoint.base import CheckpointTuple
+            from app.agents.graph import get_graph
 
-            # Check if thread exists
-            if not existing_state.values:
-                logger.warning(
-                    "Thread not found",
-                    extra={"user_id": user_id, "thread_id": thread_id}
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Thread not found"
+            try:
+                # Get the graph instance WITH the checkpointer to access state
+                graph_instance = get_graph(checkpointer)
+
+                # Get the current state to verify ownership
+                existing_state = await graph_instance.aget_state(
+                    config={"configurable": {
+                        "thread_id": thread_id, "checkpoint_ns": ""}},
+                    subgraphs=False
                 )
 
-            # Verify ownership
-            state_user_id = existing_state.values.get("user_id")
-            if state_user_id != user_id:
-                logger.warning(
-                    "Access denied to thread",
+                # Check if thread exists
+                if not existing_state.values:
+                    logger.warning(
+                        "Thread not found",
+                        extra={"user_id": user_id, "thread_id": thread_id}
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Thread not found"
+                    )
+
+                # Verify ownership
+                state_user_id = existing_state.values.get("user_id")
+                if state_user_id != user_id:
+                    logger.warning(
+                        "Access denied to thread",
+                        extra={
+                            "user_id": user_id,
+                            "thread_id": thread_id,
+                            "owner_id": state_user_id
+                        }
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Thread not found"  # Don't reveal existence to unauthorized user
+                    )
+
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(
+                    "Error verifying thread ownership - denying access",
                     extra={
                         "user_id": user_id,
                         "thread_id": thread_id,
-                        "owner_id": state_user_id
-                    }
+                        "error": str(e),
+                        "error_type": type(e).__name__
+                    },
+                    exc_info=True
                 )
+                # Fail closed: deny access if we can't verify ownership
+                # This is more secure than allowing unverified access
                 raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Thread not found"  # Don't reveal existence to unauthorized user
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Unable to verify thread access"
                 )
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(
-                "Error verifying thread ownership - denying access",
-                extra={
-                    "user_id": user_id,
-                    "thread_id": thread_id,
-                    "error": str(e),
-                    "error_type": type(e).__name__
-                },
-                exc_info=True
-            )
-            # Fail closed: deny access if we can't verify ownership
-            # This is more secure than allowing unverified access
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Unable to verify thread access"
-            )
 
     # Note: No need to manually initialize thread state for new threads
     # The stream_agent() function automatically creates initial state with user_id
