@@ -402,6 +402,7 @@ async def ingest_document(
             file_bytes=file_content,
             filename=file.filename,
             user_id=user_id,
+            metadata={"document_title": file.filename},
         )
 
         logger.info(

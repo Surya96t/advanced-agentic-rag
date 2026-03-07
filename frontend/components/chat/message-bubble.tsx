@@ -75,7 +75,7 @@ export function MessageBubble({
         <MessageContent className="overflow-hidden">
           {/* Agent Status (Chain of Thought) - shown for AI messages with agent history */}
           {!isUser && agentHistory && agentHistory.length > 0 && (
-            <div className="mb-4 space-y-2">
+            <div className="mb-4 mt-2 space-y-2">
               <AgentStatus agentHistory={agentHistory} />
               {/* Only show metrics while actively streaming */}
               {isStreaming && streamingMetrics && (
