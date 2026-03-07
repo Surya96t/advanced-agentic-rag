@@ -5,7 +5,7 @@ Provides CRUD operations for chat threads stored in the LangGraph checkpointer.
 Allows users to list, view, create, and delete conversation threads.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -204,10 +204,9 @@ async def get_thread_metadata_from_checkpoint(
                 preview = content[:100]
 
         # Get timestamps from checkpoint metadata
-        created_at = checkpoint_metadata.get(
-            "created_at", datetime.utcnow().isoformat())
-        updated_at = checkpoint_metadata.get(
-            "updated_at", datetime.utcnow().isoformat())
+        _now_iso = datetime.now(timezone.utc).isoformat()
+        created_at = checkpoint_metadata.get("created_at", _now_iso)
+        updated_at = checkpoint_metadata.get("updated_at", _now_iso)
 
         return ThreadMetadata(
             thread_id=thread_id,
@@ -389,8 +388,9 @@ async def list_user_threads_from_db(
                         preview = content[:100]
 
                 # Timestamps
-                created_at = checkpoint_metadata.get("created_at", datetime.utcnow().isoformat())
-                updated_at = checkpoint_metadata.get("updated_at", datetime.utcnow().isoformat())
+                _now_iso = datetime.now(timezone.utc).isoformat()
+                created_at = checkpoint_metadata.get("created_at", _now_iso)
+                updated_at = checkpoint_metadata.get("updated_at", _now_iso)
 
                 threads.append(ThreadMetadata(
                     thread_id=thread_id,
