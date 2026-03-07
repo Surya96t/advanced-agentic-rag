@@ -3,7 +3,6 @@
  */
 
 import { create } from 'zustand'
-import { revalidateThreads } from '@/app/actions'
 import { Message, Citation } from '@/types/chat'
 
 /**
@@ -95,9 +94,7 @@ interface ChatState {
   
   // Thread management
   currentThreadId: string | null  // Active conversation thread
-  threads: Thread[]  // List of all user's threads
-  isLoadingThreads: boolean  // Loading state for thread list
-  
+
   // Actions
   addMessage: (message: Message) => void
   addUserMessage: (content: string) => void
@@ -119,7 +116,6 @@ interface ChatState {
   
   // Thread management actions
   setCurrentThreadId: (threadId: string | null) => void
-  loadThreads: () => Promise<void>
   createNewThread: (title?: string) => Promise<string>  // DEPRECATED
   createNewChat: () => void  // New method for lazy creation
   loadThread: (threadId: string) => Promise<void>
@@ -144,8 +140,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   
   // Thread management state
   currentThreadId: null,
-  threads: [],
-  isLoadingThreads: false,
 
   addMessage: (message) =>
     set((state) => ({
@@ -360,72 +354,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setCurrentThreadId: (threadId) =>
     set({ currentThreadId: threadId }),
   
-  loadThreads: async () => {
-    // Only show loading state if we have no threads (initial load)
-    // This prevents the "flash" when refreshing in the background
-    if (get().threads.length === 0) {
-      set({ isLoadingThreads: true })
-    }
-    
-    console.log('[Store] Loading threads...')
-    try {
-      // Load threads from backend
-      // Note: Client-side fetch ignores 'next' options like revalidate/tags
-      // Caching should be handled by the API route or browser cache headers
-      const response = await fetch('/api/threads', {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-      })
-      
-      if (!response.ok) {
-        throw new Error('Failed to load threads')
-      }
-      
-      const threads = await response.json()
-      
-      // Log thread titles for debugging "New Chat" issue
-      if (threads.length > 0) {
-        const titles = threads.slice(0, 3).map((t: any) => `${t.thread_id.slice(0,8)}:${t.title}`)
-        console.log('[Store] Loaded threads titles (first 3):', titles)
-      }
-      
-      // Convert date strings to Date objects and map backend field names
-      const threadsWithDates = threads.map((thread: { 
-        thread_id: string; 
-        title: string; 
-        preview?: string;
-        message_count: number;
-        created_at: string;
-        updated_at: string;
-        user_id: string;
-      }) => {
-        const mapped = {
-          id: thread.thread_id,  // Backend uses thread_id, frontend uses id
-          title: thread.title,
-          preview: thread.preview,
-          messageCount: thread.message_count,
-          createdAt: new Date(thread.created_at),
-          updatedAt: new Date(thread.updated_at),
-          userId: thread.user_id,
-        }
-        // Safety check
-        if (!mapped.id) {
-          console.error('[Store] Thread mapping failed - missing id:', thread)
-        }
-        return mapped
-      })
-      
-      console.log('[Store] Mapped threads:', threadsWithDates.map((t: Thread) => ({ id: t.id, title: t.title })))
-      console.log('[Store] Processed threads:', threadsWithDates.length)
-      set({ threads: threadsWithDates, isLoadingThreads: false })
-    } catch (error) {
-      console.error('[Store] Failed to load threads:', error)
-      set({ isLoadingThreads: false, error: 'Failed to load conversations' })
-    }
-  },
-  
   createNewThread: async (title?: string) => {
     // DEPRECATED: Use createNewChat() instead for lazy thread creation
     // This method is kept for backward compatibility but creates empty threads
@@ -453,9 +381,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         agentHistory: [],
         streamingMessageId: null,
       })
-      
-      // Refresh thread list
-      await get().loadThreads()
       
       return thread_id
     } catch (error) {
@@ -543,13 +468,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
         content: string;
         timestamp?: string;
         citations?: Citation[];
-      }) => {
-        // Use backend ID if present, otherwise generate stable ID
-        // Fallback to empty string (not current time) to ensure deterministic IDs
+      }, index: number) => {
+        // Use backend ID if present, otherwise generate stable ID.
+        // When no timestamp is available, use the position-in-thread as the
+        // fallback seed so messages with identical content don't collide.
         const messageId = msg.id || generateStableMessageId(
           msg.role,
           msg.content,
-          msg.timestamp || ''  // Empty string = deterministic fallback (no timestamp)
+          msg.timestamp || `position:${index}`  // Position-based fallback prevents hash collisions
         )
         
         return {
@@ -590,12 +516,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (!response.ok) {
         throw new Error('Failed to delete thread')
       }
-      
-      // Invalidate threads cache after deletion
-      await revalidateThreads()
-      
-      // Refresh thread list
-      await get().loadThreads()
       
       // If deleted thread was the current thread when deletion started, reset state
       // Use captured value to avoid race condition with concurrent thread switches
@@ -638,10 +558,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
       
       console.log('[Store] Thread title updated successfully')
-            // Invalidate threads cache after update
-      await revalidateThreads()
-            // Refresh thread list to get updated title
-      await get().loadThreads()
     } catch (error) {
       console.error('Failed to update thread title:', error)
       set({ error: 'Failed to update conversation title' })

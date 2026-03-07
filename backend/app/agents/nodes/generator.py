@@ -181,9 +181,9 @@ async def generator_node(state: AgentState) -> dict:
     4. Track metadata (tokens, latency, cost)
     5. Return generated response
 
-    Note: When used with stream_mode="custom" or ["updates", "custom"], this node
-    emits custom token events for real-time token-by-token streaming. When used with
-    ainvoke() or without custom streaming, it returns the full response synchronously.
+    Note: Uses llm.ainvoke(). When the graph runs with stream_mode="messages",
+    LangGraph automatically emits AIMessageChunks through the messages stream,
+    enabling token-by-token streaming without any manual writer loop.
 
     Args:
         state: Current agent state with retrieved_chunks and original_query
@@ -200,8 +200,6 @@ async def generator_node(state: AgentState) -> dict:
         >>> "generated_response" in result
         True
     """
-    from langgraph.config import get_stream_writer
-
     start_time = time.time()
     logger.info("⏱️  GENERATOR NODE: Starting LLM response generation")
 
@@ -244,32 +242,13 @@ async def generator_node(state: AgentState) -> dict:
     logger.info("Calling LLM for response generation")
 
     try:
-        # Get stream writer for emitting custom token events
-        # This will only work if stream_mode="custom" is enabled
-        writer = None
-        try:
-            writer = get_stream_writer()
-        except Exception:
-            # No stream writer available (e.g., not in streaming mode)
-            pass
-
-        # Stream the response token-by-token
+        # Invoke LLM — when graph runs with stream_mode="messages", LangGraph
+        # automatically intercepts ainvoke() and streams AIMessageChunks through
+        # the messages stream without any manual writer/astream loop needed.
         llm_start = time.time()
-        full_response = ""
 
-        # Stream tokens from LLM
-        async for chunk in llm.astream(messages):
-            if chunk.content:
-                token = chunk.content
-                full_response += token
-
-                # Emit token event for real-time streaming (if writer available)
-                if writer:
-                    writer({
-                        "type": "token",
-                        "token": token,
-                        "model": settings.openai_model,
-                    })
+        response = await llm.ainvoke(messages)
+        full_response = response.content
 
         llm_time = time.time() - llm_start
         logger.info(f"  ↳ LLM generation took {llm_time:.3f}s")

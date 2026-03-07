@@ -1,6 +1,6 @@
 import { UserSync } from '@/components/auth/user-sync'
 import { AppSidebar } from '@/components/app-sidebar'
-import ProfileDropdown from '@/components/profile-dropdown'
+import ProfileDropdown from '@/components/profile-dropdown-client'
 import {
   SidebarInset,
   SidebarProvider,

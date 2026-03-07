@@ -7,6 +7,7 @@ import { apiFetch } from '@/lib/api-client'
 interface BackendChatRequest {
   message: string  // Backend expects 'message', not 'query'
   thread_id?: string
+  is_new_thread?: boolean
 }
 
 /**
@@ -16,7 +17,7 @@ interface BackendChatRequest {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { message, thread_id } = body
+    const { message, thread_id, is_new_thread } = body
 
     if (!message || typeof message !== 'string') {
       return NextResponse.json(
@@ -29,6 +30,7 @@ export async function POST(request: NextRequest) {
     const backendRequest: BackendChatRequest = {
       message: message,
       thread_id: thread_id,
+      is_new_thread: is_new_thread,
     }
 
     const response = await apiFetch('/api/v1/chat', {

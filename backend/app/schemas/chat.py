@@ -39,6 +39,10 @@ class ChatRequest(BaseSchema):
         default=True,
         description="Whether to stream response via SSE (recommended)"
     )
+    is_new_thread: bool = Field(
+        default=False,
+        description="True when the client pre-generated this thread_id and has not sent a message on it before"
+    )
     max_retries: int = Field(
         default=2,
         ge=0,

@@ -39,6 +39,8 @@ from app.agents.nodes.classifier import classify_query
 from app.agents.nodes.simple_answer import generate_simple_answer
 from app.agents.nodes.router import route_after_classification
 from app.agents.state import AgentState, create_initial_state
+import time
+
 from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
 from uuid import UUID, uuid4
@@ -313,10 +315,30 @@ async def run_agent(
         graph_instance = get_graph(checkpointer=checkpointer)
 
         # Invoke graph (blocks until completion)
+        invoke_start = time.time()
         final_state = await graph_instance.ainvoke(initial_state, config=config)
+        total_duration_ms = int((time.time() - invoke_start) * 1000)
+
+        # Derive which nodes executed from populated state fields.
+        # Branch on pipeline_path since both paths set generated_response and
+        # retrieved_chunks is initialised to [] (so `is not None` is always True).
+        node_executions: list[str] = ["context_loader", "classifier"]
+        if final_state.get("pipeline_path") == "simple":
+            node_executions.append("simple_answer")
+        else:
+            # RAG path
+            if final_state.get("query_complexity"):
+                node_executions.append("router")
+            if final_state.get("expanded_queries"):
+                node_executions.append("query_expander")
+            if final_state.get("retrieved_chunks"):  # truthy: non-empty list
+                node_executions.append("retriever")
+            if final_state.get("generated_response"):
+                node_executions.extend(["generator", "validator"])
 
         # Build response from final state
         response = ChatResponse(
+            thread_id=thread_id,
             content=final_state.get(
                 "generated_response", "No response generated."),
             sources=final_state.get("sources", []),
@@ -325,6 +347,8 @@ async def run_agent(
                 "query": query,
                 "complexity": final_state.get("query_complexity", "unknown"),
                 "validation": final_state.get("validation_result", {}),
+                "total_duration_ms": total_duration_ms,
+                "node_executions": node_executions,
                 **final_state.get("metadata", {}),
             }
         )
@@ -400,7 +424,7 @@ async def stream_agent(
                 thread_id="invalid",
                 success=False,
                 error=str(e),
-            ).model_dump_json()
+            ).model_dump_json(exclude_none=True)
         }
         return
 
@@ -425,16 +449,17 @@ async def stream_agent(
         # Get compiled graph with checkpointer
         graph_instance = get_graph(checkpointer=checkpointer)
 
-        # Stream with both updates and custom modes to get node updates + token events
-        # Using combined modes: ["updates", "custom"]
+        # Stream with both updates and messages modes to get node updates + token events.
+        # messages mode yields (AIMessageChunk, metadata) tuples; metadata["langgraph_node"]
+        # identifies which node emitted the chunk so we only surface generator tokens.
         async for chunk in graph_instance.astream(
             initial_state,
             config=config,
-            stream_mode=["updates", "custom"],
+            stream_mode=["updates", "messages"],
         ):
-            # chunk can be either:
+            # chunk is always (mode, data) when multiple stream_mode values are used:
             # - ("updates", {node_name: node_update}) for node state changes
-            # - ("custom", custom_data) for custom events from nodes
+            # - ("messages", (AIMessageChunk, metadata)) for LLM token chunks
 
             mode, data = chunk
 
@@ -508,7 +533,7 @@ async def stream_agent(
                                 source=source.get("source", "unknown"),
                                 preview=source.get("content", "")[
                                     :200] if source.get("content") else None,
-                            ).model_dump_json()
+                            ).model_dump_json(exclude_none=True)
                         }
                 elif node_name == "retriever":
                     logger.warning(
@@ -601,20 +626,26 @@ async def stream_agent(
                             issues=validation.get("issues", []),
                         ).model_dump_json()
                     }
-            elif mode == "custom":
-                # Handle custom events from nodes (e.g., token streaming)
-                if isinstance(data, dict):
-                    event_type = data.get("type")
-
-                    # Token streaming events from generator
-                    if event_type == "token":
-                        yield {
-                            "event": SSEEventType.TOKEN.value,
-                            "data": TokenEvent(
-                                token=data.get("token", ""),
-                                model=data.get("model"),
-                            ).model_dump_json()
-                        }
+            elif mode == "messages":
+                # Handle LLM token chunks from messages stream mode.
+                # data is a (message_chunk, metadata) tuple.
+                # Allow tokens from both response-generating nodes:
+                # - 'generator'     : RAG pipeline responses
+                # - 'simple_answer' : conversational / follow-up responses
+                # Tokens from 'classifier', 'router', 'validator' etc. are filtered out.
+                msg_chunk, metadata = data
+                if (
+                    hasattr(msg_chunk, "content")
+                    and msg_chunk.content
+                    and metadata.get("langgraph_node") in ("generator", "simple_answer")
+                ):
+                    yield {
+                        "event": SSEEventType.TOKEN.value,
+                        "data": TokenEvent(
+                            token=msg_chunk.content,
+                            model=settings.openai_model,
+                        ).model_dump_json()
+                    }
 
         # Complete final node
         if current_node:
@@ -632,7 +663,7 @@ async def stream_agent(
             "data": EndEvent(
                 thread_id=str(thread_id),
                 success=True,
-            ).model_dump_json()
+            ).model_dump_json(exclude_none=True)
         }
 
         logger.info(f"Streaming complete for thread {thread_id}")
@@ -656,7 +687,7 @@ async def stream_agent(
                 thread_id=str(thread_id),
                 success=False,
                 error=str(e),
-            ).model_dump_json()
+            ).model_dump_json(exclude_none=True)
         }
 
 

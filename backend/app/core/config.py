@@ -211,6 +211,25 @@ class Settings(BaseSettings):
         description="Number of results to return after re-ranking"
     )
 
+    # RAG Configuration - Validation
+    validation_pass_threshold: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Minimum quality score for a response to pass validation (0.0-1.0)"
+    )
+    validation_retry_threshold: float = Field(
+        default=0.4,
+        ge=0.0,
+        le=1.0,
+        description="Quality score below which a response is immediately retried (0.0-1.0)"
+    )
+    validation_max_retries: int = Field(
+        default=2,
+        ge=0,
+        description="Maximum number of validation-triggered retries"
+    )
+
     # Legacy field for backwards compatibility
     top_k: int = Field(
         default=10,

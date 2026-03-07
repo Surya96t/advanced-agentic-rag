@@ -9,12 +9,25 @@ import re
 import time
 from typing import Literal
 
+from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_openai import ChatOpenAI
 from langgraph.types import Command
 
 from app.agents.state import AgentState
+from app.core.config import settings
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# Confidence threshold below which we invoke the LLM for a second opinion
+CONFIDENCE_THRESHOLD = 0.85
+
+# Lightweight LLM for routing decisions (lower temp for determinism)
+_router_llm = ChatOpenAI(
+    model=settings.openai_model,
+    temperature=0.0,
+    api_key=settings.openai_api_key,
+)
 
 # Vague terms that indicate ambiguous queries
 VAGUE_TERMS = {
@@ -31,45 +44,28 @@ FRAMEWORK_NAMES = {
 }
 
 
-def analyze_query_complexity(query: str) -> Literal["simple", "complex", "ambiguous"]:
+def analyze_query_complexity(query: str) -> tuple[Literal["simple", "complex", "ambiguous"], float]:
     """
-    Analyze query complexity using heuristics.
-
-    Classification logic:
-    - Simple: Direct, single-concept queries (e.g., "How do I install Prisma?")
-    - Complex: Multi-concept queries requiring decomposition (e.g., "How do I integrate Clerk with Prisma?")
-    - Ambiguous: Vague queries needing HyDE expansion (e.g., "user sync issues")
-
-    Heuristics:
-    1. Vague terms detection → ambiguous
-    2. Multiple framework names → complex
-    3. Multiple question marks → complex
-    4. Boolean operators (AND/OR) → complex
-    5. Long queries (>15 words) → complex
-    6. Otherwise → simple
-
-    Args:
-        query: User's question
+    Analyse query complexity using heuristics and return a confidence score.
 
     Returns:
-        Query complexity classification
+        Tuple of (classification, confidence) where confidence ∈ (0, 1].
+        Values < CONFIDENCE_THRESHOLD (0.85) trigger an async LLM fallback in
+        router_node to confirm or override the classification.
 
     Example:
         >>> analyze_query_complexity("How do I install Prisma?")
-        'simple'
-        >>> analyze_query_complexity("How do I integrate Clerk with Prisma?")
-        'complex'
+        ('simple', 0.85)
         >>> analyze_query_complexity("user sync issues")
-        'ambiguous'
+        ('ambiguous', 0.95)
     """
     query_lower = query.lower()
     words = query_lower.split()
 
-    # Check for vague terms (highest priority)
+    # Check for vague terms (highest priority, high confidence)
     if any(term in query_lower for term in VAGUE_TERMS):
-        logger.info(
-            f"Query classified as ambiguous (vague terms detected): {query[:50]}...")
-        return "ambiguous"
+        logger.info(f"Query classified as ambiguous (vague terms): {query[:50]}...")
+        return "ambiguous", 0.95
 
     # Count framework/tool mentions
     framework_count = sum(1 for name in FRAMEWORK_NAMES if name in query_lower)
@@ -82,26 +78,54 @@ def analyze_query_complexity(query: str) -> Literal["simple", "complex", "ambigu
         re.search(r'\b(and|or|plus|along with)\b', query_lower)
     )
 
-    # Complex if:
-    # - Multiple frameworks mentioned (2+)
-    # - Multiple questions (2+)
-    # - Boolean operators present
-    # - Long query (>15 words)
-    if (
-        framework_count >= 2
-        or question_marks >= 2
-        or has_boolean_operators
-        or len(words) > 15
-    ):
-        logger.info(f"Query classified as complex: {query[:50]}...")
-        return "complex"
+    # Assign confidence based on how many strong signals are present
+    complex_signals = (
+        (framework_count >= 2, 0.90),
+        (question_marks >= 2, 0.88),
+        (has_boolean_operators, 0.87),
+        (len(words) > 15, 0.82),
+    )
 
-    # Default to simple
-    logger.info(f"Query classified as simple: {query[:50]}...")
-    return "simple"
+    # Use the highest-confidence signal that fires
+    for condition, confidence in sorted(complex_signals, key=lambda x: -x[1]):
+        if condition:
+            logger.info(f"Query classified as complex (confidence={confidence}): {query[:50]}...")
+            return "complex", confidence
+
+    # Default: simple — moderate confidence (may trigger LLM fallback)
+    logger.info(f"Query classified as simple (confidence=0.85): {query[:50]}...")
+    return "simple", 0.85
 
 
-def router_node(state: AgentState) -> Command[Literal["retriever", "query_expander"]]:
+async def _llm_classify_complexity(query: str) -> Literal["simple", "complex", "ambiguous"]:
+    """
+    Use the LLM to classify query complexity when heuristics are uncertain.
+
+    Returns one of: "simple", "complex", "ambiguous".
+    Falls back to "simple" on any error.
+    """
+    system = (
+        "You are a query routing assistant. Classify the user's query into exactly ONE category:\n"
+        "- simple: a direct, single-concept question that can be answered with one focused document search\n"
+        "- complex: requires multiple concepts, comparisons, or sub-queries to answer fully\n"
+        "- ambiguous: vague or underspecified, needs clarification or hypothetical expansion\n"
+        "Respond with ONLY the single word: simple, complex, or ambiguous."
+    )
+    try:
+        response = await _router_llm.ainvoke([
+            SystemMessage(content=system),
+            HumanMessage(content=f"Query: {query}"),
+        ])
+        label = response.content.strip().lower()
+        if label in ("simple", "complex", "ambiguous"):
+            return label  # type: ignore[return-value]
+        return "simple"
+    except Exception as e:
+        logger.warning(f"LLM router fallback failed: {e}, defaulting to simple")
+        return "simple"
+
+
+async def router_node(state: AgentState) -> Command[Literal["retriever", "query_expander"]]:
     """
     Router node that analyzes query complexity and routes to next node.
 
@@ -169,8 +193,21 @@ def router_node(state: AgentState) -> Command[Literal["retriever", "query_expand
     logger.info(
         f"Router node: Analyzing query complexity for: {query[:100]}...")
 
-    # Analyze complexity
-    complexity = analyze_query_complexity(query)
+    # Analyse complexity (returns classification + confidence)
+    complexity, confidence = analyze_query_complexity(query)
+
+    # LLM fallback when heuristic confidence is too low
+    if confidence < CONFIDENCE_THRESHOLD:
+        logger.info(
+            f"Heuristic confidence {confidence:.2f} < {CONFIDENCE_THRESHOLD}, "
+            f"invoking LLM to confirm classification (heuristic: {complexity})"
+        )
+        llm_complexity = await _llm_classify_complexity(query)
+        if llm_complexity != complexity:
+            logger.info(
+                f"LLM overrode heuristic: {complexity} → {llm_complexity}"
+            )
+        complexity = llm_complexity
 
     # Determine next node
     if complexity == "simple":

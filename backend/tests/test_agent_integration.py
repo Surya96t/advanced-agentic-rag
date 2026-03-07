@@ -46,8 +46,8 @@ class TestSimpleQueryFlow:
 
         # Verify response structure
         assert isinstance(result, ChatResponse)
-        assert result.answer is not None
-        assert len(result.answer) > 0
+        assert result.content is not None
+        assert len(result.content) > 0
         assert result.thread_id == thread_id
         assert result.metadata is not None
 
@@ -92,9 +92,9 @@ class TestComplexQueryFlow:
 
         # Verify response
         assert isinstance(result, ChatResponse)
-        assert result.answer is not None
+        assert result.content is not None
         # Complex query should get detailed answer
-        assert len(result.answer) > 100
+        assert len(result.content) > 100
 
         # Verify sources from multi-query retrieval
         assert result.sources is not None
@@ -133,7 +133,7 @@ class TestAmbiguousQueryFlow:
 
         # Should still get a response despite ambiguity
         assert isinstance(result, ChatResponse)
-        assert result.answer is not None
+        assert result.content is not None
 
         # Should have retrieved something
         assert result.sources is not None
@@ -268,7 +268,7 @@ class TestErrorHandling:
         # Should handle without crashing
         result = await run_agent(query=query, thread_id=thread_id, user_id=user_id)
         assert result is not None
-        assert result.answer is not None
+        assert result.content is not None
 
 
 class TestEndToEndRealism:
@@ -282,8 +282,8 @@ class TestEndToEndRealism:
         result = await run_agent(query=query, thread_id=thread_id, user_id=user_id)
 
         # Should get a helpful response
-        assert result.answer is not None
-        assert len(result.answer) > 50
+        assert result.content is not None
+        assert len(result.content) > 50
 
         # Should have retrieved relevant sources
         assert result.sources is not None
@@ -297,10 +297,10 @@ class TestEndToEndRealism:
         result = await run_agent(query=query, thread_id=thread_id, user_id=user_id)
 
         # Should provide a comparative answer
-        assert result.answer is not None
+        assert result.content is not None
 
         # Answer should mention both concepts
-        answer_lower = result.answer.lower()
+        answer_lower = result.content.lower()
         assert "mutation" in answer_lower or "mutations" in answer_lower
         assert "query" in answer_lower or "queries" in answer_lower
 
@@ -312,11 +312,11 @@ class TestEndToEndRealism:
         result = await run_agent(query=query, thread_id=thread_id, user_id=user_id)
 
         # Should include code-like content
-        assert result.answer is not None
+        assert result.content is not None
 
         # Check for code indicators (code blocks, function syntax, etc.)
         has_code_indicators = any(
-            indicator in result.answer
+            indicator in result.content
             for indicator in ["```", "function", "const", "mutation("]
         )
         # Not enforcing this strictly as it depends on retrieved docs

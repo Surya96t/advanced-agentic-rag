@@ -7,6 +7,8 @@ results using Reciprocal Rank Fusion (RRF) for optimal retrieval performance.
 
 from uuid import UUID
 
+import asyncio
+
 from supabase import Client
 
 from app.ingestion.embeddings import EmbeddingClient
@@ -16,6 +18,28 @@ from app.schemas.retrieval import SearchConfig, SearchResult
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def normalize_rrf_score(rrf_score: float, rrf_k: int = 60) -> float:
+    """
+    Normalise a raw RRF score to the [0, 1] range.
+
+    RRF score range (for a single list with k=60):
+        Minimum: approaches 0 as rank → ∞
+        Maximum: 1 / (k + 1)  when rank = 1
+
+    For a weighted sum of two lists (alpha * v + (1-alpha) * t), the max is
+    still 1/(k+1) because alpha + (1-alpha) = 1.
+    Therefore: normalised = rrf_score * (k + 1)
+
+    Args:
+        rrf_score: Raw RRF score from _reciprocal_rank_fusion.
+        rrf_k: The RRF constant used during fusion (must match the searcher's rrf_k).
+
+    Returns:
+        Score in [0, 1], with 1.0 meaning rank-1 in both retrieval lists.
+    """
+    return min(rrf_score * (rrf_k + 1), 1.0)
 
 
 class HybridSearcher:
@@ -185,15 +209,14 @@ class HybridSearcher:
                 result.source = "hybrid"
             return results
 
-        # True hybrid: run both searches
-        logger.debug("Running vector and text search")
+        # True hybrid: run both searches in parallel for speed
+        logger.debug("Running vector and text search in parallel")
 
-        # Run vector search
-        vector_results = await self.vector_searcher.search(query, user_id, config)
+        vector_results, text_results = await asyncio.gather(
+            self.vector_searcher.search(query, user_id, config),
+            self.text_searcher.search(query, user_id, config),
+        )
         logger.debug(f"Vector search returned {len(vector_results)} results")
-
-        # Run text search
-        text_results = await self.text_searcher.search(query, user_id, config)
         logger.debug(f"Text search returned {len(text_results)} results")
 
         # Apply RRF fusion

@@ -135,17 +135,14 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
         logger.error(f"Failed to initialize FlashRank reranker: {e}")
         reranker = None
 
-    # Search configuration
+    # Search configuration — sourced from settings so values are overridable via .env
     search_config = SearchConfig(
-        top_k=20,  # High recall for re-ranking candidate pool
-        # Lower similarity threshold allowed because reranker will filter noise
-        # 0.01 captures almost everything for re-ranking
-        min_similarity=0.01,
-        hybrid_alpha=0.5,  # Balanced vector + text
+        top_k=settings.vector_search_top_k,   # candidate pool before re-ranking
+        min_similarity=settings.vector_search_min_similarity,
+        hybrid_alpha=settings.hybrid_search_alpha,
     )
-    
-    # Fallback minimum similarity when reranker is unavailable
-    # Apply stricter threshold to avoid returning low-quality results
+
+    # Fallback similarity threshold when reranker is unavailable
     MIN_SIMILARITY_FALLBACK = 0.1
 
     # Step 1: Search each query
@@ -219,7 +216,7 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
         logger.info(f"Fallback filtering: {len(deduplicated)} → {len(filtered_results)} (>= {MIN_SIMILARITY_FALLBACK}) → top 5")
     else:
         logger.info("Re-ranking results with FlashRank")
-        rerank_config = RerankConfig(top_k=5)  # Keep top-5 after re-ranking
+        rerank_config = RerankConfig(top_k=settings.rerank_top_k)  # configurable via .env
 
         try:
             reranked_results = await reranker.rerank(
