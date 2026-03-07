@@ -29,6 +29,7 @@ class SSEEventType(str, Enum):
     CONTEXT_STATUS = "context_status"  # Context window usage info
     CONVERSATION_SUMMARY = "conversation_summary"  # When messages are summarized
     QUERY_CLASSIFICATION = "query_classification"  # Query type classification result
+    THREAD_TITLE = "thread_title"  # LLM-generated title, emitted once per new thread
 
 
 class AgentStartEvent(BaseSchema):
@@ -341,3 +342,12 @@ class QueryClassificationEvent(BaseSchema):
             ]
         }
     )
+
+
+class ThreadTitleEvent(BaseSchema):
+    """Emitted once per new thread when the LLM-generated title is ready."""
+
+    title: str = Field(..., description="Generated thread title (2-5 words)")
+    thread_id: str = Field(..., description="Thread this title belongs to")
+    timestamp: datetime = Field(
+        default_factory=utc_now, description="Event timestamp (UTC)")

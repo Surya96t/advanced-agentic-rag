@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/collapsible"
 import Link from "next/link"
 import { useChatStore } from "@/stores/chat-store"
+import { useThreadHistory, mutateThreadHistory } from "@/hooks/useThreadHistory"
 import { formatDistanceToNow } from "date-fns"
 import { cn } from "@/lib/utils"
 
@@ -80,15 +81,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [editingTitle, setEditingTitle] = React.useState('')
   const isSavingRef = React.useRef(false)
   const router = useRouter()
-  const { threads, isLoadingThreads, currentThreadId, loadThreads, deleteThread, createNewChat, updateThreadTitle } = useChatStore()
+  const { currentThreadId, deleteThread, createNewChat, updateThreadTitle } = useChatStore()
+  const { threads, isLoadingThreads } = useThreadHistory()
   
   React.useEffect(() => {
     setMounted(true)
-    // Load threads when component mounts (only once)
-    console.log('[Sidebar] Component mounted, loading threads...')
-    loadThreads()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Empty deps - load only on mount, not on store changes
+  }, [])
   React.useEffect(() => {
     console.log('[Sidebar] Threads updated:', threads.length, 'threads')
     console.log('[Sidebar] Current thread ID:', currentThreadId)
@@ -132,6 +130,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           router.push('/chat')
         }
         
+        await mutateThreadHistory()
         toast.success('Conversation deleted')
       } catch (error) {
         console.error('[Sidebar] Failed to delete thread:', error)
@@ -178,6 +177,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     try {
       isSavingRef.current = true
       await updateThreadTitle(threadId, trimmedTitle)
+      mutateThreadHistory()
       setEditingThreadId(null)
       setEditingTitle('')
     } catch (error) {

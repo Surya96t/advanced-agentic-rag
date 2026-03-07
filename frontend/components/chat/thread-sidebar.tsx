@@ -1,41 +1,30 @@
-/**
- * Thread Sidebar Component
- * Displays list of conversation threads with create/delete actions
- */
-
 'use client'
 
-import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useChatStore } from '@/stores/chat-store'
+import { useThreadHistory, mutateThreadHistory } from '@/hooks/useThreadHistory'
 import { formatDistanceToNow } from 'date-fns'
 import { Plus, Trash2, MessageSquare, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
 export function ThreadSidebar() {
-  const {
-    threads,
-    currentThreadId,
-    isLoadingThreads,
-    loadThreads,
-    createNewThread,
-    loadThread,
-    deleteThread,
-  } = useChatStore()
+  const { threads, isLoadingThreads } = useThreadHistory()
+  const { currentThreadId, deleteThread } = useChatStore()
+  const router = useRouter()
 
-  // Load threads on mount (only once, not on store changes)
-  useEffect(() => {
-    loadThreads()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Empty deps - load only on mount
+  const handleNewChat = () => {
+    router.push('/chat')
+  }
 
-  const handleNewChat = async () => {
+  const handleDelete = async (threadId: string) => {
     try {
-      await createNewThread()
+      await deleteThread(threadId)
+      await mutateThreadHistory()
     } catch (error) {
-      console.error('Failed to create new thread:', error)
-      toast.error('Failed to create chat', {
-        description: error instanceof Error ? error.message : 'An unexpected error occurred'
+      console.error('Failed to delete thread:', error)
+      toast.error('Failed to delete chat', {
+        description: error instanceof Error ? error.message : 'An unexpected error occurred',
       })
     }
   }
@@ -72,8 +61,8 @@ export function ThreadSidebar() {
                 key={thread.id}
                 thread={thread}
                 isActive={thread.id === currentThreadId}
-                onSelect={() => loadThread(thread.id)}
-                onDelete={() => deleteThread(thread.id)}
+                onSelect={() => router.push(`/chat/${thread.id}`)}
+                onDelete={() => handleDelete(thread.id)}
               />
             ))}
           </div>

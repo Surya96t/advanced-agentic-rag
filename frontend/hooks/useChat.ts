@@ -8,28 +8,17 @@
 'use client'
 
 import { useCallback, useRef, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useUser } from '@clerk/nextjs'
 import { toast } from 'sonner'
 import { useChatStore } from '@/stores/chat-store'
 import { useRateLimitStore } from '@/stores/rate-limit-store'
 import { SSEClient } from '@/lib/sse-client'
 import { parseSSEEvent } from '@/lib/sse-parser'
 import { sanitizeToken, isCitationSafe } from '@/lib/sanitizer'
-import { revalidateThreads } from '@/app/actions'
-
-/**
- * Generate a title from the user's message (first 50 chars)
- */
-function generateTitleFromMessage(message: string): string {
-  const cleaned = message.trim()
-  if (cleaned.length <= 50) {
-    return cleaned
-  }
-  return cleaned.slice(0, 47) + '...'
-}
+import { mutateThreadHistory, updateThreadTitleOptimistically, insertThreadOptimistically } from '@/hooks/useThreadHistory'
 
 export function useChat(threadId?: string) {
-  const router = useRouter()
+  const { user } = useUser()
   const {
     messages,
     isLoading,
@@ -54,8 +43,6 @@ export function useChat(threadId?: string) {
     setError,
     clearMessages,
     setCurrentThreadId,
-    loadThreads,
-    updateThreadTitle,
   } = useChatStore()
 
   const { setRateLimit } = useRateLimitStore()
@@ -88,9 +75,6 @@ export function useChat(threadId?: string) {
       if (!content.trim() || isLoading) return
 
       try {
-        // Track if this is the first message in the thread (for auto-title generation)
-        const isFirstMessage = messages.length === 0
-        
         // Add user message to UI immediately
         addUserMessage(content)
         setLoading(true)
@@ -106,6 +90,36 @@ export function useChat(threadId?: string) {
         // Track streaming state
         let messageStarted = false
 
+        // Pre-generate thread ID for new threads — this lets us update the URL via
+        // window.history.replaceState() (no page transition) instead of router.push(),
+        // which would tear down the page component during a live SSE stream.
+        const effectiveThreadId = currentThreadId ?? (() => {
+          const newId = crypto.randomUUID()
+          setCurrentThreadId(newId)
+          if (typeof window !== 'undefined') {
+            window.history.replaceState({}, '', `/chat/${newId}`)
+          }
+          return newId
+        })()
+        const isNewThread = !currentThreadId
+
+        // Optimistically insert a placeholder thread into the sidebar SWR cache
+        // the instant the user hits send — before any network request fires.
+        // The placeholder is replaced by the real DB row when the thread_title
+        // event arrives or the end handler triggers a final revalidation.
+        if (isNewThread) {
+          const now = new Date()
+          insertThreadOptimistically({
+            id: effectiveThreadId,
+            title: 'New Chat',
+            preview: content.slice(0, 100),
+            messageCount: 1,
+            createdAt: now,
+            updatedAt: now,
+            userId: user?.id ?? '',
+          })
+        }
+
         // Create SSE client with retry logic
         const client = new SSEClient({
           url: '/api/chat',
@@ -116,7 +130,8 @@ export function useChat(threadId?: string) {
           body: { 
             message: content,
             stream: true,
-            thread_id: currentThreadId || null  // null = new thread, UUID = existing thread
+            thread_id: effectiveThreadId,
+            is_new_thread: isNewThread,
           },
           maxRetries: 3,
           baseDelay: 1000,
@@ -234,8 +249,8 @@ export function useChat(threadId?: string) {
                     document_title: data.document_title || 'Unknown Document',
                     chunk_id: data.chunk_id,
                     content: data.preview || data.content || '',
-                    similarity_score: data.score ?? data.similarity_score,
-                    original_score: data.original_score,  // Original cosine similarity
+                    similarity_score: data.score ?? data.similarity_score ?? undefined,
+                    original_score: data.original_score ?? undefined,
                   }
                   console.log('[Adding Citation]', citation) // DEBUG
                   addCitationToStreamingMessage(citation)
@@ -277,22 +292,32 @@ export function useChat(threadId?: string) {
                 break
               }
 
+              case 'thread_title': {
+                const data = parseSSEEvent('thread_title', event)
+                if (data) {
+                  console.log('[SSE] Thread title received:', data.title)
+                  // Optimistically update sidebar title without a full re-fetch
+                  updateThreadTitleOptimistically(effectiveThreadId, data.title)
+                }
+                break
+              }
+
               case 'thread_created': {
-                // Handle lazy thread creation - backend sends this event when creating a new thread
+                // With client-side UUID pre-generation, the thread ID is already set and
+                // the URL already updated via replaceState before streaming started.
+                // This event is kept for backward compatibility but we never redirect here —
+                // router.push() during a live SSE stream causes a disruptive page transition.
                 const data = parseSSEEvent('thread_created', event)
                 if (data && data.thread_id) {
-                  console.log('[SSE] Thread created event received:', data.thread_id)
-                  setCurrentThreadId(data.thread_id)
-                  
-                  // Redirect to the new thread URL
-                  console.log('[SSE] Redirecting to /chat/' + data.thread_id)
-                  router.push(`/chat/${data.thread_id}`)
-                  
-                  // Do NOT call loadThreads() here — the title hasn't been saved yet
-                  // (the thread still has its default "New Chat" title at this point).
-                  // The 'end' handler calls updateThreadTitle() → loadThreads() after the
-                  // title is persisted, which is the single correct refresh point.
-                  // Loading here races with that refresh and can overwrite the correct title.
+                  console.log('[SSE] Thread created acknowledgement received:', data.thread_id)
+                  // Fallback: set thread ID if pre-generation didn't run for some reason
+                  const liveState = useChatStore.getState()
+                  if (!liveState.currentThreadId) {
+                    setCurrentThreadId(data.thread_id)
+                    if (typeof window !== 'undefined') {
+                      window.history.replaceState({}, '', `/chat/${data.thread_id}`)
+                    }
+                  }
                 } else {
                   console.error('[SSE] Invalid thread_created event data:', event.data)
                 }
@@ -303,55 +328,18 @@ export function useChat(threadId?: string) {
                 const data = parseSSEEvent('end', event)
                 if (data) {
                   console.log('[SSE] Chat complete:', data.success ? 'success' : 'failed')
-                  console.log('[Thread] Current thread ID:', currentThreadId)
-                  console.log('[Thread] Response thread ID:', data.thread_id)
-                  
+
                   // Capture thread_id for multi-turn conversations
                   if (data.thread_id) {
                     if (!currentThreadId) {
-                      console.log('[Thread] NEW THREAD created:', data.thread_id)
                       setCurrentThreadId(data.thread_id)
-                    } else if (currentThreadId !== data.thread_id) {
-                      console.warn('[Thread] Thread ID mismatch!', {
-                        current: currentThreadId,
-                        response: data.thread_id
-                      })
-                    } else {
-                      console.log('[Thread] Continuing existing thread:', data.thread_id)
                     }
-
-                    // Handle Title Update (First Message) vs Regular Refresh
-                    // We avoid firing both to prevent race conditions where we fetch "New Chat" 
-                    // before the title update completes.
-                    
-                    if (isFirstMessage && data.thread_id) {
-                      const newTitle = generateTitleFromMessage(content)
-                      console.log('[Thread] First message detected. Updating title to:', newTitle)
-                      
-                      // This will trigger its own refresh after update completes
-                      updateThreadTitle(data.thread_id, newTitle)
-                        .then(() => {
-                          console.log('[Thread] Title updated and list refreshed')
-                        })
-                        .catch(err => {
-                          console.error('[Thread] Failed to update title:', err)
-                          // Fallback refresh if title update fails
-                          revalidateThreads().then(() => loadThreads())
-                        })
-                    } else {
-                      // Not first message - just refresh to show updated message count/preview
-                      console.log('[Thread] Stream ended - refreshing thread list...')
-                      revalidateThreads()
-                        .then(() => {
-                          console.log('[Thread] Thread cache invalidated')
-                          loadThreads() // Silent reload (no spinner)
-                        })
-                        .catch(err => {
-                          console.error('[Thread] Failed to refresh thread list:', err)
-                        })
-                    }
+                    // Refresh sidebar thread list after every turn.
+                    // For new threads the title was already applied optimistically
+                    // via the thread_title event — this just syncs any other fields.
+                    mutateThreadHistory()
                   }
-                  
+
                   // Ensure message is started
                   if (!messageStarted) {
                     startStreamingMessage()
@@ -359,7 +347,7 @@ export function useChat(threadId?: string) {
                   }
                   finishStreamingMessage()
                   setCurrentAgent(null)
-                  
+
                   if (!data.success && data.error) {
                     toast.error(`Chat failed: ${data.error}`)
                   }
@@ -419,10 +407,9 @@ export function useChat(threadId?: string) {
       }
     },
     [
-      messages.length,
       isLoading,
       currentThreadId,
-      router,
+      user?.id,
       addUserMessage,
       startStreamingMessage,
       appendToStreamingMessage,
@@ -439,8 +426,6 @@ export function useChat(threadId?: string) {
       setError,
       setRateLimit,
       setCurrentThreadId,
-      loadThreads,
-      updateThreadTitle,
     ]
   )
 

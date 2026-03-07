@@ -93,6 +93,12 @@ export const ConversationSummaryEventSchema = z.object({
   messages_kept: z.number(),
 })
 
+export const ThreadTitleEventSchema = z.object({
+  title: z.string(),
+  thread_id: z.string(),
+  timestamp: z.string().optional(),
+})
+
 // ---------------------------------------------------------------------------
 // Registry — maps SSE event name → schema
 // ---------------------------------------------------------------------------
@@ -110,6 +116,7 @@ export const eventSchemas = {
   query_classification: QueryClassificationEventSchema,
   context_status: ContextStatusEventSchema,
   conversation_summary: ConversationSummaryEventSchema,
+  thread_title: ThreadTitleEventSchema,
 } as const
 
 export type EventSchemas = typeof eventSchemas

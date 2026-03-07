@@ -24,6 +24,7 @@ from fastapi.responses import StreamingResponse
 from app.agents.graph import run_agent, stream_agent
 from app.api.deps import UserID, RateLimitInfo
 from app.core.config import settings
+from app.database.pool import DatabasePool
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.schemas.events import SSEEventType
 from app.utils.logger import get_logger
@@ -128,10 +129,18 @@ async def sse_generator(
 
     # Track successful completion for thread_created event
     stream_successful = False
+    # Will hold the asyncio Task for LLM title generation (new threads only)
+    title_task: asyncio.Task[str] | None = None
 
     try:
         # Get checkpointer from app state (may be None in tests without lifespan)
         checkpointer = getattr(request.app.state, "checkpointer", None)
+
+        # Kick off LLM title generation in parallel with the main astream loop so it
+        # never adds latency to token delivery.
+        if is_new_thread:
+            from app.utils.title_generator import generate_title
+            title_task = asyncio.create_task(generate_title(query))
 
         # Send thread_created event for new threads IMMEDIATELY (before streaming)
         # This allows frontend to redirect to /chat/[threadId] before tokens arrive
@@ -218,6 +227,60 @@ async def sse_generator(
         # Mark stream as successful if we completed without errors
         stream_successful = True
 
+        # ------------------------------------------------------------------
+        # Emit thread_title SSE event and persist the LLM-generated title
+        # ------------------------------------------------------------------
+        if title_task is not None:
+            from app.schemas.events import ThreadTitleEvent
+            try:
+                title = await asyncio.wait_for(title_task, timeout=10.0)
+                title_task = None  # Mark as consumed
+            except (asyncio.TimeoutError, Exception):
+                logger.warning(
+                    "Title generation failed or timed out, using fallback",
+                    extra={"thread_id": str(thread_id)},
+                )
+                title = query.strip()[:50]
+                title_task = None
+
+            yield (
+                f"event: {SSEEventType.THREAD_TITLE.value}\n"
+                f"data: {ThreadTitleEvent(title=title, thread_id=str(thread_id)).model_dump_json()}\n\n"
+            )
+
+            # Persist the title to checkpoint metadata so the threads listing
+            # picks it up immediately without any client-side PATCH request.
+            # Uses the shared DatabasePool (opened at app lifespan) — no new
+            # connection is opened, and the ownership filter (user_id) ensures
+            # a compromised thread_id cannot overwrite another user's title.
+            try:
+                async with DatabasePool.get_connection() as conn:
+                    async with conn.cursor() as cur:
+                        # Scope the statement timeout to this transaction only
+                        await cur.execute("SET LOCAL statement_timeout = '30s'")
+                        await cur.execute(
+                            """
+                            UPDATE checkpoints
+                            SET metadata = jsonb_set(
+                                COALESCE(metadata, '{}'::jsonb),
+                                '{custom_title}',
+                                to_jsonb(%s::text)
+                            )
+                            WHERE thread_id = %s
+                              AND checkpoint->'channel_values'->>'user_id' = %s
+                            """,
+                            (title, str(thread_id), user_id),
+                        )
+                logger.info(
+                    "Thread title persisted",
+                    extra={"thread_id": str(thread_id), "title": title},
+                )
+            except Exception as persist_err:
+                logger.warning(
+                    "Failed to persist thread title",
+                    extra={"thread_id": str(thread_id), "error": str(persist_err)},
+                )
+
     except asyncio.CancelledError:
         logger.info(
             "Stream cancelled",
@@ -252,6 +315,9 @@ async def sse_generator(
         yield f"event: {end_event['event']}\ndata: {end_event['data']}\n\n"
 
     finally:
+        # Cancel title task if still running (e.g., client disconnected mid-stream)
+        if title_task is not None and not title_task.done():
+            title_task.cancel()
         # thread_created event now sent at stream start (not here)
         # Finalize and log metrics
         metrics.finalize()
@@ -316,21 +382,65 @@ async def chat(
         }
     )
 
-    # Lazy thread creation: Generate thread_id if not provided
+    # Thread ID resolution:
+    # - Legacy path: client sends thread_id=None → backend generates UUID
+    # - Modern path: client pre-generates UUID and sends is_new_thread=True
     if chat_request.thread_id is None:
         thread_id = str(uuid4())
         is_new_thread = True
         logger.info(
-            "Creating new thread (lazy creation)",
+            "Creating new thread (legacy: backend-generated ID)",
             extra={"user_id": user_id, "thread_id": thread_id}
         )
     else:
         thread_id = str(chat_request.thread_id)  # Convert UUID to string
-        is_new_thread = False
-        logger.debug(
-            "Using existing thread",
-            extra={"user_id": user_id, "thread_id": thread_id}
-        )
+        # Trust the client flag — client pre-generated the ID for new threads
+        is_new_thread = chat_request.is_new_thread
+        if is_new_thread:
+            logger.info(
+                "Creating new thread (client-generated ID)",
+                extra={"user_id": user_id, "thread_id": thread_id}
+            )
+            # Security: verify the claimed-new thread ID truly has no existing state.
+            # Without this check a malicious client could supply an existing thread's
+            # UUID with is_new_thread=True to bypass the ownership check below and
+            # overwrite another user's conversation.
+            verify_checkpointer = getattr(request.app.state, "checkpointer", None)
+            if verify_checkpointer is not None:
+                try:
+                    from app.agents.graph import get_graph
+                    graph_instance = get_graph(verify_checkpointer)
+                    existing_state = await graph_instance.aget_state(
+                        config={"configurable": {
+                            "thread_id": thread_id, "checkpoint_ns": ""}},
+                        subgraphs=False,
+                    )
+                    if existing_state.values:
+                        logger.warning(
+                            "Client claimed is_new_thread=True for an existing thread ID",
+                            extra={"user_id": user_id, "thread_id": thread_id}
+                        )
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail="Thread ID already exists; use a different ID for a new thread.",
+                        )
+                except HTTPException:
+                    raise
+                except Exception as e:
+                    logger.error(
+                        "Error checking thread existence for new-thread claim",
+                        extra={"user_id": user_id, "thread_id": thread_id, "error": str(e)},
+                        exc_info=True,
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail="Unable to verify thread ID uniqueness; please retry.",
+                    )
+        else:
+            logger.debug(
+                "Using existing thread",
+                extra={"user_id": user_id, "thread_id": thread_id}
+            )
 
     # Ownership verification for existing threads
     if not is_new_thread:
