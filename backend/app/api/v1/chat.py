@@ -406,36 +406,44 @@ async def chat(
             # UUID with is_new_thread=True to bypass the ownership check below and
             # overwrite another user's conversation.
             verify_checkpointer = getattr(request.app.state, "checkpointer", None)
-            if verify_checkpointer is not None:
-                try:
-                    from app.agents.graph import get_graph
-                    graph_instance = get_graph(verify_checkpointer)
-                    existing_state = await graph_instance.aget_state(
-                        config={"configurable": {
-                            "thread_id": thread_id, "checkpoint_ns": ""}},
-                        subgraphs=False,
-                    )
-                    if existing_state.values:
-                        logger.warning(
-                            "Client claimed is_new_thread=True for an existing thread ID",
-                            extra={"user_id": user_id, "thread_id": thread_id}
-                        )
-                        raise HTTPException(
-                            status_code=status.HTTP_409_CONFLICT,
-                            detail="Thread ID already exists; use a different ID for a new thread.",
-                        )
-                except HTTPException:
-                    raise
-                except Exception as e:
-                    logger.error(
-                        "Error checking thread existence for new-thread claim",
-                        extra={"user_id": user_id, "thread_id": thread_id, "error": str(e)},
-                        exc_info=True,
+            if verify_checkpointer is None:
+                logger.error(
+                    "Checkpointer unavailable; cannot verify thread ID uniqueness for new-thread claim",
+                    extra={"user_id": user_id, "thread_id": thread_id},
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Unable to verify thread ID uniqueness; please retry.",
+                )
+            try:
+                from app.agents.graph import get_graph
+                graph_instance = get_graph(verify_checkpointer)
+                existing_state = await graph_instance.aget_state(
+                    config={"configurable": {
+                        "thread_id": thread_id, "checkpoint_ns": ""}},
+                    subgraphs=False,
+                )
+                if existing_state.values:
+                    logger.warning(
+                        "Client claimed is_new_thread=True for an existing thread ID",
+                        extra={"user_id": user_id, "thread_id": thread_id}
                     )
                     raise HTTPException(
-                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                        detail="Unable to verify thread ID uniqueness; please retry.",
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Thread ID already exists; use a different ID for a new thread.",
                     )
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(
+                    "Error checking thread existence for new-thread claim",
+                    extra={"user_id": user_id, "thread_id": thread_id, "error": str(e)},
+                    exc_info=True,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Unable to verify thread ID uniqueness; please retry.",
+                )
         else:
             logger.debug(
                 "Using existing thread",
