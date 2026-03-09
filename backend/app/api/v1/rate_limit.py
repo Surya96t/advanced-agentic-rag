@@ -65,8 +65,18 @@ def get_rate_limit_status(user_id: UserID) -> RateLimitStatusResponse:
 
     limiter = get_rate_limiter()
 
+    # Sentinel returned by peek_rate_limit when Redis is unavailable.
+    _UNAVAILABLE = EndpointLimitStatus(limit=-1, remaining=-1, reset=-1)
+
     def _peek(endpoint: str) -> EndpointLimitStatus:
-        limit, remaining, reset = limiter.peek_rate_limit(user_id, endpoint)
+        result = limiter.peek_rate_limit(user_id, endpoint)
+        if result is None:
+            logger.warning(
+                "Redis unavailable during rate limit peek",
+                extra={"endpoint": endpoint},
+            )
+            return _UNAVAILABLE
+        limit, remaining, reset = result
         return EndpointLimitStatus(limit=limit, remaining=remaining, reset=reset)
 
     return RateLimitStatusResponse(

@@ -51,7 +51,7 @@ from app.database.repositories.chunks import ChunkRepository
 from app.database.repositories.documents import DocumentRepository
 from app.ingestion.embeddings import get_embedding_client
 from app.ingestion.pipeline import IngestionPipeline
-from app.core.storage import StorageClient, StorageUploadError, get_storage_client
+from app.core.storage import StorageClient, StorageDeleteError, StorageUploadError, get_storage_client
 from app.schemas.document import (
     DocumentResponse,
     MAX_FILE_SIZE_BYTES,
@@ -453,14 +453,36 @@ async def ingest_document(
     # STEP 5: Process document with pipeline
     # ========================================================================
 
+    async def _delete_orphaned_blob(path: str, reason: str) -> None:
+        """Best-effort delete of an orphaned storage blob; never raises."""
+        try:
+            await storage.delete(path)
+            logger.info(
+                "Orphaned blob deleted",
+                path=path,
+                reason=reason,
+            )
+        except (StorageDeleteError, Exception) as del_exc:
+            logger.warning(
+                "Failed to delete orphaned blob",
+                path=path,
+                reason=reason,
+                error=str(del_exc),
+            )
+
     try:
-        document, _ = await pipeline.ingest_document(
+        document, is_duplicate = await pipeline.ingest_document(
             file_bytes=file_content,
             filename=file.filename,
             user_id=user_id,
             metadata={"document_title": file.filename},
             storage_path=storage_path,
         )
+
+        # Duplicate detected — the existing document already has its own blob_path;
+        # the blob we just uploaded is orphaned and must be cleaned up.
+        if is_duplicate and storage_path:
+            await _delete_orphaned_blob(storage_path, "duplicate_document")
 
         logger.info(
             "Document ingestion completed",
@@ -471,6 +493,7 @@ async def ingest_document(
             if document.metadata
             else 0,
             user_id=user_id,
+            is_duplicate=is_duplicate,
         )
 
         # Convert to response schema
@@ -494,6 +517,9 @@ async def ingest_document(
             user_id=user_id,
             exc_info=True,
         )
+        # Clean up orphaned blob so storage doesn't accumulate failed-ingest files.
+        if storage_path:
+            await _delete_orphaned_blob(storage_path, "pipeline_error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Document ingestion failed. Please try again or contact support.",

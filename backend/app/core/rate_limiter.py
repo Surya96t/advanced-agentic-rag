@@ -139,7 +139,7 @@ class RedisRateLimiter:
 
     def peek_rate_limit(
         self, user_id: str, endpoint: str = "default"
-    ) -> Tuple[int, int, int]:
+    ) -> Optional[Tuple[int, int, int]]:
         """
         Return (limit, remaining, reset) for an endpoint WITHOUT recording a request.
 
@@ -147,13 +147,14 @@ class RedisRateLimiter:
         ``reset`` is the Unix epoch second at which the oldest in-window request
         expires and a new slot opens — i.e. ``oldest_entry_timestamp + window``.
         Returns 0 for reset when the bucket is empty (no requests in window).
+        Returns None when Redis is unavailable.
 
         Args:
             user_id: User identifier
             endpoint: API endpoint name
 
         Returns:
-            Tuple of (limit, remaining, reset)
+            Tuple of (limit, remaining, reset), or None if Redis is unavailable.
         """
         if not settings.rate_limit_enabled:
             return (0, 0, 0)
@@ -189,7 +190,7 @@ class RedisRateLimiter:
 
         except (RedisError, Exception) as e:
             logger.error(f"Error in peek_rate_limit: {e}")
-            return (0, 0, 0)
+            return None
 
     def close(self):
         """Close Redis connection pool."""

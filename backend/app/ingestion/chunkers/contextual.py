@@ -85,6 +85,11 @@ class ContextualChunker(BaseChunker):
         # values to satisfy BaseChunker validation.
         super().__init__(chunk_size=1, chunk_overlap=0, metadata_prefix=metadata_prefix)
 
+        if concurrency <= 0:
+            raise ValueError(
+                f"concurrency must be a positive integer, got {concurrency!r}"
+            )
+
         self._base_chunker = base_chunker
         self._model = model
         self._concurrency = concurrency
