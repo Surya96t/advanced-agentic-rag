@@ -16,11 +16,88 @@ from langgraph.types import Command
 from app.agents.state import AgentState
 from app.core.config import settings
 from app.utils.logger import get_logger
+from app.utils.observability import trace_node
 
 logger = get_logger(__name__)
 
 # Confidence threshold below which we invoke the LLM for a second opinion
 CONFIDENCE_THRESHOLD = 0.85
+
+# ---------------------------------------------------------------------------
+# Format/style instruction stripping
+# ---------------------------------------------------------------------------
+
+# Ordered (specific before generic) patterns that match format/style modifiers
+# users add to queries.  These words have no counterpart in document chunks and
+# produce low similarity scores → validator retry loops.
+_FORMAT_PATTERNS: list[tuple[str, str]] = [
+    # ── Multi-word / highly-specific patterns ─────────────────────────────────
+    # These are specific enough that they rarely appear as domain terms;
+    # kept unanchored so they match regardless of position in the query.
+
+    # Sentence count: "in 3 sentences", "in a sentence", "in one sentence"
+    (r"\bin\s+(?:a|an|one|\d+)\s+sentences?\b", "in N sentences"),
+    # Bullet formats
+    (r"\b(?:in|as)\s+bullet[\s-]points?\b", "in bullet points"),
+    (r"\bin\s+bullets\b", "in bullet points"),
+    # ELI5
+    (r"\bexplain\s+like\s+(?:i'?m|you'?re)\s+(?:five|5|\d+)\b", "explain like I'm 5"),
+    (r"\beli5\s*$", "explain like I'm 5"),
+    # Step by step
+    (r"\bstep[- ]by[- ]step\b", "step by step"),
+    # Table format
+    (r"\b(?:in|as)\s+a\s+table\b", "in a table"),
+
+    # ── Single-word / short-phrase modifiers — anchored to end-of-string ──────
+    # Without anchoring, terms like "summarize", "detailed", "verbose" are
+    # indistinguishable from genuine subject matter (e.g. "how do I summarize
+    # docs with LangChain?" or "explain verbose logging in Python").
+    # \s*$ allows optional trailing whitespace/punctuation after the word.
+    (r"\bconcisely\s*$", "concisely"),
+    (r"\bbriefly\s*$", "briefly"),
+    (r"\bin\s+short\s*$", "briefly"),
+    (r"\bshortly\s*$", "briefly"),
+    (r"\btl[;:]?dr\s*$", "briefly"),
+    (r"\bsummariz[ei]\s*$", "summarize"),
+    (r"\bsummariz(?:ation|ing)\s*$", "summarize"),
+    (r"\bsummar(?:y|ise)\s*$", "summarize"),
+    (r"\bin\s+depth\s*$", "in detail"),
+    (r"\bin\s+detail\s*$", "in detail"),
+    (r"\bdetailed(?:ly)?\s*$", "in detail"),
+    (r"\bverbose(?:ly)?\s*$", "in detail"),
+]
+
+
+def _strip_format_instructions(query: str) -> tuple[str, str]:
+    """Extract format/style instructions from the query string.
+
+    Removes formatting directives (e.g. "briefly", "in bullet points") from
+    the retrieval query so they don't reduce similarity scores.  Returns both
+    the cleaned query and the extracted directives so the generator can honour
+    them in the response.
+
+    Args:
+        query: Raw user query, possibly containing format qualifiers.
+
+    Returns:
+        Tuple of (cleaned_query, format_instructions) where:
+        - cleaned_query: Query with format words removed, used for retrieval.
+        - format_instructions: Comma-joined format directives for the generator.
+    """
+    instructions: list[str] = []
+    cleaned = query
+
+    for pattern, label in _FORMAT_PATTERNS:
+        match = re.search(pattern, cleaned, re.IGNORECASE)
+        if match:
+            instruction = label if label else match.group().strip()
+            instructions.append(instruction)
+            cleaned = cleaned[: match.start()] + cleaned[match.end():]
+
+    # Collapse multiple spaces and strip punctuation artefacts left by removal
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip().strip(",").strip()
+
+    return cleaned, ", ".join(instructions)
 
 # Lightweight LLM for routing decisions (lower temp for determinism)
 _router_llm = ChatOpenAI(
@@ -125,6 +202,7 @@ async def _llm_classify_complexity(query: str) -> Literal["simple", "complex", "
         return "simple"
 
 
+@trace_node("router")
 async def router_node(state: AgentState) -> Command[Literal["retriever", "query_expander"]]:
     """
     Router node that analyzes query complexity and routes to next node.
@@ -190,6 +268,24 @@ async def router_node(state: AgentState) -> Command[Literal["retriever", "query_
         raise ValueError(
             "Extracted query is empty. Please provide a valid question.")
 
+    # Strip format/style instructions (e.g. "briefly", "in bullet points")
+    # before complexity analysis and retrieval.  These words produce low
+    # similarity scores because they don't appear in document chunks.
+    cleaned_query, format_instructions = _strip_format_instructions(query)
+    if format_instructions:
+        logger.info(
+            f"Stripped format instructions: '{format_instructions}' | "
+            f"Original: '{query[:80]}' → Cleaned: '{cleaned_query[:80]}'"
+        )
+        # Only use cleaned query if it's non-empty; otherwise keep original
+        if cleaned_query.strip():
+            query = cleaned_query
+        else:
+            logger.warning(
+                "Cleaned query is empty after stripping format instructions; "
+                "keeping original query for retrieval."
+            )
+
     logger.info(
         f"Router node: Analyzing query complexity for: {query[:100]}...")
 
@@ -225,7 +321,8 @@ async def router_node(state: AgentState) -> Command[Literal["retriever", "query_
     return Command(
         update={
             "query_complexity": complexity,
-            "original_query": query  # Store query in state for downstream nodes
+            "retrieval_query": query,  # Cleaned query (format instructions stripped) — used by retriever/expander
+            "format_instructions": format_instructions,  # For generator to honour
         },
         goto=next_node
     )

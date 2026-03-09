@@ -14,8 +14,11 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}): Pro
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = `${BASE_URL}${cleanEndpoint}`;
   
+  // Don't set Content-Type for FormData — the browser/Node sets it automatically
+  // with the correct multipart boundary. Overriding it breaks file uploads.
+  const isFormData = options.body instanceof FormData;
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...(options.headers as Record<string, string>),
   };
 

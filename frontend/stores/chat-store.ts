@@ -3,7 +3,7 @@
  */
 
 import { create } from 'zustand'
-import { Message, Citation } from '@/types/chat'
+import { Message, Citation, CitationMarker } from '@/types/chat'
 
 /**
  * Generate a stable message ID based on content and timestamp
@@ -101,7 +101,9 @@ interface ChatState {
   addAssistantMessage: (content: string, citations?: Message['citations']) => void
   startStreamingMessage: () => string  // Start a new streaming message, returns ID
   appendToStreamingMessage: (token: string) => void  // Append token to streaming message
+  resetStreamingMessage: () => void  // Discard accumulated tokens and restart (on validator retry)
   addCitationToStreamingMessage: (citation: Citation) => void  // Add citation
+  setCitationMapForMessage: (citationMap: Record<string, CitationMarker>) => void  // Set inline citation map
   finishStreamingMessage: () => void  // Mark streaming as complete
   setCurrentAgent: (agent: string | null) => void  // Set active agent
   startAgent: (agent: string) => void  // Start agent and add to history
@@ -222,6 +224,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }),
 
+  resetStreamingMessage: () =>
+    set((state) => {
+      if (!state.streamingMessageId) return state
+      return {
+        messages: state.messages.map((msg) =>
+          msg.id === state.streamingMessageId
+            ? { ...msg, content: '', citations: [], citationMap: undefined }
+            : msg
+        ),
+        // Reset streaming metrics so token timing restarts from scratch
+        streamingMetrics: {
+          tokenCount: 0,
+          startTime: null,
+          lastTokenTime: null,
+          tokensPerSecond: 0,
+          qualityScore: null,
+        },
+      }
+    }),
+
   addCitationToStreamingMessage: (citation) =>
     set((state) => {
       if (!state.streamingMessageId) return state
@@ -241,8 +263,51 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }),
 
+  setCitationMapForMessage: (citationMap) =>
+    set((state) => {
+      if (!state.streamingMessageId) return state
+      // Trim citations to only those actually referenced in the response
+      // and stamp each with its marker index from the citation_map.
+      const chunkIdToIndex = new Map<string, number>()
+      for (const [marker, source] of Object.entries(citationMap)) {
+        const idx = parseInt(marker, 10)
+        if (!Number.isNaN(idx) && Number.isFinite(idx)) {
+          chunkIdToIndex.set(source.chunk_id, idx)
+        }
+      }
+      return {
+        messages: state.messages.map((msg) =>
+          msg.id === state.streamingMessageId
+            ? {
+                ...msg,
+                citationMap,
+                citations: (msg.citations || [])
+                  .filter(c => chunkIdToIndex.has(c.chunk_id))
+                  .map(c => {
+                    const chunk_index = chunkIdToIndex.get(c.chunk_id)
+                    return chunk_index !== undefined ? { ...c, chunk_index } : c
+                  }),
+              }
+            : msg
+        ),
+      }
+    }),
+
   finishStreamingMessage: () =>
-    set({ streamingMessageId: null }),
+    set((state) => {
+      const { streamingMessageId, streamingMetrics } = state
+      const lowConfidence =
+        streamingMetrics.qualityScore !== null &&
+        streamingMetrics.qualityScore < 0.6
+      return {
+        streamingMessageId: null,
+        messages: state.messages.map((msg) =>
+          msg.id === streamingMessageId && lowConfidence
+            ? { ...msg, lowConfidence: true }
+            : msg
+        ),
+      }
+    }),
 
   setCurrentAgent: (agent) =>
     set({ currentAgent: agent }),
@@ -419,21 +484,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const currentState = get()
       
       // Skip loading if:
-      // 1. Stream is active (streamingMessageId !== null) - for any thread
-      // 2. Messages already exist AND we're already viewing this thread (no reload needed)
+      // 1. Stream is active (streamingMessageId !== null) - only for the same thread
+      // 2. isLoading=true means a stream is in flight - only for the same thread
+      // 3. Messages already exist AND we're already viewing this thread (no reload needed)
       // BUT allow loading when navigating to a DIFFERENT thread
-      if (currentState.streamingMessageId !== null || 
-          (currentState.messages.length > 0 && currentState.currentThreadId === threadId)) {
+      const isSameThread = currentState.currentThreadId === threadId
+      if (
+        (currentState.streamingMessageId !== null && isSameThread) ||
+        (currentState.isLoading && isSameThread) ||
+        (currentState.messages.length > 0 && isSameThread)
+      ) {
         console.log('[loadThread] Skipping load - stream active or already on this thread', {
           streaming: currentState.streamingMessageId !== null,
           messageCount: currentState.messages.length,
           currentThreadId: currentState.currentThreadId,
           requestedThreadId: threadId,
-          isSameThread: currentState.currentThreadId === threadId
+          isSameThread
         })
         // Just update the threadId to match the URL, keep existing messages
         // Only do this if we're staying on the same thread
-        if (currentState.currentThreadId === threadId) {
+        if (isSameThread) {
           set({ currentThreadId: threadId })
         }
         return
@@ -468,6 +538,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         content: string;
         timestamp?: string;
         citations?: Citation[];
+        citation_map?: Record<string, CitationMarker> | null;
       }, index: number) => {
         // Use backend ID if present, otherwise generate stable ID.
         // When no timestamp is available, use the position-in-thread as the
@@ -484,6 +555,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           content: msg.content,
           timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
           citations: msg.citations || [],
+          citationMap: msg.citation_map ?? undefined,
         }
       })
       

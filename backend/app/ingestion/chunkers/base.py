@@ -225,6 +225,26 @@ class BaseChunker(ABC):
         """
         pass
 
+    async def achunk(self, text: str, **kwargs: Any) -> list[Chunk]:
+        """
+        Async version of chunk().
+
+        Default implementation delegates to chunk(), so all existing chunkers
+        automatically support async callers (e.g., IngestionPipeline._chunk_text)
+        without any changes.
+
+        ContextualChunker overrides this to run concurrent LLM calls for
+        per-chunk context enrichment.
+
+        Args:
+            text: Text to chunk
+            **kwargs: Strategy-specific parameters (forwarded to chunk())
+
+        Returns:
+            List of Chunk objects with metadata
+        """
+        return self.chunk(text, **kwargs)
+
     @abstractmethod
     def get_strategy_name(self) -> ChunkStrategy:
         """

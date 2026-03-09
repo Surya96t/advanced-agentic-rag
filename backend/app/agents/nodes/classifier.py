@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from app.agents.state import AgentState
 from app.core.config import settings
 from app.utils.logger import get_logger
+from app.utils.observability import trace_node
 
 logger = get_logger(__name__)
 
@@ -51,6 +52,7 @@ def format_messages_for_classifier(messages: list) -> str:
     return "\n".join(lines) if lines else "No previous context"
 
 
+@trace_node("classifier")
 async def classify_query(state: AgentState) -> Command:
     """
     Classify the user's query to determine routing.

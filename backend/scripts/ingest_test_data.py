@@ -77,7 +77,7 @@ async def ingest_file(pipeline: IngestionPipeline, file_path: Path) -> None:
             file_bytes = f.read()
 
         # Ingest document
-        result = await pipeline.ingest_document(
+        result, _ = await pipeline.ingest_document(
             file_bytes=file_bytes,
             filename=file_path.name,
             user_id=TEST_USER_ID,

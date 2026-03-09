@@ -145,3 +145,7 @@ def get_db() -> Client:
         ```
     """
     return SupabaseClient.get_client()
+
+
+# Alias used in tests and external code
+get_supabase_client = get_db

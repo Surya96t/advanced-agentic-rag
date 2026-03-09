@@ -223,12 +223,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        {/* Main Navigation - pinned above scrollable area */}
+        <NavMain items={data.navMain} />
       </SidebarHeader>
 
       <SidebarContent>
-        {/* Main Navigation */}
-        <NavMain items={data.navMain} />
-
         {/* Conversation History (collapsible section) - Only render on client to avoid hydration mismatch */}
         {mounted && (
           <Collapsible defaultOpen={true} className="group/collapsible">
@@ -283,7 +282,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                             )}>
                               <SidebarMenuButton
                                 onClick={() => !isEditing && handleThreadClick(thread.id)}
-                                className="flex-1"
+                                className="flex-1 h-auto py-1.5"
                                 tooltip={!isEditing ? thread.title : undefined}
                                 disabled={isEditing}
                               >

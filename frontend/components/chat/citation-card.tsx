@@ -6,7 +6,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown, Copy, ExternalLink, Check } from 'lucide-react'
+import { ChevronDown, Copy, Check, FileDown, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -15,11 +15,15 @@ import type { Citation } from '@/types/chat'
 interface CitationCardProps {
   citation: Citation
   index: number
+  /** Display label for the badge (e.g. chunk_index). Falls back to index+1. */
+  label?: number
 }
 
-export function CitationCard({ citation, index }: CitationCardProps) {
+export function CitationCard({ citation, index, label }: CitationCardProps) {
+  const displayLabel = label ?? (index + 1)
   const [isExpanded, setIsExpanded] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
+  const [isLoadingSource, setIsLoadingSource] = useState(false)
 
   // Use the reranked/final score first (mapped to similarity_score in frontend), fallback to original_score
   // In RRF/Reranking, the final 'score' is the high-quality one
@@ -40,6 +44,33 @@ export function CitationCard({ citation, index }: CitationCardProps) {
     setTimeout(() => setIsCopied(false), 2000)
   }
 
+  const handleViewSource = async () => {
+    // Open a placeholder popup synchronously — popups opened after an `await` are
+    // blocked by browsers; a synchronous open is treated as a direct user gesture.
+    // Note: noopener/noreferrer are intentionally omitted here because passing either
+    // causes window.open() to return null (per spec), which would sever our reference
+    // before we can navigate the popup to the signed URL.
+    const popup = window.open('', '_blank')
+    if (!popup) return
+
+    setIsLoadingSource(true)
+    try {
+      const res = await fetch(`/api/documents/${citation.document_id}/signed-url`)
+      if (!res.ok) {
+        // No blob stored or endpoint error — fall back to the document detail page
+        popup.location.href = `/documents/${citation.document_id}`
+        return
+      }
+      const { url } = (await res.json()) as { url: string }
+      popup.location.href = url
+    } catch {
+      // Network error — fall back gracefully
+      popup.location.href = `/documents/${citation.document_id}`
+    } finally {
+      setIsLoadingSource(false)
+    }
+  }
+
   return (
     <div className="inline-block">
       {/* Collapsed Pill */}
@@ -54,7 +85,7 @@ export function CitationCard({ citation, index }: CitationCardProps) {
           aria-controls={`citation-content-${index}`}
           title={`${citation.document_title} (${scorePercentage}% match)`}
         >
-          <span className="font-mono">[{index + 1}]</span>
+          <span className="font-mono">[{displayLabel}]</span>
         </button>
       ) : (
         /* Expanded Card */
@@ -76,7 +107,7 @@ export function CitationCard({ citation, index }: CitationCardProps) {
             
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <span className="font-mono text-xs text-muted-foreground">[{index + 1}]</span>
+                <span className="font-mono text-xs text-muted-foreground">[{displayLabel}]</span>
                 <h4 className="font-medium text-xs truncate">
                   {citation.document_title}
                 </h4>
@@ -122,17 +153,21 @@ export function CitationCard({ citation, index }: CitationCardProps) {
             <Button
               variant="ghost"
               size="sm"
-              asChild
+              onClick={handleViewSource}
+              disabled={isLoadingSource}
               className="h-6 px-2 text-[10px]"
             >
-              <a 
-                href={`/documents/${citation.document_id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <ExternalLink className="h-2.5 w-2.5 mr-1" />
-                View
-              </a>
+              {isLoadingSource ? (
+                <>
+                  <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />
+                  Loading
+                </>
+              ) : (
+                <>
+                  <FileDown className="h-2.5 w-2.5 mr-1" />
+                  View Source
+                </>
+              )}
             </Button>
           </div>
         </div>

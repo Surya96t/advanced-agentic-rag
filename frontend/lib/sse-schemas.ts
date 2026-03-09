@@ -18,8 +18,14 @@ export const TokenEventSchema = z.object({
   model: z.string().optional(),
 })
 
+/** Emitted when the validator retries — the frontend should clear its streaming buffer. */
+export const TokenResetEventSchema = z.object({
+  reason: z.string().optional(),
+})
+
 export const CitationEventSchema = z.object({
   chunk_id: z.string(),
+  document_id: z.string().optional(),
   document_title: z.string(),
   content: z.string().nullish(),
   preview: z.string().nullish(),       // backend sends null when no preview — must use nullish()
@@ -99,12 +105,30 @@ export const ThreadTitleEventSchema = z.object({
   timestamp: z.string().optional(),
 })
 
+/** Emitted after generator completes with a mapping from inline [N] marker to source. */
+export const CitationMarkerSchema = z.object({
+  chunk_id: z.string(),
+  document_id: z.string().optional(),
+  document_title: z.string(),
+  content: z.string().optional(),
+  score: z.number().optional(),
+  source: z.string().optional(),
+})
+
+export const CitationMapEventSchema = z.object({
+  /** Keys are string marker numbers ("1", "2", ...) matching inline [N] in the response. */
+  markers: z.record(z.string(), CitationMarkerSchema),
+})
+
+export type CitationMarker = z.infer<typeof CitationMarkerSchema>
+
 // ---------------------------------------------------------------------------
 // Registry — maps SSE event name → schema
 // ---------------------------------------------------------------------------
 
 export const eventSchemas = {
   token: TokenEventSchema,
+  token_reset: TokenResetEventSchema,
   citation: CitationEventSchema,
   agent_start: AgentStartEventSchema,
   agent_complete: AgentCompleteEventSchema,
@@ -117,6 +141,7 @@ export const eventSchemas = {
   context_status: ContextStatusEventSchema,
   conversation_summary: ConversationSummaryEventSchema,
   thread_title: ThreadTitleEventSchema,
+  citation_map: CitationMapEventSchema,
 } as const
 
 export type EventSchemas = typeof eventSchemas

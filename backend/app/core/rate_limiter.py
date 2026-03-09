@@ -137,6 +137,61 @@ class RedisRateLimiter:
             logger.error(f"Unexpected error in rate limiter: {e}")
             return (True, 0, 0)
 
+    def peek_rate_limit(
+        self, user_id: str, endpoint: str = "default"
+    ) -> Optional[Tuple[int, int, int]]:
+        """
+        Return (limit, remaining, reset) for an endpoint WITHOUT recording a request.
+
+        Used by the rate-limit status endpoint so it doesn't consume a slot.
+        ``reset`` is the Unix epoch second at which the oldest in-window request
+        expires and a new slot opens — i.e. ``oldest_entry_timestamp + window``.
+        Returns 0 for reset when the bucket is empty (no requests in window).
+        Returns None when Redis is unavailable.
+
+        Args:
+            user_id: User identifier
+            endpoint: API endpoint name
+
+        Returns:
+            Tuple of (limit, remaining, reset), or None if Redis is unavailable.
+        """
+        if not settings.rate_limit_enabled:
+            return (0, 0, 0)
+
+        try:
+            redis_client = self._get_redis()
+            key = get_rate_limit_key(user_id, endpoint)
+            limit, window = get_endpoint_limits(endpoint)
+
+            now = time.time()
+            window_start = now - window
+
+            pipe = redis_client.pipeline()
+            pipe.zremrangebyscore(key, 0, window_start)   # index 0: removed count
+            pipe.zcard(key)                                # index 1: current count
+            pipe.expire(key, window)                       # index 2: True/False
+            pipe.zrange(key, 0, 0, withscores=True)        # index 3: oldest entry
+            results = pipe.execute()
+
+            current_count = results[1]
+            remaining = max(0, limit - current_count)
+
+            # Derive reset from the actual oldest entry score so it reflects the
+            # real sliding-window expiry rather than a recomputed now+window.
+            oldest_entries = results[3]  # list of (member, score) or []
+            if oldest_entries:
+                reset = int(oldest_entries[0][1] + window)
+            else:
+                # Bucket is empty — no pending expiry, no reset needed.
+                reset = 0
+
+            return (limit, remaining, reset)
+
+        except (RedisError, Exception) as e:
+            logger.error(f"Error in peek_rate_limit: {e}")
+            return None
+
     def close(self):
         """Close Redis connection pool."""
         if self._pool:

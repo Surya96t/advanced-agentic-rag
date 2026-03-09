@@ -101,6 +101,7 @@ class AgentState(TypedDict, total=False):
 
     # Query processing (original_query is required)
     original_query: str
+    retrieval_query: str  # Cleaned/rewritten query used for retrieval (format instructions stripped)
     query: str  # Current working query (may be expanded/rewritten)
     expanded_queries: list[str]
     query_complexity: Literal["simple", "complex", "ambiguous"]
@@ -118,6 +119,7 @@ class AgentState(TypedDict, total=False):
 
     # Generation
     generated_response: str
+    format_instructions: str  # Format/style directives extracted from user query (e.g. "briefly", "in bullet points")
 
     # Validation
     validation_result: dict[str, Any]

@@ -198,7 +198,7 @@ class HybridSearcher:
             # Update source to "hybrid" for consistency
             for result in results:
                 result.source = "hybrid"
-            return results
+            return await self._swap_children_for_parents(results, user_id)
 
         if config.hybrid_alpha <= 0.0:
             # Pure text search
@@ -207,7 +207,7 @@ class HybridSearcher:
             # Update source to "hybrid" for consistency
             for result in results:
                 result.source = "hybrid"
-            return results
+            return await self._swap_children_for_parents(results, user_id)
 
         # True hybrid: run both searches in parallel for speed
         logger.debug("Running vector and text search in parallel")
@@ -235,7 +235,7 @@ class HybridSearcher:
             fused_count=len(fused_results),
         )
 
-        return fused_results
+        return await self._swap_children_for_parents(fused_results, user_id)
 
     def _reciprocal_rank_fusion(
         self,
@@ -358,3 +358,129 @@ class HybridSearcher:
             )
 
         return fused_results
+
+    # ------------------------------------------------------------------
+    # Parent-child retrieval: swap child chunks for their parent chunks
+    # ------------------------------------------------------------------
+
+    async def _swap_children_for_parents(
+        self,
+        results: list[SearchResult],
+        user_id: str,
+    ) -> list[SearchResult]:
+        """
+        Replace child-chunk content with its parent's content.
+
+        When a document was ingested with :class:`ParentChildChunker`, the
+        vector index only contains *child* chunks (small, focused).  Returning
+        child content to the LLM gives poor context.  This method swaps each
+        child's content for the richer parent paragraph while keeping the
+        child's metadata and scores for accurate citations.
+
+        Algorithm (two batch DB queries — no N+1)
+        ------------------------------------------
+        1. Batch-fetch ``chunk_type`` + ``parent_chunk_id`` for all result chunks.
+        2. Collect unique ``parent_chunk_id`` values for child chunks.
+        3. Batch-fetch ``content`` for those parent DB rows.
+        4. Rebuild the result list: children → parent content; others unchanged.
+
+        If a child has no parent recorded (edge case / legacy data), falls back
+        to the child content unchanged.
+
+        Args:
+            results:  RRF-fused search results (may be child chunks).
+            user_id:  Authenticated user ID (used for safety filter on lookup).
+
+        Returns:
+            The same list with child content replaced by parent content.
+        """
+        if not results:
+            return results
+
+        chunk_ids = [str(r.chunk_id) for r in results]
+
+        # Step 1: batch-fetch chunk_type + parent_chunk_id
+        try:
+            info_result = await asyncio.to_thread(
+                lambda: (
+                    self.db.table("document_chunks")
+                    .select("id, chunk_type, parent_chunk_id")
+                    .eq("user_id", user_id)
+                    .in_("id", chunk_ids)
+                    .execute()
+                )
+            )
+        except Exception as exc:
+            logger.warning("Parent-swap info query failed; returning originals", error=str(exc))
+            return results
+
+        chunk_info: dict[str, dict] = {
+            row["id"]: row for row in (info_result.data or [])
+        }
+
+        # Step 2: find which results are children with a parent
+        parent_ids_needed: set[str] = {
+            row["parent_chunk_id"]
+            for row in chunk_info.values()
+            if row.get("chunk_type") == "child" and row.get("parent_chunk_id")
+        }
+
+        if not parent_ids_needed:
+            # No parent-child chunks in these results — nothing to swap.
+            return results
+
+        # Step 3: batch-fetch parent content
+        try:
+            parent_result = await asyncio.to_thread(
+                lambda: (
+                    self.db.table("document_chunks")
+                    .select("id, content")
+                    .eq("user_id", user_id)
+                    .in_("id", list(parent_ids_needed))
+                    .execute()
+                )
+            )
+        except Exception as exc:
+            logger.warning("Parent content query failed; returning originals", error=str(exc))
+            return results
+
+        parent_content: dict[str, str] = {
+            row["id"]: row["content"]
+            for row in (parent_result.data or [])
+        }
+
+        # Step 4: rebuild result list with swapped content
+        # seen_parent_ids ensures each parent paragraph appears at most once.
+        # results are already ranked by score, so the first child for a given
+        # parent is the highest-ranked one — subsequent siblings are skipped.
+        swapped: list[SearchResult] = []
+        seen_parent_ids: set[str] = set()
+        swapped_count = 0
+
+        for result in results:
+            info = chunk_info.get(str(result.chunk_id))
+
+            if not info or info.get("chunk_type") != "child":
+                swapped.append(result)
+                continue
+
+            parent_id = info.get("parent_chunk_id")
+            parent_text = parent_content.get(parent_id) if parent_id else None
+
+            if parent_text:
+                if parent_id in seen_parent_ids:
+                    # A sibling child already contributed this parent's text — skip.
+                    continue
+                seen_parent_ids.add(parent_id)
+                swapped.append(result.model_copy(update={"content": parent_text}))
+                swapped_count += 1
+            else:
+                # Fallback: no parent found, keep child content
+                swapped.append(result)
+
+        logger.debug(
+            "Parent-child swap complete",
+            total=len(results),
+            swapped=swapped_count,
+        )
+        return swapped

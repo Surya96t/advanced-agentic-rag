@@ -276,7 +276,7 @@ async def test_documents(
         with open(file_path, "rb") as f:
             file_bytes = f.read()
 
-        result = await ingestion_pipeline.ingest_document(
+        result, _ = await ingestion_pipeline.ingest_document(
             file_bytes=file_bytes,
             filename=file_path.name,
             user_id=test_user_id,
