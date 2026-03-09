@@ -10,9 +10,12 @@ can be parsed by log aggregators (JSON in prod, pretty-print in dev).
 import functools
 import time
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Awaitable, Callable, Optional, ParamSpec, TypeVar
 
 from app.utils.logger import get_logger
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 logger = get_logger(__name__)
 
@@ -89,12 +92,12 @@ def trace_node(name: str):
             ...
     """
 
-    def decorator(fn):
+    def decorator(fn: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
         @functools.wraps(fn)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             # First positional arg is always AgentState for every node type
-            state = args[0] if args else kwargs.get("state")
-            if not state:
+            state: Optional[dict[str, Any]] = args[0] if args else kwargs.get("state")  # type: ignore[assignment]
+            if state is None:
                 logger.warning(
                     "trace_node wrapper received no state",
                     node=name,

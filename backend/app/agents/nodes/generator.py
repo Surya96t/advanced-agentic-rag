@@ -332,7 +332,7 @@ async def generator_node(state: AgentState) -> dict:
             "messages": [AIMessage(
                 content=full_response,
                 additional_kwargs={"citations": citations, "citation_map": citation_map},
-                response_metadata={"citations": citations},
+                response_metadata={"citations": citations, "citation_map": citation_map},
             )],
             "generated_response": full_response,
             "metadata": {

@@ -180,10 +180,11 @@ async def query_expander_node(state: AgentState) -> dict:
         ["Authentication system configuration", "Database connection setup", "Integrating authentication with database"]
     """
     start_time = time.time()
-    # Use the router-cleaned original_query (format instructions already stripped)
-    query = state.get("original_query")
+    # Prefer retrieval_query (format instructions already stripped by router);
+    # fall back to original_query when router was bypassed (e.g. direct invocation).
+    query = state.get("retrieval_query") or state.get("original_query")
     if not query:
-        logger.error("Missing original_query in state")
+        logger.error("Missing query in state: retrieval_query or original_query")
         return {"expanded_queries": []}
 
     complexity = state.get("query_complexity", "simple")

@@ -10,7 +10,7 @@ import { useEffect, useCallback, useRef } from 'react'
 interface KeyboardShortcutsConfig {
   /** Focus the input field (Cmd/Ctrl + K) */
   onFocus?: () => void
-  /** Cancel streaming (Esc) */
+  /** Cancel streaming (Cmd/Ctrl + Esc) */
   onCancel?: () => void
   /** Show help modal (Cmd/Ctrl + /) */
   onShowHelp?: () => void
@@ -85,8 +85,8 @@ export function useKeyboardShortcuts({
       return
     }
 
-    // Esc → Cancel streaming
-    if (event.key === 'Escape') {
+    // Cmd/Ctrl + Esc → Cancel streaming
+    if (modKey && event.key === 'Escape') {
       onCancel?.()
       return
     }

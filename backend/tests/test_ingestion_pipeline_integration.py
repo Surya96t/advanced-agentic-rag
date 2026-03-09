@@ -183,7 +183,7 @@ async def test_ingest_real_document(pipeline, test_user_id, progress_tracker):
     print(f"{'='*80}")
 
     # Ingest document
-    document = await pipeline.ingest_document(
+    document, _ = await pipeline.ingest_document(
         file_bytes=file_bytes,
         filename=TEST_FILE.name,
         user_id=test_user_id,
@@ -277,7 +277,7 @@ async def test_duplicate_detection(pipeline, test_user_id, progress_tracker):
 
     # First ingestion
     print("\n[1] First ingestion (should create new document)...")
-    doc1 = await pipeline.ingest_document(
+    doc1, _ = await pipeline.ingest_document(
         file_bytes=file_bytes,
         filename="test_duplicate.md",
         user_id=test_user_id,
@@ -290,7 +290,7 @@ async def test_duplicate_detection(pipeline, test_user_id, progress_tracker):
 
     # Second ingestion (same content, should be deduplicated)
     print("\n[2] Second ingestion (should return existing document)...")
-    doc2 = await pipeline.ingest_document(
+    doc2, is_duplicate = await pipeline.ingest_document(
         file_bytes=file_bytes,
         filename="test_duplicate.md",  # Same filename
         user_id=test_user_id,
@@ -301,6 +301,7 @@ async def test_duplicate_detection(pipeline, test_user_id, progress_tracker):
     print(f"  Returned document {doc2.id}")
 
     # Validate deduplication
+    assert is_duplicate, "Second ingestion of same content should be flagged as duplicate"
     assert doc1.id == doc2.id, "Should return same document ID"
     assert doc2.chunk_count == first_chunk_count, "Chunk count should be unchanged"
 
@@ -340,7 +341,7 @@ async def test_multiple_documents(pipeline, test_user_id, progress_tracker):
             file_bytes = f.read()
 
         print(f"\nIngesting: {test_file.name}")
-        doc = await pipeline.ingest_document(
+        doc, _ = await pipeline.ingest_document(
             file_bytes=file_bytes,
             filename=test_file.name,
             user_id=test_user_id,

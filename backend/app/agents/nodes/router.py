@@ -31,31 +31,40 @@ CONFIDENCE_THRESHOLD = 0.85
 # users add to queries.  These words have no counterpart in document chunks and
 # produce low similarity scores → validator retry loops.
 _FORMAT_PATTERNS: list[tuple[str, str]] = [
+    # ── Multi-word / highly-specific patterns ─────────────────────────────────
+    # These are specific enough that they rarely appear as domain terms;
+    # kept unanchored so they match regardless of position in the query.
+
     # Sentence count: "in 3 sentences", "in a sentence", "in one sentence"
-    (r"\bin\s+(?:a|an|one|\d+)\s+sentences?\b", ""),
+    (r"\bin\s+(?:a|an|one|\d+)\s+sentences?\b", "in N sentences"),
     # Bullet formats
     (r"\b(?:in|as)\s+bullet[\s-]points?\b", "in bullet points"),
     (r"\bin\s+bullets\b", "in bullet points"),
     # ELI5
     (r"\bexplain\s+like\s+(?:i'?m|you'?re)\s+(?:five|5|\d+)\b", "explain like I'm 5"),
-    (r"\beli5\b", "explain like I'm 5"),
+    (r"\beli5\s*$", "explain like I'm 5"),
     # Step by step
     (r"\bstep[- ]by[- ]step\b", "step by step"),
     # Table format
     (r"\b(?:in|as)\s+a\s+table\b", "in a table"),
-    # Single-word / short-phrase modifiers (specific before generic)
-    (r"\bconcisely\b", "concisely"),
-    (r"\bbriefly\b", "briefly"),
-    (r"\bin\s+short\b", "briefly"),
-    (r"\bshortly\b", "briefly"),
-    (r"\btl[;:]?dr\b", "briefly"),
-    (r"\bsummariz[ei]\b", "summarize"),
-    (r"\bsummariz(?:ation|ing)\b", "summarize"),
-    (r"\bsummar(?:y|ise)\b", "summarize"),
-    (r"\bin\s+depth\b", "in detail"),
-    (r"\bin\s+detail\b", "in detail"),
-    (r"\bdetailed(?:ly)?\b", "in detail"),
-    (r"\bverbose(?:ly)?\b", "in detail"),
+
+    # ── Single-word / short-phrase modifiers — anchored to end-of-string ──────
+    # Without anchoring, terms like "summarize", "detailed", "verbose" are
+    # indistinguishable from genuine subject matter (e.g. "how do I summarize
+    # docs with LangChain?" or "explain verbose logging in Python").
+    # \s*$ allows optional trailing whitespace/punctuation after the word.
+    (r"\bconcisely\s*$", "concisely"),
+    (r"\bbriefly\s*$", "briefly"),
+    (r"\bin\s+short\s*$", "briefly"),
+    (r"\bshortly\s*$", "briefly"),
+    (r"\btl[;:]?dr\s*$", "briefly"),
+    (r"\bsummariz[ei]\s*$", "summarize"),
+    (r"\bsummariz(?:ation|ing)\s*$", "summarize"),
+    (r"\bsummar(?:y|ise)\s*$", "summarize"),
+    (r"\bin\s+depth\s*$", "in detail"),
+    (r"\bin\s+detail\s*$", "in detail"),
+    (r"\bdetailed(?:ly)?\s*$", "in detail"),
+    (r"\bverbose(?:ly)?\s*$", "in detail"),
 ]
 
 
@@ -312,7 +321,7 @@ async def router_node(state: AgentState) -> Command[Literal["retriever", "query_
     return Command(
         update={
             "query_complexity": complexity,
-            "original_query": query,  # Store cleaned query for downstream nodes
+            "retrieval_query": query,  # Cleaned query (format instructions stripped) — used by retriever/expander
             "format_instructions": format_instructions,  # For generator to honour
         },
         goto=next_node

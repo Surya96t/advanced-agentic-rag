@@ -405,6 +405,7 @@ class HybridSearcher:
                 lambda: (
                     self.db.table("document_chunks")
                     .select("id, chunk_type, parent_chunk_id")
+                    .eq("user_id", user_id)
                     .in_("id", chunk_ids)
                     .execute()
                 )
@@ -434,6 +435,7 @@ class HybridSearcher:
                 lambda: (
                     self.db.table("document_chunks")
                     .select("id, content")
+                    .eq("user_id", user_id)
                     .in_("id", list(parent_ids_needed))
                     .execute()
                 )
@@ -448,7 +450,11 @@ class HybridSearcher:
         }
 
         # Step 4: rebuild result list with swapped content
+        # seen_parent_ids ensures each parent paragraph appears at most once.
+        # results are already ranked by score, so the first child for a given
+        # parent is the highest-ranked one — subsequent siblings are skipped.
         swapped: list[SearchResult] = []
+        seen_parent_ids: set[str] = set()
         swapped_count = 0
 
         for result in results:
@@ -462,6 +468,10 @@ class HybridSearcher:
             parent_text = parent_content.get(parent_id) if parent_id else None
 
             if parent_text:
+                if parent_id in seen_parent_ids:
+                    # A sibling child already contributed this parent's text — skip.
+                    continue
+                seen_parent_ids.add(parent_id)
                 swapped.append(result.model_copy(update={"content": parent_text}))
                 swapped_count += 1
             else:

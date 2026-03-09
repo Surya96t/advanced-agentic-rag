@@ -454,7 +454,7 @@ async def ingest_document(
     # ========================================================================
 
     try:
-        document = await pipeline.ingest_document(
+        document, _ = await pipeline.ingest_document(
             file_bytes=file_content,
             filename=file.filename,
             user_id=user_id,

@@ -230,7 +230,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return {
         messages: state.messages.map((msg) =>
           msg.id === state.streamingMessageId
-            ? { ...msg, content: '', citations: [] }
+            ? { ...msg, content: '', citations: [], citationMap: undefined }
             : msg
         ),
         // Reset streaming metrics so token timing restarts from scratch
@@ -270,7 +270,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // and stamp each with its marker index from the citation_map.
       const chunkIdToIndex = new Map<string, number>()
       for (const [marker, source] of Object.entries(citationMap)) {
-        chunkIdToIndex.set(source.chunk_id, parseInt(marker, 10))
+        const idx = parseInt(marker, 10)
+        if (!Number.isNaN(idx) && Number.isFinite(idx)) {
+          chunkIdToIndex.set(source.chunk_id, idx)
+        }
       }
       return {
         messages: state.messages.map((msg) =>
@@ -280,7 +283,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 citationMap,
                 citations: (msg.citations || [])
                   .filter(c => chunkIdToIndex.has(c.chunk_id))
-                  .map(c => ({ ...c, chunk_index: chunkIdToIndex.get(c.chunk_id) })),
+                  .map(c => {
+                    const chunk_index = chunkIdToIndex.get(c.chunk_id)
+                    return chunk_index !== undefined ? { ...c, chunk_index } : c
+                  }),
               }
             : msg
         ),
@@ -478,25 +484,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const currentState = get()
       
       // Skip loading if:
-      // 1. Stream is active (streamingMessageId !== null) - for any thread
-      // 2. isLoading=true means a stream is in flight (belt-and-suspenders guard)
+      // 1. Stream is active (streamingMessageId !== null) - only for the same thread
+      // 2. isLoading=true means a stream is in flight - only for the same thread
       // 3. Messages already exist AND we're already viewing this thread (no reload needed)
       // BUT allow loading when navigating to a DIFFERENT thread
+      const isSameThread = currentState.currentThreadId === threadId
       if (
-        currentState.streamingMessageId !== null ||
-        currentState.isLoading ||
-        (currentState.messages.length > 0 && currentState.currentThreadId === threadId)
+        (currentState.streamingMessageId !== null && isSameThread) ||
+        (currentState.isLoading && isSameThread) ||
+        (currentState.messages.length > 0 && isSameThread)
       ) {
         console.log('[loadThread] Skipping load - stream active or already on this thread', {
           streaming: currentState.streamingMessageId !== null,
           messageCount: currentState.messages.length,
           currentThreadId: currentState.currentThreadId,
           requestedThreadId: threadId,
-          isSameThread: currentState.currentThreadId === threadId
+          isSameThread
         })
         // Just update the threadId to match the URL, keep existing messages
         // Only do this if we're staying on the same thread
-        if (currentState.currentThreadId === threadId) {
+        if (isSameThread) {
           set({ currentThreadId: threadId })
         }
         return

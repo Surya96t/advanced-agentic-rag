@@ -16,6 +16,7 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Protocol, runtime_checkable
 
 from app.core.config import get_settings
@@ -128,18 +129,18 @@ class SupabaseStorageClient:
     ) -> str:
         """Upload *data* to *path* in the Supabase ``documents`` bucket.
 
-        supabase-py's ``storage.upload()`` is synchronous (it uses httpx
-        under the hood without an async wrapper), so we call it directly.
-        The operation is fast enough for the sizes we accept (<50 MB) that
-        blocking in the FastAPI thread-pool is acceptable.  A future
-        improvement could wrap it in ``asyncio.to_thread()``.
+        The supabase-py storage client is synchronous (httpx without an async
+        wrapper), so the call is offloaded to a thread via asyncio.to_thread
+        to avoid blocking the event loop.
         """
         try:
             logger.debug("Uploading file to Supabase Storage", path=path, bucket=self._bucket)
-            self._storage().upload(
-                path=path,
-                file=data,
-                file_options={"content-type": content_type, "upsert": "true"},
+            await asyncio.to_thread(
+                lambda: self._storage().upload(
+                    path=path,
+                    file=data,
+                    file_options={"content-type": content_type, "upsert": "true"},
+                )
             )
             logger.info("File uploaded to storage", path=path, bucket=self._bucket)
             return path
@@ -155,7 +156,9 @@ class SupabaseStorageClient:
         """Generate a signed URL for *path* in Supabase Storage."""
         try:
             logger.debug("Generating signed URL", path=path, expires_in=expires_in)
-            result = self._storage().create_signed_url(path=path, expires_in=expires_in)
+            result = await asyncio.to_thread(
+                lambda: self._storage().create_signed_url(path=path, expires_in=expires_in)
+            )
 
             # supabase-py returns {"signedURL": "..."} or raises on failure
             signed_url: str | None = None
@@ -172,6 +175,13 @@ class SupabaseStorageClient:
         except (StorageSignedUrlError, StorageNotFoundError):
             raise
         except Exception as exc:
+            # Detect missing-object errors from the Supabase storage3 library.
+            # StorageApiError carries a .status attribute (int or str) set from
+            # the HTTP response status code; 404 means the object doesn't exist.
+            status = getattr(exc, "status", None)
+            if status is not None and int(status) == 404:
+                logger.warning("Storage object not found", path=path)
+                raise StorageNotFoundError(f"Object not found at path: {path}") from exc
             logger.error("Failed to generate signed URL", path=path, error=str(exc))
             raise StorageSignedUrlError(f"Failed to generate signed URL: {exc}") from exc
 
@@ -179,7 +189,7 @@ class SupabaseStorageClient:
         """Delete *path* from Supabase Storage."""
         try:
             logger.debug("Deleting file from storage", path=path, bucket=self._bucket)
-            self._storage().remove([path])
+            await asyncio.to_thread(lambda: self._storage().remove([path]))
             logger.info("File deleted from storage", path=path)
         except Exception as exc:
             logger.error("Storage deletion failed", path=path, error=str(exc))
@@ -249,13 +259,13 @@ def get_storage_client() -> StorageClient:
 
     The backend is selected by ``settings.storage_backend``:
     - ``"supabase"`` (default) → :class:`SupabaseStorageClient`
-    - ``"azure"``              → :class:`AzureBlobStorageClient` (stub)
+    - ``"azure"``              → not yet implemented; raises ``ValueError`` at startup.
 
     Returns:
         A :class:`StorageClient` instance.
 
     Raises:
-        ValueError: If ``storage_backend`` is unsupported.
+        ValueError: If ``storage_backend`` is unsupported or not yet implemented.
     """
     global _storage_client
 
@@ -269,11 +279,14 @@ def get_storage_client() -> StorageClient:
     if backend == "supabase":
         _storage_client = SupabaseStorageClient(bucket=bucket)
     elif backend == "azure":
-        _storage_client = AzureBlobStorageClient(container=bucket)
+        raise ValueError(
+            "Azure Blob Storage backend is not yet implemented. "
+            "Set STORAGE_BACKEND to 'supabase'."
+        )
     else:
         raise ValueError(
             f"Unsupported storage backend: {backend!r}. "
-            "Set STORAGE_BACKEND to 'supabase' or 'azure'."
+            "Set STORAGE_BACKEND to 'supabase'."
         )
 
     logger.info("Storage client initialised", backend=backend, bucket=bucket)

@@ -75,11 +75,22 @@ def _parse_args() -> argparse.Namespace:
         help="user_id assigned to all ingested documents. "
              "Use 'system' for enterprise corpus (two-tier RLS).",
     )
+    def _positive_int(value: str) -> int:
+        try:
+            n = int(value)
+        except ValueError:
+            raise argparse.ArgumentTypeError(f"{value!r} is not an integer")
+        if n <= 0:
+            raise argparse.ArgumentTypeError(
+                f"--concurrency must be >= 1, got {n}"
+            )
+        return n
+
     parser.add_argument(
         "--concurrency",
-        type=int,
+        type=_positive_int,
         default=5,
-        help="Maximum number of documents to process in parallel.",
+        help="Maximum number of documents to process in parallel (must be >= 1).",
     )
     parser.add_argument(
         "--dry-run",
@@ -119,17 +130,12 @@ async def _ingest_file(
             return f"failed: cannot read file — {exc}"
 
         try:
-            doc = await pipeline.ingest_document(
+            doc, is_duplicate = await pipeline.ingest_document(
                 file_bytes=file_bytes,
                 filename=path.name,
                 user_id=user_id,
                 metadata={"document_title": path.stem},
             )
-            # The pipeline returns the existing document when a duplicate is detected
-            # (matched by content_hash). A completed doc always has content_hash set;
-            # if chunk_count is 0 the doc is still processing (shouldn't happen here
-            # since we await the pipeline), so treat it as freshly ingested.
-            is_duplicate = bool(doc.metadata and doc.metadata.get("content_hash")) and bool(doc.chunk_count)
             return "skipped (duplicate)" if is_duplicate else "ingested"
         except Exception as exc:
             logger.error("Ingest failed", path=str(path), error=str(exc))

@@ -21,8 +21,13 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Maximum document characters sent to the LLM per chunk call.
+# gpt-4o-mini has a 128 K-token context window; 120 000 chars ≈ 30 000 tokens,
+# leaving headroom for the chunk text and the system overhead.
+MAX_DOC_CHARS = 120_000
+
 # Prompt adapted from the Anthropic contextual retrieval paper.
-# The LLM sees the full document and one chunk; output is a 1-2 sentence context.
+# The LLM sees a bounded document window and one chunk; output is 1-2 sentences.
 _CONTEXTUALIZE_PROMPT = """\
 <document>
 {document}
@@ -156,10 +161,22 @@ class ContextualChunker(BaseChunker):
         if not chunks:
             return chunks
 
+        # Precompute a single bounded document window once for all chunk calls.
+        # This avoids redundant truncation work inside the hot path and ensures
+        # we never exceed the model's context window regardless of document size.
+        if len(text) > MAX_DOC_CHARS:
+            logger.warning(
+                "Document exceeds MAX_DOC_CHARS; truncating for contextual enrichment",
+                original_chars=len(text),
+                truncated_chars=MAX_DOC_CHARS,
+            )
+        document_window = text[:MAX_DOC_CHARS]
+
         logger.debug(
             "Starting contextual enrichment",
             chunk_count=len(chunks),
             model=self._model,
+            document_chars=len(document_window),
         )
 
         sem = asyncio.Semaphore(self._concurrency)
@@ -167,7 +184,7 @@ class ContextualChunker(BaseChunker):
         async def _enrich(chunk: Chunk) -> Chunk:
             async with sem:
                 prompt = _CONTEXTUALIZE_PROMPT.format(
-                    document=text,
+                    document=document_window,
                     chunk=chunk.content,
                 )
                 response = await self._client.chat.completions.create(

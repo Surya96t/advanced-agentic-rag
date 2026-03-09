@@ -111,19 +111,20 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
         )
 
     # Get queries to search
-    # If expanded_queries exist, use them, otherwise use original_query
+    # If expanded_queries exist, use them, otherwise use retrieval_query (cleaned)
+    # with a fallback to original_query when the router was bypassed.
     queries = state.get("expanded_queries", [])
     if not queries:
-        # Defensive: ensure original_query exists and is not empty
-        original_query = state.get("original_query", "").strip()
-        if not original_query:
+        # Prefer the cleaned retrieval_query set by the router; fall back to original.
+        retrieval_query = (state.get("retrieval_query") or state.get("original_query", "")).strip()
+        if not retrieval_query:
             logger.error(
-                "No queries available: both expanded_queries and original_query are missing or empty")
+                "No queries available: expanded_queries, retrieval_query, and original_query are all empty")
             raise ValueError(
                 "Cannot perform retrieval: no query provided. "
-                "State must contain either 'expanded_queries' or 'original_query'."
+                "State must contain either 'expanded_queries' or 'retrieval_query'."
             )
-        queries = [original_query]
+        queries = [retrieval_query]
 
     logger.info(f"Searching {len(queries)} queries for user {user_id}")
 
@@ -199,14 +200,14 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
 
     # Step 3: Re-rank using FlashRank
     rerank_start = time.time()
-    # Use original query for re-ranking (most representative)
-    # Defensive: retrieve original_query safely (should always exist after validation above)
-    original_query = state.get("original_query", "")
-    if not original_query:
+    # Use the cleaned retrieval_query for re-ranking (most representative for similarity);
+    # fall back to original_query when router was bypassed.
+    rerank_query = (state.get("retrieval_query") or state.get("original_query", "")).strip()
+    if not rerank_query:
         # This shouldn't happen after validation above, but handle defensively
         logger.warning(
-            "original_query missing during re-ranking, using first expanded query as fallback")
-        original_query = queries[0] if queries else ""
+            "retrieval_query missing during re-ranking, using first expanded query as fallback")
+        rerank_query = queries[0].strip() if queries else ""
 
     # Skip reranking if reranker is not available
     if reranker is None:
@@ -222,7 +223,7 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
 
         try:
             reranked_results = await reranker.rerank(
-                query=original_query,
+                query=rerank_query,
                 results=deduplicated,
                 config=rerank_config
             )

@@ -370,6 +370,21 @@ class ThreadTitleEvent(BaseSchema):
         default_factory=utc_now, description="Event timestamp (UTC)")
 
 
+class CitationMarker(BaseSchema):
+    """Source metadata for a single inline citation marker.
+
+    Matches the ``CitationMarkerSchema`` Zod schema on the frontend
+    (``frontend/lib/sse-schemas.ts``) so validation is symmetric.
+    """
+
+    chunk_id: str = Field(..., description="ID of the retrieved chunk")
+    document_id: str | None = Field(None, description="ID of the parent document")
+    document_title: str = Field(..., description="Human-readable document title")
+    content: str | None = Field(None, description="Chunk text (first 300 chars)")
+    score: float | None = Field(None, description="RRF relevance score")
+    source: str | None = Field(None, description="Retrieval source tag (e.g. 'hybrid')")
+
+
 class CitationMapEvent(BaseSchema):
     """Emitted after generator completes with a mapping from inline marker to source.
 
@@ -378,7 +393,7 @@ class CitationMapEvent(BaseSchema):
     for the corresponding context chunk so the frontend can render hover cards.
     """
 
-    markers: dict[str, dict] = Field(
+    markers: dict[str, CitationMarker] = Field(
         ...,
         description="Marker number (str) → source metadata dict",
     )

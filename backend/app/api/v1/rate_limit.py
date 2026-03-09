@@ -4,13 +4,11 @@ Rate limit status endpoint.
 Returns the current rate limit state for all endpoints for the authenticated user.
 """
 
-import time
-
 from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.api.deps import UserID
-from app.core.rate_limiter import get_endpoint_limits, get_rate_limiter
+from app.core.rate_limiter import get_rate_limiter
 from app.core.config import settings
 from app.utils.logger import get_logger
 
@@ -68,10 +66,8 @@ def get_rate_limit_status(user_id: UserID) -> RateLimitStatusResponse:
     limiter = get_rate_limiter()
 
     def _peek(endpoint: str) -> EndpointLimitStatus:
-        limit, remaining = limiter.peek_rate_limit(user_id, endpoint)
-        _, window = get_endpoint_limits(endpoint)
-        reset_time = int(time.time()) + window
-        return EndpointLimitStatus(limit=limit, remaining=remaining, reset=reset_time)
+        limit, remaining, reset = limiter.peek_rate_limit(user_id, endpoint)
+        return EndpointLimitStatus(limit=limit, remaining=remaining, reset=reset)
 
     return RateLimitStatusResponse(
         chat=_peek("chat"),

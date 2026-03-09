@@ -192,7 +192,7 @@ class IngestionPipeline:
         contextual: bool = False,
         storage_path: str | None = None,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
-    ) -> Document:
+    ) -> tuple[Document, bool]:
         """
         Ingest a document through the complete pipeline.
 
@@ -223,18 +223,24 @@ class IngestionPipeline:
         - Document is the main entity user cares about
         - Chunks are implementation details
         - User can query chunks via document_id later
-        - Cleaner API: ingest_document → get Document
+        - Cleaner API: ingest_document → get (Document, is_duplicate)
+
+        Returns:
+            tuple[Document, bool]: (document, is_duplicate) — is_duplicate is True
+            when an existing document with the same content hash was found; False
+            means a new document was created and fully processed.
 
         Example:
         ```python
         pipeline = IngestionPipeline(...)
-        doc = await pipeline.ingest_document(
+        doc, is_duplicate = await pipeline.ingest_document(
             file_bytes=pdf_bytes,
             filename="api_guide.pdf",
             user_id=user.id,
             metadata={"category": "documentation"}
         )
-        print(f"Ingested {doc.chunk_count} chunks")
+        if not is_duplicate:
+            print(f"Ingested {doc.chunk_count} chunks")
         ```
         """
         progress = IngestionProgress()
@@ -263,7 +269,7 @@ class IngestionPipeline:
                     existing_doc_id=existing_doc.id,
                 )
                 emit_progress("complete", 100, "Document already exists")
-                return existing_doc
+                return existing_doc, True
 
             # Step 2: Parse document (10-20%)
             emit_progress("parsing", 10, "Extracting text from document")
@@ -343,7 +349,7 @@ class IngestionPipeline:
                 elapsed_seconds=progress.get_state()["elapsed_seconds"],
             )
 
-            return document
+            return document, False
 
         except Exception as e:
             logger.error(
@@ -597,6 +603,45 @@ class IngestionPipeline:
                 # Parent-child two-phase insertion
                 # --------------------------------------------------------
 
+                # Gather children first so we can validate before writing anything.
+                # NOTE: Supabase PostgREST is auto-commit per HTTP request, so
+                # true cross-call rollback is not available here.  Pre-validating
+                # before any insert is the safest approach — we fail fast with a
+                # clear error instead of writing partial data.
+                children_with_emb = [
+                    (chunk, embeddings[i])
+                    for i, chunk in enumerate(chunks)
+                    if chunk.chunk_type == ChunkType.CHILD
+                ]
+
+                # Build the set of parent chunk_indices that will be inserted,
+                # so we can detect broken references before touching the DB.
+                parent_chunk_indices = {
+                    chunk.chunk_index
+                    for chunk in chunks
+                    if chunk.chunk_type == ChunkType.PARENT
+                }
+
+                # Pre-validate every child before inserting either batch.
+                for child_chunk, child_embedding in children_with_emb:
+                    if child_embedding is None:
+                        raise ValueError(
+                            f"Child chunk at index {child_chunk.chunk_index} has no "
+                            "embedding; cannot store an unembedded child chunk."
+                        )
+                    if child_chunk.parent_chunk_index is None:
+                        raise ValueError(
+                            f"Child chunk at index {child_chunk.chunk_index} has no "
+                            "parent_chunk_index; parent-child mapping is broken."
+                        )
+                    if child_chunk.parent_chunk_index not in parent_chunk_indices:
+                        raise ValueError(
+                            f"Child chunk at index {child_chunk.chunk_index} references "
+                            f"parent_chunk_index={child_chunk.parent_chunk_index!r} "
+                            "which does not exist in the current chunk batch; "
+                            "parent-child mapping is broken."
+                        )
+
                 # Phase 1: insert parent chunks (embedding=NULL)
                 parent_dicts = [
                     {
@@ -620,13 +665,9 @@ class IngestionPipeline:
                     p.chunk_index: p.id for p in created_parents
                 }
 
-                # Phase 2: insert child chunks with parent_chunk_id resolved
-                children_with_emb = [
-                    (chunk, embeddings[i])
-                    for i, chunk in enumerate(chunks)
-                    if chunk.chunk_type == ChunkType.CHILD
-                ]
-
+                # Phase 2: insert child chunks with parent_chunk_id resolved.
+                # Use direct key access (not .get()) so a missing mapping raises
+                # immediately rather than silently inserting parent_chunk_id=NULL.
                 child_dicts = [
                     {
                         "document_id": document_id,
@@ -636,11 +677,7 @@ class IngestionPipeline:
                         "embedding": embedding,
                         "metadata": chunk.metadata,
                         "chunk_type": chunk.chunk_type.value,
-                        "parent_chunk_id": (
-                            parent_uuid_map.get(chunk.parent_chunk_index)
-                            if chunk.parent_chunk_index is not None
-                            else None
-                        ),
+                        "parent_chunk_id": parent_uuid_map[chunk.parent_chunk_index],
                     }
                     for chunk, embedding in children_with_emb
                 ]

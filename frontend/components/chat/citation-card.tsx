@@ -45,19 +45,27 @@ export function CitationCard({ citation, index, label }: CitationCardProps) {
   }
 
   const handleViewSource = async () => {
+    // Open a placeholder popup synchronously — popups opened after an `await` are
+    // blocked by browsers; a synchronous open is treated as a direct user gesture.
+    // Note: noopener/noreferrer are intentionally omitted here because passing either
+    // causes window.open() to return null (per spec), which would sever our reference
+    // before we can navigate the popup to the signed URL.
+    const popup = window.open('', '_blank')
+    if (!popup) return
+
     setIsLoadingSource(true)
     try {
       const res = await fetch(`/api/documents/${citation.document_id}/signed-url`)
       if (!res.ok) {
         // No blob stored or endpoint error — fall back to the document detail page
-        window.open(`/documents/${citation.document_id}`, '_blank', 'noopener,noreferrer')
+        popup.location.href = `/documents/${citation.document_id}`
         return
       }
       const { url } = (await res.json()) as { url: string }
-      window.open(url, '_blank', 'noopener,noreferrer')
+      popup.location.href = url
     } catch {
       // Network error — fall back gracefully
-      window.open(`/documents/${citation.document_id}`, '_blank', 'noopener,noreferrer')
+      popup.location.href = `/documents/${citation.document_id}`
     } finally {
       setIsLoadingSource(false)
     }

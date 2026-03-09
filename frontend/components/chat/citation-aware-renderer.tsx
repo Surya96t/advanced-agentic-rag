@@ -35,6 +35,7 @@ import {
   InlineCitationSource,
 } from '@/components/ai-elements/inline-citation'
 import type { BundledLanguage } from 'shiki'
+import { bundledLanguages } from 'shiki'
 import type { CitationMarker } from '@/types/chat'
 
 // ---------------------------------------------------------------------------
@@ -79,6 +80,10 @@ function rehypeCitationRef() {
 
   function walk(node: HastNode, parent: HastNode | null, index: number): number {
     if (node.type === 'text') {
+      // Do not rewrite text inside code/pre blocks — [1] is valid syntax there
+      const parentTag = parent && 'tagName' in parent ? (parent as HastElement).tagName : ''
+      if (parentTag === 'code' || parentTag === 'pre') return 0
+
       const text: string = (node as HastText).value
       const parts = text.split(CITATION_RE)
 
@@ -203,7 +208,7 @@ export function CitationAwareRenderer({ content, citationMap }: CitationAwareRen
           li: ({ children }) => <li className="mb-1">{children}</li>,
           code: ({ className, children, ...rest }) => {
             const match = /language-(\w+)/.exec(className || '')
-            const hasNewlines = children?.toString().includes('\n')
+            const hasNewlines = String(children ?? '').includes('\n')
             const isInlineCode = !match && !hasNewlines
 
             if (isInlineCode) {
@@ -214,8 +219,9 @@ export function CitationAwareRenderer({ content, citationMap }: CitationAwareRen
               )
             }
 
-            const language = (match?.[1] || 'text') as BundledLanguage
-            const codeString = String(children).replace(/\n$/, '')
+            const rawLang = match?.[1] ?? 'text'
+            const language: BundledLanguage = (rawLang in bundledLanguages) ? rawLang as BundledLanguage : 'text'
+            const codeString = String(children ?? '').replace(/\n$/, '')
 
             return (
               <CodeBlock
