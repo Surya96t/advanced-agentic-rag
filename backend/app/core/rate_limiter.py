@@ -137,6 +137,46 @@ class RedisRateLimiter:
             logger.error(f"Unexpected error in rate limiter: {e}")
             return (True, 0, 0)
 
+    def peek_rate_limit(
+        self, user_id: str, endpoint: str = "default"
+    ) -> Tuple[int, int]:
+        """
+        Return (limit, remaining) for an endpoint WITHOUT recording a request.
+
+        Used by the rate-limit status endpoint so it doesn't consume a slot.
+
+        Args:
+            user_id: User identifier
+            endpoint: API endpoint name
+
+        Returns:
+            Tuple of (limit, remaining)
+        """
+        if not settings.rate_limit_enabled:
+            return (0, 0)
+
+        try:
+            redis_client = self._get_redis()
+            key = get_rate_limit_key(user_id, endpoint)
+            limit, window = get_endpoint_limits(endpoint)
+
+            now = time.time()
+            window_start = now - window
+
+            pipe = redis_client.pipeline()
+            pipe.zremrangebyscore(key, 0, window_start)
+            pipe.zcard(key)
+            pipe.expire(key, window)
+            results = pipe.execute()
+
+            current_count = results[1]
+            remaining = max(0, limit - current_count)
+            return (limit, remaining)
+
+        except (RedisError, Exception) as e:
+            logger.error(f"Error in peek_rate_limit: {e}")
+            return (0, 0)
+
     def close(self):
         """Close Redis connection pool."""
         if self._pool:

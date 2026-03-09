@@ -16,6 +16,19 @@ export interface Citation {
 }
 
 /**
+ * Inline citation marker source — maps [N] in the LLM response to its source.
+ * Matches the CitationMarkerSchema in sse-schemas.ts.
+ */
+export interface CitationMarker {
+  chunk_id: string
+  document_id?: string
+  document_title: string
+  content?: string
+  score?: number
+  source?: string
+}
+
+/**
  * Chat message
  */
 export interface Message {
@@ -23,7 +36,10 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   citations?: Citation[]
+  /** Marker number (string key) → source info for inline [N] citations in the response. */
+  citationMap?: Record<string, CitationMarker>
   timestamp: Date
+  lowConfidence?: boolean
   metadata?: {
     usedConversationContext?: boolean
     queryType?: 'simple' | 'conversational_followup' | 'complex_standalone'

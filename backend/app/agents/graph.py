@@ -17,12 +17,14 @@ from app.schemas.events import (
     AgentErrorEvent,
     ProgressEvent,
     TokenEvent,
+    TokenResetEvent,
     CitationEvent,
     ValidationEvent,
     EndEvent,
     ContextStatusEvent,
     ConversationSummaryEvent,
     QueryClassificationEvent,
+    CitationMapEvent,
 )
 from app.schemas.chat import ChatResponse
 from app.core.config import settings
@@ -526,6 +528,7 @@ async def stream_agent(
                             "event": SSEEventType.CITATION.value,
                             "data": CitationEvent(
                                 chunk_id=chunk_id,
+                                document_id=document_id,
                                 document_title=source.get(
                                     "document_title", "Unknown Document"),
                                 score=rrf_score,
@@ -625,6 +628,40 @@ async def stream_agent(
                             score=validation.get("score", 0.0),
                             issues=validation.get("issues", []),
                         ).model_dump_json()
+                    }
+
+                # Citation map event from generator — emitted after all tokens are
+                # streamed (updates arrive after messages in the combined stream).
+                if node_name == "generator" and "messages" in node_update:
+                    msgs = node_update.get("messages", [])
+                    if msgs:
+                        msg = msgs[0]
+                        if hasattr(msg, "additional_kwargs"):
+                            raw_map = msg.additional_kwargs.get("citation_map", {})
+                            if raw_map:
+                                yield {
+                                    "event": SSEEventType.CITATION_MAP.value,
+                                    "data": CitationMapEvent(
+                                        markers={str(k): v for k, v in raw_map.items()}
+                                    ).model_dump_json()
+                                }
+                                logger.info(
+                                    f"📌 Emitted citation_map with {len(raw_map)} markers"
+                                )
+
+                # Token reset: tell the frontend to discard the streamed tokens
+                # from this failed generator run before the retry begins.
+                # Only emit when retry_count is EXPLICITLY set in this node's delta
+                # (i.e. the validator returned it). Using "in" instead of .get()
+                # prevents false-positives if the full merged state leaks through.
+                if (
+                    node_name == "validator"
+                    and "retry_count" in node_update
+                    and node_update["retry_count"] > 0
+                ):
+                    yield {
+                        "event": SSEEventType.TOKEN_RESET.value,
+                        "data": TokenResetEvent(reason="validator_retry").model_dump_json()
                     }
             elif mode == "messages":
                 # Handle LLM token chunks from messages stream mode.

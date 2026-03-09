@@ -563,14 +563,32 @@ async def get_thread(
                             # Map generator's 'score' (RRF) to similarity_score
                             "similarity_score": c.get("score", 0.0),
                             "original_score": c.get("original_score"),
-                            "document_id": c.get("document_id", "unknown"),  # Ensuring required fields
+                            "document_id": c.get("document_id", "unknown"),
+                            "chunk_index": c.get("index"),
                         })
+
+                # Extract citation_map (marker → source metadata) for inline citations
+                citation_map = None
+                raw_citation_map = additional_kwargs.get("citation_map") if additional_kwargs else None
+                if raw_citation_map:
+                    citation_map = {
+                        str(k): {
+                            "chunk_id": str(v.get("chunk_id", "")),
+                            "document_id": str(v.get("document_id", "")),
+                            "document_title": v.get("document_title", ""),
+                            "content": v.get("content", ""),
+                            "score": v.get("score"),
+                            "source": v.get("source"),
+                        }
+                        for k, v in raw_citation_map.items()
+                    }
 
                 messages.append({
                     "role": role,
                     "content": msg.content,
                     "timestamp": getattr(msg, "timestamp", None),
                     "citations": citations,
+                    "citation_map": citation_map,
                 })
 
         return ThreadDetail(

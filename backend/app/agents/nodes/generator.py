@@ -5,6 +5,7 @@ This module synthesizes integration code from retrieved documentation chunks
 using GPT-4, with support for token-by-token streaming.
 """
 
+import re
 import time
 
 import tiktoken
@@ -15,6 +16,7 @@ from app.agents.state import AgentState
 from app.core.config import settings
 from app.schemas.retrieval import SearchResult
 from app.utils.logger import get_logger
+from app.utils.observability import trace_node
 
 logger = get_logger(__name__)
 
@@ -31,17 +33,17 @@ SYSTEM_PROMPT = """You are a helpful documentation assistant. Your task is to pr
 
 Your role is to:
 - Answer the user's question directly using only the context provided
-- Cite your sources using [Source: Document Title] format
+- Cite sources using inline numbered markers such as [1], [2], etc. placed at the END of the sentence they support
+- Each number corresponds to the matching "Source N" in the provided context (e.g. [1] cites Source 1)
 - Provide complete code examples when relevant (in TypeScript for frontend, Python for backend unless specified)
 - If the answer is not in the context, politely state that you cannot answer based on the available documentation
-- distinctively mark code blocks with the language used
+- Distinctively mark code blocks with the language used
 - Maintain a professional, neutral tone
 
 Format your response as:
-1. Direct answer/explanation
+1. Direct answer/explanation with inline citations [N] after each supported sentence
 2. Technical details or steps (if applicable)
 3. Code examples with comments (if applicable)
-4. Source citations
 
 Do not invent information or use external knowledge not found in the context."""
 
@@ -170,6 +172,7 @@ def count_chat_tokens(messages: list, model: str = "gpt-4") -> int:
         return sum(count_tokens(msg.content, model) for msg in messages) + (len(messages) * 4) + 3
 
 
+@trace_node("generator")
 async def generator_node(state: AgentState) -> dict:
     """
     Generator node that synthesizes response from retrieved context.
@@ -228,6 +231,15 @@ async def generator_node(state: AgentState) -> dict:
         logger.info(
             f"Added conversation summary to system prompt ({len(conversation_summary)} chars)")
 
+    # Honour format/style instructions extracted by query_expander (e.g. "briefly", "in bullet points")
+    format_instructions = state.get("format_instructions", "")
+    if format_instructions:
+        system_prompt_parts.append(
+            f"\n\nFormatting instruction: {format_instructions}. "
+            "You MUST honour this constraint in your response."
+        )
+        logger.info(f"Applied format instructions: '{format_instructions}'")
+
     system_prompt = "\n".join(system_prompt_parts)
 
     # Build messages
@@ -278,19 +290,38 @@ async def generator_node(state: AgentState) -> dict:
         estimated_cost = (prompt_tokens * 0.00003) + \
             (completion_tokens * 0.00006)
 
-        # Format chunks into citations for persistence
+        # Build citation_map only for markers the LLM actually referenced.
+        # Scan the response for [N] patterns and include only those entries.
+        referenced_markers = {int(m) for m in re.findall(r'\[(\d+)\]', full_response)}
+
+        citation_map: dict[int, dict] = {}
         citations = []
-        for chunk in chunks:
-            citations.append({
-                "chunk_id": str(chunk.chunk_id),
-                "document_id": str(chunk.document_id),
-                "document_title": chunk.metadata.get("document_title", "Unknown Document"),
-                "content": chunk.content,  # Full content for persistence
-                "preview": chunk.content[:200],  # Preview for quick display if needed
-                "score": chunk.score,
-                "original_score": chunk.original_score,
-                "source": chunk.metadata.get("source", "unknown"),
-            })
+        for idx, chunk in enumerate(chunks, 1):
+            if idx in referenced_markers:
+                citation_map[idx] = {
+                    "chunk_id": str(chunk.chunk_id),
+                    "document_id": str(chunk.document_id),
+                    "document_title": chunk.document_title,
+                    "content": chunk.content[:300],
+                    "score": chunk.score,
+                    "source": chunk.source,
+                }
+                citations.append({
+                    "index": idx,
+                    "chunk_id": str(chunk.chunk_id),
+                    "document_id": str(chunk.document_id),
+                    "document_title": chunk.document_title,
+                    "content": chunk.content,
+                    "preview": chunk.content[:200],
+                    "score": chunk.score,
+                    "original_score": chunk.original_score,
+                    "source": chunk.source,
+                })
+
+        logger.info(
+            f"LLM referenced markers {sorted(referenced_markers)}, "
+            f"citation_map has {len(citation_map)} of {len(chunks)} chunks"
+        )
 
         logger.info(f"Persisting {len(citations)} citations to message history")
 
@@ -299,9 +330,9 @@ async def generator_node(state: AgentState) -> dict:
         # Also attach to response_metadata as a fallback for persistence
         return {
             "messages": [AIMessage(
-                content=full_response, 
-                additional_kwargs={"citations": citations},
-                response_metadata={"citations": citations}
+                content=full_response,
+                additional_kwargs={"citations": citations, "citation_map": citation_map},
+                response_metadata={"citations": citations},
             )],
             "generated_response": full_response,
             "metadata": {

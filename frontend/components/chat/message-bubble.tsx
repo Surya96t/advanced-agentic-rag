@@ -9,27 +9,14 @@ import { Message, MessageContent } from '@/components/ai-elements/message'
 import { Suggestions, Suggestion } from '@/components/ai-elements/suggestion'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
-import { Bot, User, Loader2, MessageCircle, Zap } from 'lucide-react'
-import dynamic from 'next/dynamic'
+import { Bot, User, Loader2, MessageCircle, Zap, AlertTriangle } from 'lucide-react'
+import { CitationAwareRenderer } from './citation-aware-renderer'
+import { MarkdownRenderer } from './markdown-renderer'
 import { CitationsList } from './citation'
 import { AgentStatus } from './agent-status'
 import { StreamingStatus } from './streaming-status'
 import type { Message as MessageType } from '@/types/chat'
 import type { AgentStep, StreamingMetrics } from '@/stores/chat-store'
-
-// Dynamically import the markdown renderer to reduce initial bundle size
-const MarkdownRenderer = dynamic(
-  () => import('./markdown-renderer').then((mod) => mod.MarkdownRenderer),
-  {
-    loading: () => (
-      <div className="flex items-center gap-2 text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        <span className="text-sm">Loading...</span>
-      </div>
-    ),
-    ssr: false,
-  }
-)
 
 interface MessageBubbleProps {
   message: MessageType
@@ -92,13 +79,25 @@ export function MessageBubble({
           {/* Message text */}
           {isUser ? (
             <p className="text-sm whitespace-pre-wrap wrap-break-word">{message.content}</p>
+          ) : message.citationMap && Object.keys(message.citationMap).length > 0 ? (
+            <CitationAwareRenderer content={message.content} citationMap={message.citationMap} />
           ) : (
             <MarkdownRenderer content={message.content} />
           )}
 
-          {/* Citations (AI messages only) */}
-          {!isUser && message.citations && message.citations.length > 0 && (
+          {/* Citations (AI messages only, shown after streaming completes) */}
+          {!isUser && !isStreaming && message.citations && message.citations.length > 0 && (
             <CitationsList citations={message.citations} />
+          )}
+
+          {/* Low-confidence disclaimer */}
+          {!isUser && !isStreaming && message.lowConfidence && (
+            <div className="flex items-start gap-2 mt-3 px-3 py-2 rounded-md bg-muted/50 text-xs text-muted-foreground">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>
+                My confidence in this answer is low — uploading documents specifically about this topic would improve accuracy.
+              </span>
+            </div>
           )}
 
           {/* Conversational indicators (AI messages only) */}

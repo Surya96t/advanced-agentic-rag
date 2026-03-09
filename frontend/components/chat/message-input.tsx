@@ -1,14 +1,20 @@
 /**
- * Enhanced message input with rotating placeholder, keyboard shortcuts,
- * character count, and smooth animations
+ * Enhanced message input using PromptInput components.
+ * Provides rotating placeholder, keyboard shortcuts, character count,
+ * stop-generation button, and smooth animations.
  */
 
 'use client'
 
-import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
-import { useState, useRef, useEffect, type FormEvent, type KeyboardEvent } from 'react'
+import { useState, useRef, useEffect, type ChangeEvent, type KeyboardEvent } from 'react'
 import { CornerDownLeft, StopCircle, Loader2 } from 'lucide-react'
+import {
+  PromptInput,
+  PromptInputFooter,
+  PromptInputTextarea,
+  PromptInputButton,
+  type PromptInputMessage,
+} from '@/components/ai-elements/prompt-input'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { usePlaceholderRotation } from '@/hooks/usePlaceholderRotation'
 import { cn } from '@/lib/utils'
@@ -30,15 +36,14 @@ export function MessageInput({
   placeholder,
   maxCharacters = 8000, // ~2000 tokens (chars / 4)
 }: MessageInputProps) {
-  const [value, setValue] = useState('')
+  const [charCount, setCharCount] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const formRef = useRef<HTMLFormElement>(null)
 
   // Rotating placeholder
-  const { placeholder: rotatingPlaceholder, inputRef: placeholderRef } = 
+  const { placeholder: rotatingPlaceholder, inputRef: placeholderRef } =
     usePlaceholderRotation({
-      placeholders: placeholder 
-        ? [placeholder] 
+      placeholders: placeholder
+        ? [placeholder]
         : [
             'Ask a question about your documentation...',
             'Try: How do I authenticate with the API?',
@@ -50,166 +55,131 @@ export function MessageInput({
       pauseOnFocus: true,
     })
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts — PromptInputTextarea handles Enter/Cmd+Enter natively,
+  // so we only register focus (Cmd+K) and cancel (Esc) here to avoid double submit.
   const { getModKey } = useKeyboardShortcuts({
     onFocus: () => textareaRef.current?.focus(),
     onCancel: () => {
       if (isStreaming) onStop?.()
     },
-    onSubmit: () => {
-      if (value.trim() && !disabled) {
-        handleSubmit()
-      }
-    },
     enabled: true,
   })
 
-  // Character count warnings
-  const charCount = value.length
-  const charPercentage = (charCount / maxCharacters) * 100
-  const showCharCount = charPercentage >= 80
-  const charCountColor = 
-    charPercentage >= 95 ? 'text-destructive' 
-    : charPercentage >= 80 ? 'text-yellow-600 dark:text-yellow-500' 
-    : 'text-muted-foreground'
-
-  const handleSubmit = (e?: FormEvent<HTMLFormElement>) => {
-    e?.preventDefault()
-    const trimmed = value.trim()
-    if (!trimmed || disabled) return
-    
-    onSend(trimmed)
-    setValue('') // Clear input after sending
-  }
-
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    // Submit on Enter, newline on Shift+Enter
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      if (value.trim() && !disabled) {
-        handleSubmit()
-      }
-    }
-  }
-
-  // Sync refs for placeholder rotation
+  // Sync the placeholder rotation ref with the actual textarea element
   useEffect(() => {
     if (textareaRef.current && placeholderRef) {
       placeholderRef.current = textareaRef.current
     }
   }, [placeholderRef])
 
-  // Auto-resize textarea
-  useEffect(() => {
-    const textarea = textareaRef.current
-    if (!textarea) return
+  // Character count state
+  const charPercentage = (charCount / maxCharacters) * 100
+  const showCharCount = charPercentage >= 80
+  const charCountColor =
+    charPercentage >= 95
+      ? 'text-destructive'
+      : charPercentage >= 80
+        ? 'text-yellow-600 dark:text-yellow-500'
+        : 'text-muted-foreground'
 
-    textarea.style.height = 'auto'
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`
-  }, [value])
+  const handleSubmit = (message: PromptInputMessage) => {
+    const trimmed = message.text.trim()
+    if (!trimmed || disabled) return
+    onSend(trimmed)
+    setCharCount(0)
+  }
+
+  // Prevent submission while streaming (PromptInputTextarea checks e.defaultPrevented)
+  const handleTextareaKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (isStreaming && e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+    }
+  }
 
   return (
     <div className="border-t bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
-      <form 
-        ref={formRef}
-        onSubmit={handleSubmit} 
-        className="p-4 max-w-3xl mx-auto"
-      >
-        <div className="flex flex-col gap-2">
-          {/* Main input area */}
-          <div className="flex items-end gap-2">
-            <div className="relative flex-1">
-              <Textarea
-                ref={textareaRef}
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={rotatingPlaceholder}
-                disabled={disabled}
-                maxLength={maxCharacters}
-                className={cn(
-                  "min-h-15 max-h-50 resize-none",
-                  "bg-muted/50 border-muted-foreground/20",
-                  "transition-all duration-200",
-                  // Focus effects
-                  "focus-visible:ring-2 focus-visible:ring-ring",
-                  "focus-visible:border-transparent",
-                  // Loading state - pulsing border
-                  isStreaming && "animate-pulse border-primary/50",
-                  // Disabled state
-                  disabled && "opacity-50 cursor-not-allowed"
-                )}
-                aria-label="Chat message input"
-                aria-describedby={showCharCount ? "char-count" : undefined}
-              />
-              
-              {/* Character count indicator */}
-              {showCharCount && (
-                <div 
+      <div className="p-4 max-w-3xl mx-auto">
+        <PromptInput
+          onSubmit={handleSubmit}
+          className={cn(
+            'bg-muted/50 border border-muted-foreground/20',
+            'transition-all duration-200 rounded-lg',
+            isStreaming && 'animate-pulse border-primary/50',
+            disabled && 'opacity-50 cursor-not-allowed'
+          )}
+        >
+          <PromptInputTextarea
+            ref={textareaRef}
+            placeholder={rotatingPlaceholder}
+            disabled={disabled}
+            maxLength={maxCharacters}
+            onKeyDown={handleTextareaKeyDown}
+            onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
+              setCharCount(e.target.value.length)
+            }
+            aria-label="Chat message input"
+            aria-describedby={showCharCount ? 'char-count' : undefined}
+          />
+
+          <PromptInputFooter>
+            {/* Char count / keyboard hint */}
+            <div className="flex items-center text-xs text-muted-foreground">
+              {showCharCount ? (
+                <span
                   id="char-count"
-                  className={cn(
-                    "absolute bottom-2 right-2 text-xs font-mono",
-                    "transition-colors duration-200",
-                    charCountColor
-                  )}
+                  className={cn('font-mono transition-colors duration-200', charCountColor)}
                   role="status"
                   aria-live="polite"
                 >
                   {charCount.toLocaleString()} / {maxCharacters.toLocaleString()}
-                </div>
-              )}
+                </span>
+              ) : !isStreaming ? (
+                <span>
+                  <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">
+                    {getModKey()}+K
+                  </kbd>
+                  {' '}to focus •{' '}
+                  <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">
+                    Enter
+                  </kbd>
+                  {' '}to send
+                </span>
+              ) : null}
             </div>
 
-            {/* Send/Stop button */}
+            {/* Send / Stop button */}
             {isStreaming && onStop ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
+              <PromptInputButton
                 onClick={onStop}
-                title={`Stop generation (${getModKey()}+Esc)`}
-                className={cn(
-                  "shrink-0 h-15 w-15",
-                  "transition-all duration-200",
-                  "hover:scale-105 active:scale-95"
-                )}
+                variant="outline"
+                tooltip={{
+                  content: 'Stop generation',
+                  shortcut: `${getModKey()}+Esc`,
+                }}
               >
-                <StopCircle className="h-5 w-5" />
-              </Button>
+                <StopCircle className="h-4 w-4" />
+              </PromptInputButton>
             ) : (
-              <Button
+              <PromptInputButton
+                // type="submit" overrides the default type="button" in PromptInputButton
                 type="submit"
-                size="icon"
-                disabled={disabled || !value.trim()}
-                className={cn(
-                  "shrink-0 h-15 w-15",
-                  "transition-all duration-200",
-                  !disabled && value.trim() && "hover:scale-105 active:scale-95"
-                )}
-                aria-label={
-                  disabled 
-                    ? "Sending message" 
-                    : `Send message (${getModKey()}+Enter)`
-                }
+                disabled={disabled || charCount === 0}
+                tooltip={{
+                  content: 'Send message',
+                  shortcut: 'Enter',
+                }}
               >
                 {disabled ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <CornerDownLeft className="h-5 w-5" />
+                  <CornerDownLeft className="h-4 w-4" />
                 )}
-              </Button>
+              </PromptInputButton>
             )}
-          </div>
-
-          {/* Keyboard shortcuts hint */}
-          {!value && !isStreaming && (
-            <p className="text-xs text-muted-foreground text-center animate-in fade-in duration-300">
-              Press <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">{getModKey()}+K</kbd> to focus • 
-              {' '}<kbd className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">{getModKey()}+Enter</kbd> to send
-            </p>
-          )}
-        </div>
-      </form>
+          </PromptInputFooter>
+        </PromptInput>
+      </div>
     </div>
   )
 }
+

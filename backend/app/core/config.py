@@ -187,10 +187,10 @@ class Settings(BaseSettings):
 
     # RAG Configuration - Hybrid Search
     hybrid_search_alpha: float = Field(
-        default=0.5,
+        default=0.7,
         ge=0.0,
         le=1.0,
-        description="Weight for vector vs text (0.0=text only, 1.0=vector only, 0.5=equal)"
+        description="Weight for vector vs text (0.0=text only, 1.0=vector only, 0.7=favour semantic)"
     )
     hybrid_rrf_k: int = Field(
         default=60,
@@ -207,7 +207,7 @@ class Settings(BaseSettings):
         description="FlashRank model name (TinyBERT, MiniLM-L-6, MiniLM-L-12)"
     )
     rerank_top_k: int = Field(
-        default=10,
+        default=5,
         description="Number of results to return after re-ranking"
     )
 
@@ -260,6 +260,18 @@ class Settings(BaseSettings):
         ge=2,
         le=50,
         description="Number of recent messages to always keep (sliding window)"
+    )
+
+    # Storage Configuration
+    storage_backend: Literal["supabase", "azure"] = Field(
+        default="supabase",
+        description="File storage backend: 'supabase' or 'azure'",
+        alias="STORAGE_BACKEND",
+    )
+    storage_bucket: str = Field(
+        default="documents",
+        description="Storage bucket / container name for uploaded documents",
+        alias="STORAGE_BUCKET",
     )
 
     # Logging

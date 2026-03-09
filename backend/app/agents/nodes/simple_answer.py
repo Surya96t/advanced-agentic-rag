@@ -13,10 +13,12 @@ from langchain_openai import ChatOpenAI
 from app.agents.state import AgentState
 from app.core.config import settings
 from app.utils.logger import get_logger
+from app.utils.observability import trace_node
 
 logger = get_logger(__name__)
 
 
+@trace_node("simple_answer")
 async def generate_simple_answer(state: AgentState) -> dict[str, Any]:
     """
     Generate answer for simple queries without retrieval.

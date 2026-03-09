@@ -118,6 +118,7 @@ class AgentState(TypedDict, total=False):
 
     # Generation
     generated_response: str
+    format_instructions: str  # Format/style directives extracted from user query (e.g. "briefly", "in bullet points")
 
     # Validation
     validation_result: dict[str, Any]

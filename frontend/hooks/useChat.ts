@@ -30,7 +30,9 @@ export function useChat(threadId?: string) {
     addUserMessage,
     startStreamingMessage,
     appendToStreamingMessage,
+    resetStreamingMessage,
     addCitationToStreamingMessage,
+    setCitationMapForMessage,
     finishStreamingMessage,
     setCurrentAgent,
     startAgent,
@@ -226,6 +228,14 @@ export function useChat(threadId?: string) {
                 break
               }
 
+              case 'token_reset': {
+                // Validator failed and is retrying — discard the streamed tokens
+                // from the failed generator run so the user only sees the final answer.
+                console.log('[SSE] Token reset received, clearing streaming buffer for retry')
+                resetStreamingMessage()
+                break
+              }
+
               case 'citation': {
                 const data = parseSSEEvent('citation', event)
                 if (data) {
@@ -245,7 +255,7 @@ export function useChat(threadId?: string) {
                   
                   // Convert CitationEvent to Citation format
                   const citation = {
-                    document_id: data.chunk_id || 'unknown',
+                    document_id: data.document_id || data.chunk_id || 'unknown',
                     document_title: data.document_title || 'Unknown Document',
                     chunk_id: data.chunk_id,
                     content: data.preview || data.content || '',
@@ -298,6 +308,19 @@ export function useChat(threadId?: string) {
                   console.log('[SSE] Thread title received:', data.title)
                   // Optimistically update sidebar title without a full re-fetch
                   updateThreadTitleOptimistically(effectiveThreadId, data.title)
+                }
+                break
+              }
+
+              case 'citation_map': {
+                const data = parseSSEEvent('citation_map', event)
+                if (data) {
+                  if (typeof data.markers === 'object' && data.markers !== null) {
+                    console.log('[SSE] Citation map received:', Object.keys(data.markers).length, 'markers')
+                    setCitationMapForMessage(data.markers)
+                  } else {
+                    console.warn('[SSE] citation_map event missing or invalid markers field, skipping')
+                  }
                 }
                 break
               }

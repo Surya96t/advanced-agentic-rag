@@ -45,7 +45,7 @@ from app.database.client import SupabaseClient
 from app.database.models import Document, DocumentChunk, DocumentStatus
 from app.database.repositories.chunks import ChunkRepository
 from app.database.repositories.documents import DocumentRepository
-from app.ingestion.chunkers.base import Chunk
+from app.ingestion.chunkers.base import BaseChunker, Chunk, ChunkType
 from app.ingestion.chunkers.recursive import RecursiveChunker
 from app.ingestion.embeddings import EmbeddingClient, get_embedding_client
 from app.ingestion.parser import DocumentParser, ParsedDocument
@@ -148,7 +148,7 @@ class IngestionPipeline:
         doc_repo: DocumentRepository,
         chunk_repo: ChunkRepository,
         embedding_client: EmbeddingClient,
-        chunker: RecursiveChunker | None = None,
+        chunker: BaseChunker | None = None,
         parser: DocumentParser | None = None,
     ) -> None:
         """
@@ -189,6 +189,8 @@ class IngestionPipeline:
         user_id: str,  # Clerk user ID (e.g., "user_2bXYZ123")
         source_id: UUID | None = None,
         metadata: dict[str, Any] | None = None,
+        contextual: bool = False,
+        storage_path: str | None = None,
         progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> Document:
         """
@@ -279,6 +281,7 @@ class IngestionPipeline:
                 file_size_bytes=len(file_bytes),
                 metadata=metadata or {},
                 parsed_doc=parsed_doc,
+                blob_path=storage_path,
             )
 
             # Step 4: Chunk text (30-40%)
@@ -294,6 +297,7 @@ class IngestionPipeline:
                 text=parsed_doc.content,
                 document_id=document.id,
                 document_metadata=full_metadata,
+                contextual=contextual,
             )
             emit_progress("chunking", 40, f"Created {len(chunks)} chunks")
 
@@ -406,6 +410,7 @@ class IngestionPipeline:
         text: str,
         document_id: UUID,
         document_metadata: dict[str, Any],
+        contextual: bool = False,
     ) -> list[Chunk]:
         """
         Chunk text into smaller pieces.
@@ -428,7 +433,14 @@ class IngestionPipeline:
                 "document_id": str(document_id),
             }
 
-            chunks = self.chunker.chunk(
+            # Optionally wrap the configured chunker with ContextualChunker
+            # (lazy import avoids circular dependency at module load time).
+            chunker: BaseChunker = self.chunker
+            if contextual:
+                from app.ingestion.chunkers.contextual import ContextualChunker
+                chunker = ContextualChunker(base_chunker=self.chunker)
+
+            chunks = await chunker.achunk(
                 text=text,
                 document_metadata=enriched_metadata,
             )
@@ -452,48 +464,68 @@ class IngestionPipeline:
         self,
         chunks: list[Chunk],
         progress_callback: Callable[[float], None] | None = None,
-    ) -> list[list[float]]:
+    ) -> list[list[float] | None]:
         """
         Generate embeddings for chunks.
 
+        For parent-child chunking, parent chunks (``chunk_type=PARENT``) are
+        intentionally **not** embedded — they are stored with a ``NULL`` vector
+        and only retrieved during the parent-swap phase of hybrid search.
+        Child chunks are embedded as usual.
+
+        Returns a list whose length equals ``len(chunks)``.  Positions that
+        correspond to a PARENT chunk are ``None``; all others hold the
+        embedding vector.
+
         Args:
-            chunks: List of text chunks
-            progress_callback: Optional callback for progress (0-100)
+            chunks: List of text chunks (may include parents and children).
+            progress_callback: Optional callback for progress (0–100).
 
         Returns:
-            List of embedding vectors
+            List of embedding vectors (or ``None`` for parent chunks).
 
         Raises:
-            Exception: If embedding generation fails
-
-        Learning Note:
-        Why batch embeddings?
-        - Efficiency: 100 texts in 1 API call vs 100 calls
-        - Cost: Same tokens, fewer API overhead charges
-        - Rate Limits: Less likely to hit requests/min limit
-        - The EmbeddingClient handles batching internally
+            Exception: If embedding generation fails.
         """
         try:
-            # Extract text from chunks
-            texts = [chunk.content for chunk in chunks]
+            # Identify which chunks actually need embeddings.
+            embeddable_indices = [
+                i for i, c in enumerate(chunks)
+                if c.chunk_type != ChunkType.PARENT
+            ]
+            embeddable_texts = [chunks[i].content for i in embeddable_indices]
 
-            # Generate embeddings (client handles batching)
-            embeddings = await self.embedding_client.embed_texts(
-                texts=texts,
+            if not embeddable_texts:
+                # Edge case: document chunked into parents only (no children).
+                logger.debug("No embeddable chunks (all parents); skipping embedding")
+                if progress_callback:
+                    progress_callback(100.0)
+                return [None] * len(chunks)
+
+            # Generate embeddings only for embeddable chunks.
+            raw_embeddings = await self.embedding_client.embed_texts(
+                texts=embeddable_texts,
                 show_progress=True,
             )
 
-            # Report progress if callback provided
+            # Report progress if callback provided.
             if progress_callback:
                 progress_callback(100.0)
 
+            # Reconstruct a full-length list: None for parents, embedding for others.
+            result: list[list[float] | None] = [None] * len(chunks)
+            for list_pos, chunk_idx in enumerate(embeddable_indices):
+                result[chunk_idx] = raw_embeddings[list_pos]
+
             logger.debug(
                 "Embeddings generated",
-                chunk_count=len(chunks),
-                embedding_dimensions=len(embeddings[0]) if embeddings else 0,
+                total_chunks=len(chunks),
+                embedded_count=len(embeddable_texts),
+                parent_count=len(chunks) - len(embeddable_texts),
+                embedding_dimensions=len(raw_embeddings[0]) if raw_embeddings else 0,
             )
 
-            return embeddings
+            return result
         except Exception as e:
             logger.error(
                 "Embedding generation failed",
@@ -507,51 +539,121 @@ class IngestionPipeline:
         document_id: UUID,
         user_id: str,  # Clerk user ID
         chunks: list[Chunk],
-        embeddings: list[list[float]],
+        embeddings: list[list[float] | None],
     ) -> None:
         """
         Store chunks in database with embeddings.
 
+        Handles two modes automatically:
+
+        **Standard mode** (all chunks have the same type):
+        A single batch insert; all embeddings are present.
+
+        **Parent-child mode** (mix of ``PARENT`` and ``CHILD`` chunks):
+        Two-phase insertion:
+
+        1. Insert parent chunks with ``embedding=NULL``.
+        2. Build a ``chunk_index → DB UUID`` mapping from the returned rows.
+        3. Insert child chunks with ``parent_chunk_id`` resolved from the map.
+
         Args:
-            document_id: ID of parent document
-            user_id: Clerk user ID of the owner
-            chunks: List of text chunks
-            embeddings: List of embedding vectors
+            document_id: ID of parent document.
+            user_id:     Clerk user ID of the owner.
+            chunks:      List of text chunks (parents first, then children).
+            embeddings:  Parallel list of embedding vectors; ``None`` for parents.
 
         Raises:
-            Exception: If storage fails
-
-        Learning Note:
-        Why batch inserts?
-        - Performance: 100 rows in 1 query vs 100 queries
-        - Database Load: Fewer round-trips to database
-        - Transaction Safety: All-or-nothing per batch
-        - Supabase has limits on batch size (~1000 rows)
+            Exception: If storage fails.
         """
         if len(chunks) != len(embeddings):
             raise ValueError(
-                f"Chunk count ({len(chunks)}) != embedding count ({len(embeddings)})"
+                f"Chunk count ({len(chunks)}) != embedding list length ({len(embeddings)})"
             )
 
-        try:
-            # Convert Chunks to dictionaries for create_batch
-            # NOTE: create_batch expects list[dict], not list[DocumentChunk]
-            chunk_dicts = []
-            for chunk, embedding in zip(chunks, embeddings):
-                chunk_dict = {
-                    "document_id": document_id,
-                    "user_id": user_id,  # Already a string (Clerk user ID)
-                    "chunk_index": chunk.chunk_index,
-                    "content": chunk.content,
-                    "embedding": embedding,
-                    "metadata": chunk.metadata,
-                    "chunk_type": chunk.chunk_type.value,
-                    "parent_chunk_id": None,  # Will be set in parent-child indexing
-                }
-                chunk_dicts.append(chunk_dict)
+        has_children = any(c.chunk_type == ChunkType.CHILD for c in chunks)
 
-            # Batch insert (repository handles ID generation and timestamps)
-            self.chunk_repo.create_batch(chunk_dicts)
+        try:
+            if not has_children:
+                # --------------------------------------------------------
+                # Standard single-pass insertion (RecursiveChunker etc.)
+                # --------------------------------------------------------
+                chunk_dicts = [
+                    {
+                        "document_id": document_id,
+                        "user_id": user_id,
+                        "chunk_index": chunk.chunk_index,
+                        "content": chunk.content,
+                        "embedding": embedding,
+                        "metadata": chunk.metadata,
+                        "chunk_type": chunk.chunk_type.value,
+                        "parent_chunk_id": None,
+                    }
+                    for chunk, embedding in zip(chunks, embeddings)
+                ]
+                self.chunk_repo.create_batch(chunk_dicts)
+
+            else:
+                # --------------------------------------------------------
+                # Parent-child two-phase insertion
+                # --------------------------------------------------------
+
+                # Phase 1: insert parent chunks (embedding=NULL)
+                parent_dicts = [
+                    {
+                        "document_id": document_id,
+                        "user_id": user_id,
+                        "chunk_index": chunk.chunk_index,
+                        "content": chunk.content,
+                        "embedding": None,  # parents are never embedded
+                        "metadata": chunk.metadata,
+                        "chunk_type": chunk.chunk_type.value,
+                        "parent_chunk_id": None,
+                    }
+                    for chunk in chunks
+                    if chunk.chunk_type == ChunkType.PARENT
+                ]
+
+                created_parents = self.chunk_repo.create_batch(parent_dicts)
+
+                # Build chunk_index → DB UUID mapping
+                parent_uuid_map: dict[int, UUID] = {
+                    p.chunk_index: p.id for p in created_parents
+                }
+
+                # Phase 2: insert child chunks with parent_chunk_id resolved
+                children_with_emb = [
+                    (chunk, embeddings[i])
+                    for i, chunk in enumerate(chunks)
+                    if chunk.chunk_type == ChunkType.CHILD
+                ]
+
+                child_dicts = [
+                    {
+                        "document_id": document_id,
+                        "user_id": user_id,
+                        "chunk_index": chunk.chunk_index,
+                        "content": chunk.content,
+                        "embedding": embedding,
+                        "metadata": chunk.metadata,
+                        "chunk_type": chunk.chunk_type.value,
+                        "parent_chunk_id": (
+                            parent_uuid_map.get(chunk.parent_chunk_index)
+                            if chunk.parent_chunk_index is not None
+                            else None
+                        ),
+                    }
+                    for chunk, embedding in children_with_emb
+                ]
+
+                self.chunk_repo.create_batch(child_dicts)
+
+                logger.debug(
+                    "Parent-child chunks stored",
+                    document_id=document_id,
+                    parent_count=len(parent_dicts),
+                    child_count=len(child_dicts),
+                )
+                return
 
             logger.debug(
                 "Chunks stored",
@@ -576,6 +678,7 @@ class IngestionPipeline:
         file_size_bytes: int,
         metadata: dict[str, Any],
         parsed_doc: ParsedDocument,
+        blob_path: str | None = None,
     ) -> Document:
         """
         Create document record in database.
@@ -613,6 +716,7 @@ class IngestionPipeline:
                 metadata=full_metadata,
                 status=DocumentStatus.PROCESSING,
                 chunk_count=0,
+                blob_path=blob_path,
             )
 
             created_doc = self.doc_repo.create(document)

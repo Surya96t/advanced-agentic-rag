@@ -22,6 +22,7 @@ class SSEEventType(str, Enum):
     AGENT_ERROR = "agent_error"
     CITATION = "citation"
     TOKEN = "token"
+    TOKEN_RESET = "token_reset"  # Discard streamed tokens on validator retry
     PROGRESS = "progress"
     VALIDATION = "validation"
     END = "end"
@@ -30,6 +31,7 @@ class SSEEventType(str, Enum):
     CONVERSATION_SUMMARY = "conversation_summary"  # When messages are summarized
     QUERY_CLASSIFICATION = "query_classification"  # Query type classification result
     THREAD_TITLE = "thread_title"  # LLM-generated title, emitted once per new thread
+    CITATION_MAP = "citation_map"  # Marker-to-source mapping emitted after generation
 
 
 class AgentStartEvent(BaseSchema):
@@ -118,6 +120,7 @@ class CitationEvent(BaseSchema):
     """Event emitted when a document chunk is retrieved."""
 
     chunk_id: UUID = Field(..., description="Chunk UUID")
+    document_id: UUID | None = Field(None, description="Parent document UUID")
     document_title: str = Field(..., description="Source document title")
     score: float = Field(..., ge=0.0,
                          description="RRF or reranked score (may be small!)")
@@ -159,6 +162,20 @@ class TokenEvent(BaseSchema):
                 }
             ]
         }
+    )
+
+
+class TokenResetEvent(BaseSchema):
+    """Event emitted when the frontend should discard previously streamed tokens.
+
+    Sent when the validator fails and triggers a retry — the first generator
+    run's tokens must be discarded so the frontend only shows the final
+    successful response.
+    """
+
+    reason: str = Field(
+        default="validator_retry",
+        description="Why the streaming buffer is being reset",
     )
 
 
@@ -351,3 +368,17 @@ class ThreadTitleEvent(BaseSchema):
     thread_id: str = Field(..., description="Thread this title belongs to")
     timestamp: datetime = Field(
         default_factory=utc_now, description="Event timestamp (UTC)")
+
+
+class CitationMapEvent(BaseSchema):
+    """Emitted after generator completes with a mapping from inline marker to source.
+
+    Keys are string representations of the integer marker number that appears in
+    the LLM response as ``[1]``, ``[2]``, etc.  Values hold the source metadata
+    for the corresponding context chunk so the frontend can render hover cards.
+    """
+
+    markers: dict[str, dict] = Field(
+        ...,
+        description="Marker number (str) → source metadata dict",
+    )

@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from app.agents.state import AgentState
 from app.core.config import settings
 from app.utils.logger import get_logger
+from app.utils.observability import trace_node
 
 logger = get_logger(__name__)
 
@@ -130,6 +131,7 @@ async def _llm_validate(
 # Node
 # ─────────────────────────────────────────────────────────────────────────────
 
+@trace_node("validator")
 async def validator_node(state: AgentState) -> Command[Literal["query_expander", "__end__"]]:
     """
     Validator node — evaluates response quality with LLM structured output.

@@ -1,6 +1,30 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Seamless scrollbar for sidebar — hidden by default, thin overlay on hover */
+[data-sidebar="content"] {
+  scrollbar-width: none;
+  overflow-y: auto;
+}
+[data-sidebar="content"]::-webkit-scrollbar {
+  display: none;
+}
+[data-sidebar="content"]:hover {
+  scrollbar-width: thin;
+  scrollbar-color: var(--sidebar-accent) transparent;
+}
+[data-sidebar="content"]:hover::-webkit-scrollbar {
+  display: block;
+  width: 4px;
+}
+[data-sidebar="content"]:hover::-webkit-scrollbar-track {
+  background: transparent;
+}
+[data-sidebar="content"]:hover::-webkit-scrollbar-thumb {
+  background: var(--sidebar-accent);
+  border-radius: 9999px;
+}
+
 @keyframes travel-1 {
   0%       { transform: translateX(-100%); opacity: 1; }
   33.33%   { transform: translateX(100%);  opacity: 1; }

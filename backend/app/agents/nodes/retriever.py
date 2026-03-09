@@ -16,6 +16,7 @@ from app.retrieval.hybrid_search import HybridSearcher
 from app.retrieval.rerankers.flashrank import FlashRankReranker
 from app.schemas.retrieval import RerankConfig, SearchConfig, SearchResult
 from app.utils.logger import get_logger
+from app.utils.observability import trace_node
 
 logger = get_logger(__name__)
 
@@ -53,6 +54,7 @@ def get_reranker() -> FlashRankReranker:
     return _reranker
 
 
+@trace_node("retriever")
 async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
     """
     Retrieval node that executes multi-query hybrid search with re-ranking.

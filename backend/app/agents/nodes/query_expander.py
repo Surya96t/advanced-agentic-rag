@@ -15,6 +15,7 @@ from langchain_openai import ChatOpenAI
 from app.agents.state import AgentState
 from app.core.config import settings
 from app.utils.logger import get_logger
+from app.utils.observability import trace_node
 
 logger = get_logger(__name__)
 
@@ -154,6 +155,7 @@ async def generate_hyde(query: str) -> str:
         return query
 
 
+@trace_node("query_expander")
 async def query_expander_node(state: AgentState) -> dict:
     """
     Query expansion node that selects and executes expansion strategy.
@@ -178,10 +180,12 @@ async def query_expander_node(state: AgentState) -> dict:
         ["Authentication system configuration", "Database connection setup", "Integrating authentication with database"]
     """
     start_time = time.time()
+    # Use the router-cleaned original_query (format instructions already stripped)
     query = state.get("original_query")
     if not query:
         logger.error("Missing original_query in state")
         return {"expanded_queries": []}
+
     complexity = state.get("query_complexity", "simple")
 
     logger.info(
