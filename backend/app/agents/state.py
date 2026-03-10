@@ -114,19 +114,21 @@ class AgentState(TypedDict, total=False):
     context_window_tokens: int
     pipeline_path: Literal["simple", "complex"]
 
-    # Retrieval results (uses custom reducer for deduplication)
-    retrieved_chunks: Annotated[list[SearchResult], add_search_results]
+    # Retrieval results (replaced each run — no reducer so prior-run chunks don't leak)
+    retrieved_chunks: list[SearchResult]
 
     # Generation
     generated_response: str
     format_instructions: str  # Format/style directives extracted from user query (e.g. "briefly", "in bullet points")
+    citation_map: dict[str, Any]  # Inline citation markers {"1": {chunk_id, document_id, ...}}
+    citations: list[dict]  # Full citation details from generator for persistence
 
     # Validation
     validation_result: dict[str, Any]
     retry_count: int
 
-    # Output (uses custom reducer for deduplication)
-    sources: Annotated[list[dict], add_sources]
+    # Output (replaced each run — no reducer so prior-run sources don't leak)
+    sources: list[dict]
     metadata: dict[str, Any]
 
     # Human-in-the-loop

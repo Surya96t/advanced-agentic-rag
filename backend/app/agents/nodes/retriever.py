@@ -231,6 +231,7 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
             logger.info(
                 f"Re-ranking complete: {len(reranked_results)} top results selected")
 
+
         except Exception as e:
             logger.error(f"Re-ranking failed: {e}, using hybrid scores with stricter filtering")
             # Fallback: filter by minimum similarity threshold then use hybrid search scores
@@ -264,8 +265,8 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
     )
 
     # Return state updates
-    # Note: retrieved_chunks uses add_search_results reducer (handles dedup)
-    # sources uses add_sources reducer (handles dedup by document_id)
+    # Note: retrieved_chunks and sources are replaced each run (no reducer)
+    # so that prior-run results don't leak into follow-up queries.
     return {
         "retrieved_chunks": reranked_results,
         "sources": sources,

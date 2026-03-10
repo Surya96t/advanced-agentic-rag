@@ -9,7 +9,7 @@ import re
 import time
 
 import tiktoken
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 from app.agents.state import AgentState
@@ -29,35 +29,30 @@ llm = ChatOpenAI(
 )
 
 # System prompt for documentation assistance
-SYSTEM_PROMPT = """You are a helpful documentation assistant. Your task is to provide clear, accurate answers based strictly on the provided documentation.
+SYSTEM_PROMPT = """You are a knowledgeable documentation assistant. Your task is to provide clear, accurate, and well-structured answers based **strictly** on the provided context.
 
-Your role is to:
-- Answer the user's question directly using only the context provided
-- Cite sources using inline numbered markers such as [1], [2], etc. placed at the END of the sentence they support
-- Each number corresponds to the matching "Source N" in the provided context (e.g. [1] cites Source 1)
-- Provide complete code examples when relevant (in TypeScript for frontend, Python for backend unless specified)
-- If the answer is not in the context, politely state that you cannot answer based on the available documentation
-- Distinctively mark code blocks with the language used
-- Maintain a professional, neutral tone
+Rules:
+1. Answer the user's question using ONLY information from the provided context.
+2. Cite sources using inline numbered markers [1], [2], etc. placed at the END of the sentence they support. Each number corresponds to the matching "Source N" in the context.
+3. If the context does not contain enough information to fully answer the question, say so honestly rather than guessing or fabricating details.
+4. Do NOT use external knowledge — only the retrieved documentation below.
+5. Keep your tone professional, helpful, and neutral.
+6. Structure your response with clear headings, numbered lists, or bullet points when it improves readability.
+7. Do NOT include code examples unless the user explicitly asks for code.
 
-Format your response as:
-1. Direct answer/explanation with inline citations [N] after each supported sentence
-2. Technical details or steps (if applicable)
-3. Code examples with comments (if applicable)
-
-Do not invent information or use external knowledge not found in the context."""
+Do not invent information. Do not hallucinate. Every factual claim must be grounded in a provided source."""
 
 
 # User prompt template
-USER_PROMPT_TEMPLATE = """Answer this question using the provided documentation:
+USER_PROMPT_TEMPLATE = """Answer the following question using the retrieved documentation below.
 
 QUESTION:
 {query}
 
-DOCUMENTATION:
+RETRIEVED DOCUMENTATION:
 {context}
 
-Provide a complete, working solution with proper code examples and source citations."""
+Provide a thorough answer with inline source citations [N] after each supported statement. If the documentation is insufficient, state what is missing."""
 
 
 def format_context(chunks: list[SearchResult]) -> str:
@@ -206,8 +201,9 @@ async def generator_node(state: AgentState) -> dict:
     start_time = time.time()
     logger.info("⏱️  GENERATOR NODE: Starting LLM response generation")
 
-    # Get query and chunks
-    query = state["original_query"]
+    # Use the resolved retrieval_query (pronoun-resolved for follow-ups,
+    # format-stripped for initial queries).  Fall back to original_query.
+    query = state.get("retrieval_query") or state["original_query"]
     chunks = state.get("retrieved_chunks", [])
 
     if not chunks:
@@ -294,11 +290,28 @@ async def generator_node(state: AgentState) -> dict:
         # Scan the response for [N] patterns and include only those entries.
         referenced_markers = {int(m) for m in re.findall(r'\[(\d+)\]', full_response)}
 
+        # Re-number citations to be sequential ([1],[5],[10] → [1],[2],[3]).
+        # Build a mapping from the original chunk index to a new sequential index.
+        sorted_markers = sorted(referenced_markers)
+        remap: dict[int, int] = {old: new for new, old in enumerate(sorted_markers, 1)}
+
+        if remap:
+            def _renumber(match: re.Match) -> str:
+                original = int(match.group(1))
+                return f"[{remap.get(original, original)}]"
+
+            full_response = re.sub(r'\[(\d+)\]', _renumber, full_response)
+            logger.info(
+                f"Re-numbered citations: {sorted_markers} → "
+                f"{[remap[m] for m in sorted_markers]}"
+            )
+
         citation_map: dict[int, dict] = {}
         citations = []
         for idx, chunk in enumerate(chunks, 1):
             if idx in referenced_markers:
-                citation_map[idx] = {
+                new_idx = remap.get(idx, idx)
+                citation_map[new_idx] = {
                     "chunk_id": str(chunk.chunk_id),
                     "document_id": str(chunk.document_id),
                     "document_title": chunk.document_title,
@@ -307,7 +320,7 @@ async def generator_node(state: AgentState) -> dict:
                     "source": chunk.source,
                 }
                 citations.append({
-                    "index": idx,
+                    "index": new_idx,
                     "chunk_id": str(chunk.chunk_id),
                     "document_id": str(chunk.document_id),
                     "document_title": chunk.document_title,
@@ -319,22 +332,20 @@ async def generator_node(state: AgentState) -> dict:
                 })
 
         logger.info(
-            f"LLM referenced markers {sorted(referenced_markers)}, "
+            f"LLM referenced markers {sorted_markers} → remapped to {sorted(citation_map.keys())}, "
             f"citation_map has {len(citation_map)} of {len(chunks)} chunks"
         )
 
-        logger.info(f"Persisting {len(citations)} citations to message history")
+        logger.info(f"Built {len(citations)} citations and {len(citation_map)} citation_map entries")
 
-        # Return state update (MUST include messages to persist to conversation history!)
-        # attach citations to additional_kwargs for retrieval
-        # Also attach to response_metadata as a fallback for persistence
+        # Return state update.
+        # NOTE: We do NOT add an AIMessage to messages here. The validator
+        # will create the AIMessage only when the response is approved. This
+        # prevents duplicate AI messages in the checkpoint on validator retries.
         return {
-            "messages": [AIMessage(
-                content=full_response,
-                additional_kwargs={"citations": citations, "citation_map": citation_map},
-                response_metadata={"citations": citations, "citation_map": citation_map},
-            )],
             "generated_response": full_response,
+            "citation_map": {str(k): v for k, v in citation_map.items()},
+            "citations": citations,
             "metadata": {
                 "generation": {
                     "model": settings.openai_model,
@@ -351,11 +362,12 @@ async def generator_node(state: AgentState) -> dict:
     except Exception as e:
         logger.error(f"Generation failed: {e}", exc_info=True)
 
-        # Return error response (still need to add to messages!)
-        error_msg = f"I encountered an error while generating the response. Please try again."
+        # Return error response — no AIMessage here, validator will persist it.
+        error_msg = "I encountered an error while generating the response. Please try again."
         return {
-            "messages": [AIMessage(content=error_msg)],
             "generated_response": error_msg,
+            "citation_map": {},
+            "citations": [],
             "metadata": {
                 "generation": {
                     "error": str(e),

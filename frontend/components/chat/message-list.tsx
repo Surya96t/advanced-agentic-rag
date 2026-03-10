@@ -8,6 +8,7 @@
 
 import { useEffect, useRef } from 'react'
 import { MessageBubble } from './message-bubble'
+import { ThinkingIndicator } from './thinking-indicator'
 import type { Message } from '@/types/chat'
 import type { AgentStep, StreamingMetrics } from '@/stores/chat-store'
 
@@ -66,6 +67,9 @@ export function MessageList({
           )
         })}
         
+        {/* Thinking indicator — visible while tokens are buffered server-side */}
+        {isLoading && <ThinkingIndicator className="pb-2" />}
+
         {/* Invisible div for auto-scroll target */}
         <div ref={bottomRef} />
       </div>

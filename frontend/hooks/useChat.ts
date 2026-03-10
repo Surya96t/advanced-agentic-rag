@@ -26,6 +26,7 @@ export function useChat(threadId?: string) {
     currentAgent,
     agentHistory,
     streamingMetrics,
+    thinkingStatus,
     currentThreadId,
     addUserMessage,
     startStreamingMessage,
@@ -41,6 +42,7 @@ export function useChat(threadId?: string) {
     resetAgentHistory,
     setQualityScore,
     resetStreamingMetrics,
+    setThinkingStatus,
     setLoading,
     setError,
     clearMessages,
@@ -52,6 +54,38 @@ export function useChat(threadId?: string) {
   // AbortController for cancellation
   const abortControllerRef = useRef<AbortController | null>(null)
   const sseClientRef = useRef<SSEClient | null>(null)
+  // Token counter for streaming metrics (reset per message)
+  const tokenCountRef = useRef(0)
+
+  // ── SSE event logger ────────────────────────────────────────────────────────
+  // Logs every SSE event to the browser console w/ a consistent prefix so you
+  // can filter by "[SSE]" in DevTools.  Colors distinguish event categories:
+  //   🟢 lifecycle (agent_start / end)   🔵 content (token / citation)
+  //   🟡 status (thinking / validation)  🔴 errors
+  const logSSE = (event: string, data: unknown) => {
+    const COLORS: Record<string, string> = {
+      token:          'color:#4ade80',   // green
+      citation:       'color:#60a5fa',   // blue
+      citation_map:   'color:#60a5fa',
+      thinking:       'color:#facc15',   // yellow
+      validation:     'color:#facc15',
+      agent_start:    'color:#a78bfa',   // purple
+      agent_complete: 'color:#a78bfa',
+      end:            'color:#a78bfa',
+      error:          'color:#f87171',   // red
+      agent_error:    'color:#f87171',
+    }
+    const style = COLORS[event] ?? 'color:#94a3b8'
+    // For token events only print a dot to avoid flooding (every 20th token prints full data)
+    if (event === 'token') {
+      tokenCountRef.current++
+      if (tokenCountRef.current % 20 === 1) {
+        console.log(`%c[SSE] token #${tokenCountRef.current}`, style, data)
+      }
+    } else {
+      console.log(`%c[SSE] ${event}`, style, data)
+    }
+  }
 
   // Sync the thread ID from URL params to store
   // When threadId is present: sync it to store
@@ -85,6 +119,7 @@ export function useChat(threadId?: string) {
         // Reset agent history and streaming metrics for new conversation turn
         resetAgentHistory()
         resetStreamingMetrics()
+        tokenCountRef.current = 0
 
         // Create AbortController for cancellation
         abortControllerRef.current = new AbortController()
@@ -181,10 +216,8 @@ export function useChat(threadId?: string) {
               case 'agent_start': {
                 const data = parseSSEEvent('agent_start', event)
                 if (data) {
-                  console.log('[SSE] Agent started:', data.agent)
-                  // Use new startAgent method to track in history
+                  logSSE('agent_start', { agent: data.agent, message: data.message })
                   startAgent(data.agent)
-                  // Start streaming message on first agent
                   if (!messageStarted) {
                     startStreamingMessage()
                     messageStarted = true
@@ -196,29 +229,23 @@ export function useChat(threadId?: string) {
               case 'token': {
                 const data = parseSSEEvent('token', event)
                 if (data) {
+                  // Log every token (throttled to every 20th by logSSE)
+                  logSSE('token', data.token)
+
                   // Ensure generator is marked as active when we receive tokens
-                  // This fixes the issue where UI might get stuck showing 'retriever'
-                  // We access store directly to get current state without hook dependency cycle
                   const state = useChatStore.getState()
                   const currentAgentState = state.currentAgent
                   
                   if (currentAgentState !== 'generator') {
-                    console.log('[SSE] Token received, forcing active agent to: generator')
                     setCurrentAgent('generator')
-                    
-                    // Also ensure generator is in the history with start time
                     const history = state.agentHistory
-                    const generatorExists = history.some(a => a.name === 'generator')
-                    
-                    if (!generatorExists) {
+                    if (!history.some(a => a.name === 'generator')) {
                       startAgent('generator')
                     }
                   }
 
-                  // Sanitize token before display
                   const sanitizedToken = sanitizeToken(data.token)
                   
-                  // Ensure message is started
                   if (!messageStarted) {
                     startStreamingMessage()
                     messageStarted = true
@@ -229,31 +256,24 @@ export function useChat(threadId?: string) {
               }
 
               case 'token_reset': {
-                // Validator failed and is retrying — discard the streamed tokens
-                // from the failed generator run so the user only sees the final answer.
-                console.log('[SSE] Token reset received, clearing streaming buffer for retry')
-                resetStreamingMessage()
+                // Legacy fallback — no longer emitted by backend. Keep as no-op.
+                logSSE('token_reset', {})
                 break
               }
 
               case 'citation': {
                 const data = parseSSEEvent('citation', event)
                 if (data) {
-                  console.log('[Citation Event]', data) // DEBUG
-                  
-                  // Validate citation content
                   if (!isCitationSafe(data)) {
-                    console.warn('[Security] Blocked unsafe citation')
+                    console.warn('[Security] Blocked unsafe citation:', data.chunk_id)
                     return
                   }
 
-                  // Ensure message is started
                   if (!messageStarted) {
                     startStreamingMessage()
                     messageStarted = true
                   }
-                  
-                  // Convert CitationEvent to Citation format
+
                   const citation = {
                     document_id: data.document_id || data.chunk_id || 'unknown',
                     document_title: data.document_title || 'Unknown Document',
@@ -262,7 +282,7 @@ export function useChat(threadId?: string) {
                     similarity_score: data.score ?? data.similarity_score ?? undefined,
                     original_score: data.original_score ?? undefined,
                   }
-                  console.log('[Adding Citation]', citation) // DEBUG
+                  logSSE('citation', { chunk_id: data.chunk_id, title: data.document_title, score: data.score })
                   addCitationToStreamingMessage(citation)
                 }
                 break
@@ -271,8 +291,7 @@ export function useChat(threadId?: string) {
               case 'agent_complete': {
                 const data = parseSSEEvent('agent_complete', event)
                 if (data) {
-                  console.log('[SSE] Agent completed:', data.agent)
-                  // Mark agent as complete in history (keeps it visible)
+                  logSSE('agent_complete', { agent: data.agent })
                   completeAgent(data.agent)
                 }
                 break
@@ -281,8 +300,7 @@ export function useChat(threadId?: string) {
               case 'agent_error': {
                 const data = parseSSEEvent('agent_error', event)
                 if (data) {
-                  console.error('[SSE] Agent error:', data.error)
-                  // Mark agent as error in history
+                  logSSE('agent_error', { agent: data.agent, error: data.error })
                   errorAgent(data.agent)
                   toast.error(`Agent error: ${data.error}`)
                 }
@@ -292,11 +310,36 @@ export function useChat(threadId?: string) {
               case 'validation': {
                 const data = parseSSEEvent('validation', event)
                 if (data) {
-                  console.log('[SSE] Validation:', data.passed ? 'PASSED' : 'FAILED', `(score: ${data.score})`)
-                  // Store quality score in metrics
+                  logSSE('validation', {
+                    passed: data.passed,
+                    score: data.score,
+                    issues: data.issues,
+                  })
                   setQualityScore(data.score)
-                  if (!data.passed && data.issues.length > 0) {
-                    console.warn('[SSE] Validation issues:', data.issues)
+                }
+                break
+              }
+
+              case 'thinking': {
+                const data = parseSSEEvent('thinking', event)
+                if (data) {
+                  logSSE('thinking', { status: data.status, message: data.message, attempt: data.attempt })
+                  if (data.status === 'complete') {
+                    // Tokens are about to flow — clear the indicator.
+                    setThinkingStatus(null)
+                    // Ensure the streaming message placeholder exists.
+                    if (!messageStarted) {
+                      startStreamingMessage()
+                      messageStarted = true
+                    }
+                  } else {
+                    setThinkingStatus(data)
+                    // Ensure a streaming message slot exists so the indicator
+                    // has something to anchor to in the message list.
+                    if (!messageStarted) {
+                      startStreamingMessage()
+                      messageStarted = true
+                    }
                   }
                 }
                 break
@@ -305,8 +348,7 @@ export function useChat(threadId?: string) {
               case 'thread_title': {
                 const data = parseSSEEvent('thread_title', event)
                 if (data) {
-                  console.log('[SSE] Thread title received:', data.title)
-                  // Optimistically update sidebar title without a full re-fetch
+                  logSSE('thread_title', { title: data.title })
                   updateThreadTitleOptimistically(effectiveThreadId, data.title)
                 }
                 break
@@ -316,7 +358,10 @@ export function useChat(threadId?: string) {
                 const data = parseSSEEvent('citation_map', event)
                 if (data) {
                   if (typeof data.markers === 'object' && data.markers !== null) {
-                    console.log('[SSE] Citation map received:', Object.keys(data.markers).length, 'markers')
+                    logSSE('citation_map', {
+                      markerCount: Object.keys(data.markers).length,
+                      keys: Object.keys(data.markers),
+                    })
                     setCitationMapForMessage(data.markers)
                   } else {
                     console.warn('[SSE] citation_map event missing or invalid markers field, skipping')
@@ -332,8 +377,7 @@ export function useChat(threadId?: string) {
                 // router.push() during a live SSE stream causes a disruptive page transition.
                 const data = parseSSEEvent('thread_created', event)
                 if (data && data.thread_id) {
-                  console.log('[SSE] Thread created acknowledgement received:', data.thread_id)
-                  // Fallback: set thread ID if pre-generation didn't run for some reason
+                  logSSE('thread_created', { thread_id: data.thread_id })
                   const liveState = useChatStore.getState()
                   if (!liveState.currentThreadId) {
                     setCurrentThreadId(data.thread_id)
@@ -350,7 +394,7 @@ export function useChat(threadId?: string) {
               case 'end': {
                 const data = parseSSEEvent('end', event)
                 if (data) {
-                  console.log('[SSE] Chat complete:', data.success ? 'success' : 'failed')
+                  logSSE('end', { success: data.success, thread_id: data.thread_id, error: data.error })
 
                   // Capture thread_id for multi-turn conversations
                   if (data.thread_id) {
@@ -370,6 +414,7 @@ export function useChat(threadId?: string) {
                   }
                   finishStreamingMessage()
                   setCurrentAgent(null)
+                  setThinkingStatus(null)
 
                   if (!data.success && data.error) {
                     toast.error(`Chat failed: ${data.error}`)
@@ -381,14 +426,14 @@ export function useChat(threadId?: string) {
               case 'error': {
                 const data = parseSSEEvent('error', event)
                 if (data) {
-                  console.error('[SSE] Error:', data.error)
+                  logSSE('error', { error: data.error, details: data.details })
                   throw new Error(data.error)
                 }
                 break
               }
 
               default:
-                console.log('[SSE] Unknown event:', event.event)
+                logSSE(event.event, { raw: event.data?.slice(0, 120) })
             }
           },
           onError: (error, retryCount) => {
@@ -425,6 +470,7 @@ export function useChat(threadId?: string) {
       } finally {
         setLoading(false)
         setCurrentAgent(null)
+        setThinkingStatus(null)
         abortControllerRef.current = null
         sseClientRef.current = null
       }
@@ -445,6 +491,7 @@ export function useChat(threadId?: string) {
       resetAgentHistory,
       setQualityScore,
       resetStreamingMetrics,
+      setThinkingStatus,
       setLoading,
       setError,
       setRateLimit,
@@ -474,6 +521,7 @@ export function useChat(threadId?: string) {
     currentAgent,
     agentHistory,
     streamingMetrics,
+    thinkingStatus,
     sendMessage,
     cancelStream,
     clearMessages,

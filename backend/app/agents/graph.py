@@ -9,6 +9,8 @@ This module assembles the complete agentic RAG workflow graph with:
 - Multi-mode streaming support
 """
 
+import asyncio
+
 from app.utils.logger import get_logger
 from app.schemas.events import (
     SSEEventType,
@@ -18,6 +20,7 @@ from app.schemas.events import (
     ProgressEvent,
     TokenEvent,
     TokenResetEvent,
+    ThinkingEvent,
     CitationEvent,
     ValidationEvent,
     EndEvent,
@@ -31,6 +34,7 @@ from app.core.config import settings
 from app.agents.nodes import (
     router_node,
     query_expander_node,
+    query_rewriter_node,
     retriever_node,
     generator_node,
     validator_node,
@@ -84,6 +88,7 @@ def build_graph() -> StateGraph:
     builder.add_node("context_loader", load_conversation_context)
     builder.add_node("classifier", classify_query)
     builder.add_node("simple_answer", generate_simple_answer)
+    builder.add_node("query_rewriter", query_rewriter_node)
 
     # Add existing RAG nodes
     logger.debug("Adding RAG nodes to graph")
@@ -107,6 +112,9 @@ def build_graph() -> StateGraph:
 
     # Simple answer path (bypasses RAG pipeline)
     builder.add_edge("simple_answer", END)
+
+    # Conversational follow-up path: rewrite → router → RAG pipeline
+    builder.add_edge("query_rewriter", "router")
 
     # RAG pipeline (for complex queries)
     # Router uses Command pattern to decide routing
@@ -446,22 +454,26 @@ async def stream_agent(
 
     # Track current node for event correlation
     current_node: str | None = None
+    # attempt/max_attempts tracked for ThinkingEvent emissions on node transitions.
+    attempt: int = 1
+    max_attempts: int = 1 + settings.validation_max_retries  # initial + retries
 
     try:
         # Get compiled graph with checkpointer
         graph_instance = get_graph(checkpointer=checkpointer)
 
-        # Stream with both updates and messages modes to get node updates + token events.
-        # messages mode yields (AIMessageChunk, metadata) tuples; metadata["langgraph_node"]
-        # identifies which node emitted the chunk so we only surface generator tokens.
+        # Stream with updates + messages modes.
+        # Tokens for validated responses are yielded from the validator update
+        # handler below (with real asyncio.sleep delays between words) so that
+        # the browser receives them progressively via HTTP chunked transfer.
         async for chunk in graph_instance.astream(
             initial_state,
             config=config,
             stream_mode=["updates", "messages"],
         ):
-            # chunk is always (mode, data) when multiple stream_mode values are used:
-            # - ("updates", {node_name: node_update}) for node state changes
-            # - ("messages", (AIMessageChunk, metadata)) for LLM token chunks
+            # chunk is always (mode, data) when multiple stream_mode values:
+            # - ("updates",  {node_name: node_update})       node state changes
+            # - ("messages", (AIMessageChunk, metadata))      LLM token chunks
 
             mode, data = chunk
 
@@ -495,6 +507,29 @@ async def stream_agent(
                             message=f"Executing {node_name} node",
                         ).model_dump_json()
                     }
+
+                    # Emit thinking(start) when the generator begins so the
+                    # frontend can show a progress indicator.
+                    if node_name == "generator":
+                        yield {
+                            "event": SSEEventType.THINKING.value,
+                            "data": ThinkingEvent(
+                                status="start",
+                                message="Generating response...",
+                                attempt=attempt,
+                                max_attempts=max_attempts,
+                            ).model_dump_json()
+                        }
+                    elif node_name == "validator":
+                        yield {
+                            "event": SSEEventType.THINKING.value,
+                            "data": ThinkingEvent(
+                                status="validating",
+                                message="Verifying response quality...",
+                                attempt=attempt,
+                                max_attempts=max_attempts,
+                            ).model_dump_json()
+                        }
 
                 # Process specific update types
                 # Citation events from retriever
@@ -618,63 +653,105 @@ async def stream_agent(
                     logger.info(
                         f"🔍 Query classified: {query_type} (retrieval={needs_retrieval})")
 
-                # Validation events
+                # Diagnostic: log the rewritten query so we can trace it
+                if node_name == "query_rewriter" and "retrieval_query" in node_update:
+                    rewritten = node_update["retrieval_query"]
+                    logger.info(
+                        f"✏️  Query rewritten: '{rewritten[:120]}'"
+                    )
+
+                # Diagnostic: log what the router decided
+                if node_name == "router" and "retrieval_query" in node_update:
+                    rq = node_update["retrieval_query"]
+                    cplx = node_update.get("query_complexity", "?")
+                    logger.info(
+                        f"🔀 Router decision: complexity={cplx}, retrieval_query='{rq[:120]}'"
+                    )
+
+                # Validation result + token streaming.
+                # When the validator approves the response (or max retries
+                # exhausted), it includes 'generated_response' in its update.
+                # We stream the tokens here — inside the SSE async generator —
+                # with real ``asyncio.sleep`` delays between words so that
+                # HTTP chunked transfer delivers them progressively.
                 if node_name == "validator" and "validation_result" in node_update:
                     validation = node_update["validation_result"]
+                    passed = validation.get("passed", False)
+
                     yield {
                         "event": SSEEventType.VALIDATION.value,
                         "data": ValidationEvent(
-                            passed=validation.get("passed", False),
+                            passed=passed,
                             score=validation.get("score", 0.0),
                             issues=validation.get("issues", []),
                         ).model_dump_json()
                     }
 
-                # Citation map event from generator — emitted after all tokens are
-                # streamed (updates arrive after messages in the combined stream).
-                if node_name == "generator" and "messages" in node_update:
-                    msgs = node_update.get("messages", [])
-                    if msgs:
-                        msg = msgs[0]
-                        if hasattr(msg, "additional_kwargs"):
-                            raw_map = msg.additional_kwargs.get("citation_map", {})
-                            if raw_map:
+                    approved_response = node_update.get("generated_response")
+                    if approved_response is not None:
+                        # Validator approved (or max retries): stream tokens.
+                        yield {
+                            "event": SSEEventType.THINKING.value,
+                            "data": ThinkingEvent(
+                                status="complete",
+                                message="Response ready",
+                                attempt=attempt,
+                                max_attempts=max_attempts,
+                            ).model_dump_json()
+                        }
+
+                        words = approved_response.split(" ")
+                        for i, word in enumerate(words):
+                            token = word if i == len(words) - 1 else word + " "
+                            if token:
                                 yield {
-                                    "event": SSEEventType.CITATION_MAP.value,
-                                    "data": CitationMapEvent(
-                                        markers={str(k): v for k, v in raw_map.items()}
+                                    "event": SSEEventType.TOKEN.value,
+                                    "data": TokenEvent(
+                                        token=token,
+                                        model=settings.openai_model,
                                     ).model_dump_json()
                                 }
-                                logger.info(
-                                    f"📌 Emitted citation_map with {len(raw_map)} markers"
-                                )
+                                # Real delay so tokens are flushed as separate
+                                # HTTP chunks — this is what makes streaming
+                                # visible in the browser.
+                                await asyncio.sleep(0.015)
 
-                # Token reset: tell the frontend to discard the streamed tokens
-                # from this failed generator run before the retry begins.
-                # Only emit when retry_count is EXPLICITLY set in this node's delta
-                # (i.e. the validator returned it). Using "in" instead of .get()
-                # prevents false-positives if the full merged state leaks through.
-                if (
-                    node_name == "validator"
-                    and "retry_count" in node_update
-                    and node_update["retry_count"] > 0
-                ):
-                    yield {
-                        "event": SSEEventType.TOKEN_RESET.value,
-                        "data": TokenResetEvent(reason="validator_retry").model_dump_json()
-                    }
+                    elif "retry_count" in node_update and node_update["retry_count"] > 0:
+                        # Validator rejected — retrying.
+                        attempt = node_update["retry_count"] + 1
+                        yield {
+                            "event": SSEEventType.THINKING.value,
+                            "data": ThinkingEvent(
+                                status="retrying",
+                                message=f"Improving response (attempt {attempt}/{max_attempts})...",
+                                attempt=attempt,
+                                max_attempts=max_attempts,
+                            ).model_dump_json()
+                        }
+
+                # Citation map event from generator — emit immediately so the
+                # frontend has it before tokens start flowing from the validator.
+                if node_name == "generator" and "citation_map" in node_update:
+                    raw_map = node_update.get("citation_map", {})
+                    if raw_map:
+                        yield {
+                            "event": SSEEventType.CITATION_MAP.value,
+                            "data": CitationMapEvent(
+                                markers={str(k): v for k, v in raw_map.items()}
+                            ).model_dump_json()
+                        }
+                        logger.info(
+                            f"📌 Emitted citation_map with {len(raw_map)} markers"
+                        )
+
             elif mode == "messages":
-                # Handle LLM token chunks from messages stream mode.
-                # data is a (message_chunk, metadata) tuple.
-                # Allow tokens from both response-generating nodes:
-                # - 'generator'     : RAG pipeline responses
-                # - 'simple_answer' : conversational / follow-up responses
-                # Tokens from 'classifier', 'router', 'validator' etc. are filtered out.
+                # simple_answer tokens — no validation loop, stream directly.
                 msg_chunk, metadata = data
+                node = metadata.get("langgraph_node")
                 if (
-                    hasattr(msg_chunk, "content")
+                    node == "simple_answer"
+                    and hasattr(msg_chunk, "content")
                     and msg_chunk.content
-                    and metadata.get("langgraph_node") in ("generator", "simple_answer")
                 ):
                     yield {
                         "event": SSEEventType.TOKEN.value,

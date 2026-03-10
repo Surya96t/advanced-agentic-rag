@@ -11,7 +11,7 @@ import asyncio
 import time
 from typing import Literal
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.types import Command
 from pydantic import BaseModel, Field
@@ -86,7 +86,7 @@ async def _llm_validate(
         "1. Accuracy / grounding — does the answer stay within the provided context?\n"
         "2. Completeness — does the answer fully address the query?\n"
         "3. Source citation — does the answer cite its sources where appropriate?\n"
-        "4. Code quality — are any code blocks complete and correct?\n\n"
+        "4. Clarity — is the response well-structured and easy to understand?\n\n"
         "Return a score from 0.0 (completely wrong/unhelpful) to 1.0 (perfect).\n"
         f"A score >= {PASS_THRESHOLD} means the response passes. "
         "List specific issues if score is below that threshold."
@@ -153,8 +153,11 @@ async def validator_node(state: AgentState) -> Command[Literal["query_expander",
 
     response = state.get("generated_response", "")
     chunks = state.get("retrieved_chunks", [])
-    query = state.get("original_query", state.get("query", ""))
+    # Use resolved retrieval_query (pronoun-resolved for follow-ups) so the
+    # validator evaluates against the real intent, not a vague "tell me more".
+    query = state.get("retrieval_query") or state.get("original_query", state.get("query", ""))
     retry_count = state.get("retry_count", 0)
+    max_retries = MAX_RETRIES
 
     # Build a short context preview from the top-3 chunks
     context_preview = "\n---\n".join(
@@ -180,8 +183,20 @@ async def validator_node(state: AgentState) -> Command[Literal["query_expander",
             f"⏱️  VALIDATOR NODE: Completed in {elapsed:.3f}s | "
             f"✅ PASSED (score={llm_result.score:.2f})"
         )
+        # Persist the approved response as the ONLY AIMessage for this turn.
+        # Generator intentionally omits messages to avoid duplicates on retries.
+        citations = state.get("citations", [])
+        citation_map = state.get("citation_map", {})
         return Command(
-            update={"validation_result": validation_result},
+            update={
+                "validation_result": validation_result,
+                "generated_response": response,
+                "messages": [AIMessage(
+                    content=response,
+                    additional_kwargs={"citations": citations, "citation_map": citation_map},
+                    response_metadata={"citations": citations, "citation_map": citation_map},
+                )],
+            },
             goto="__end__",
         )
 
@@ -194,8 +209,19 @@ async def validator_node(state: AgentState) -> Command[Literal["query_expander",
             f"Response quality below threshold after {MAX_RETRIES} retries. "
             "This answer may be incomplete or less accurate than ideal."
         )
+        # Persist best-effort response as AIMessage (same pattern as approval).
+        citations = state.get("citations", [])
+        citation_map = state.get("citation_map", {})
         return Command(
-            update={"validation_result": validation_result},
+            update={
+                "validation_result": validation_result,
+                "generated_response": response,
+                "messages": [AIMessage(
+                    content=response,
+                    additional_kwargs={"citations": citations, "citation_map": citation_map},
+                    response_metadata={"citations": citations, "citation_map": citation_map},
+                )],
+            },
             goto="__end__",
         )
 

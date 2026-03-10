@@ -22,7 +22,7 @@ class SSEEventType(str, Enum):
     AGENT_ERROR = "agent_error"
     CITATION = "citation"
     TOKEN = "token"
-    TOKEN_RESET = "token_reset"  # Discard streamed tokens on validator retry
+    TOKEN_RESET = "token_reset"  # Kept for backward compatibility (no longer emitted during normal flow)
     PROGRESS = "progress"
     VALIDATION = "validation"
     END = "end"
@@ -32,6 +32,7 @@ class SSEEventType(str, Enum):
     QUERY_CLASSIFICATION = "query_classification"  # Query type classification result
     THREAD_TITLE = "thread_title"  # LLM-generated title, emitted once per new thread
     CITATION_MAP = "citation_map"  # Marker-to-source mapping emitted after generation
+    THINKING = "thinking"  # Silent generation in progress (buffering before validation)
 
 
 class AgentStartEvent(BaseSchema):
@@ -168,14 +169,49 @@ class TokenEvent(BaseSchema):
 class TokenResetEvent(BaseSchema):
     """Event emitted when the frontend should discard previously streamed tokens.
 
-    Sent when the validator fails and triggers a retry — the first generator
-    run's tokens must be discarded so the frontend only shows the final
-    successful response.
+    Kept for backward compatibility. With silent generation (Problem 3 fix),
+    tokens are buffered server-side before validation so this event is no longer
+    emitted under normal operation. It may still be emitted by older code paths.
     """
 
     reason: str = Field(
         default="validator_retry",
         description="Why the streaming buffer is being reset",
+    )
+
+
+class ThinkingEvent(BaseSchema):
+    """Event emitted while the generator is running silently (before validation).
+
+    The frontend should show a thinking/progress indicator instead of content
+    while this is active. Once ``status="complete"`` is received, buffered tokens
+    begin flowing as normal TOKEN events.
+
+    Status progression (happy path, no retries):
+        thinking(start) → thinking(validating) → thinking(complete) → TOKEN events
+
+    Status progression (with retry):
+        thinking(start) → thinking(validating) → thinking(retrying) →
+        thinking(start) → thinking(validating) → thinking(complete) → TOKEN events
+    """
+
+    status: str = Field(
+        ...,
+        description="One of: 'start', 'validating', 'retrying', 'complete'",
+    )
+    message: str = Field(
+        ...,
+        description="Human-readable status message for the UI",
+    )
+    attempt: int = Field(
+        default=1,
+        ge=1,
+        description="Current generation attempt number (1-based)",
+    )
+    max_attempts: int = Field(
+        default=3,
+        ge=1,
+        description="Maximum number of attempts (initial + max_retries)",
     )
 
 

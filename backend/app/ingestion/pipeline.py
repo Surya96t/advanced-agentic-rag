@@ -495,15 +495,22 @@ class IngestionPipeline:
         """
         try:
             # Identify which chunks actually need embeddings.
+            # Only skip PARENT chunks when CHILD chunks exist (true parent-child mode).
+            # If all chunks are PARENT (e.g. RecursiveChunker default), embed them all.
+            has_children = any(c.chunk_type == ChunkType.CHILD for c in chunks)
             embeddable_indices = [
                 i for i, c in enumerate(chunks)
-                if c.chunk_type != ChunkType.PARENT
+                if has_children and c.chunk_type == ChunkType.PARENT
+            ]
+            # Invert: we want indices of chunks TO embed (non-parents, or all if no children)
+            embeddable_indices = [
+                i for i in range(len(chunks))
+                if i not in set(embeddable_indices)
             ]
             embeddable_texts = [chunks[i].content for i in embeddable_indices]
 
             if not embeddable_texts:
-                # Edge case: document chunked into parents only (no children).
-                logger.debug("No embeddable chunks (all parents); skipping embedding")
+                logger.error("No embeddable chunks found — this should not happen")
                 if progress_callback:
                     progress_callback(100.0)
                 return [None] * len(chunks)

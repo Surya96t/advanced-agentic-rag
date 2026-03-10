@@ -4,6 +4,7 @@
 
 import { create } from 'zustand'
 import { Message, Citation, CitationMarker } from '@/types/chat'
+import type { ThinkingEvent } from '@/lib/sse-schemas'
 
 /**
  * Generate a stable message ID based on content and timestamp
@@ -91,6 +92,7 @@ interface ChatState {
   agentHistory: AgentStep[]  // Track all agents with their status and timing
   streamingMessageId: string | null  // ID of message being streamed
   streamingMetrics: StreamingMetrics  // Track streaming performance metrics
+  thinkingStatus: ThinkingEvent | null  // Silent generation progress indicator
   
   // Thread management
   currentThreadId: string | null  // Active conversation thread
@@ -112,6 +114,7 @@ interface ChatState {
   resetAgentHistory: () => void  // Clear agent history
   setQualityScore: (score: number) => void  // Set validation quality score
   resetStreamingMetrics: () => void  // Reset streaming metrics
+  setThinkingStatus: (status: ThinkingEvent | null) => void  // Update thinking indicator
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
   clearMessages: () => void
@@ -139,6 +142,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     tokensPerSecond: 0,
     qualityScore: null,
   },
+  thinkingStatus: null,
   
   // Thread management state
   currentThreadId: null,
@@ -253,10 +257,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           msg.id === state.streamingMessageId
             ? {
                 ...msg,
-                citations: [
-                  ...(msg.citations || []),
-                  citation,
-                ],
+                citations: (msg.citations || []).some(c => c.chunk_id === citation.chunk_id)
+                  ? (msg.citations || [])
+                  : [...(msg.citations || []), citation],
               }
             : msg
         ),
@@ -391,6 +394,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         qualityScore: null,
       },
     }),
+
+  setThinkingStatus: (status) =>
+    set({ thinkingStatus: status }),
 
   setLoading: (loading) =>
     set({ isLoading: loading }),

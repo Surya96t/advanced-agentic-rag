@@ -6,7 +6,6 @@
 'use client'
 
 import { Message, MessageContent } from '@/components/ai-elements/message'
-import { Suggestions, Suggestion } from '@/components/ai-elements/suggestion'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
 import { Bot, User, Loader2, MessageCircle, Zap, AlertTriangle } from 'lucide-react'
@@ -26,15 +25,6 @@ interface MessageBubbleProps {
   streamingMetrics?: StreamingMetrics
   onSuggestionClick?: (suggestion: string) => void
 }
-
-// AI-generated follow-up suggestions based on common documentation queries
-const FOLLOW_UP_SUGGESTIONS = [
-  "Show me code examples",
-  "What are the best practices?",
-  "How do I get started?",
-  "What are the requirements?",
-  "Tell me more about authentication",
-]
 
 export function MessageBubble({ 
   message, 
@@ -118,21 +108,6 @@ export function MessageBubble({
                   <span>Quick response</span>
                 </div>
               )}
-            </div>
-          )}
-
-          {/* Follow-up suggestions (latest AI message only) */}
-          {!isUser && isLatestAI && onSuggestionClick && (
-            <div className="mt-4">
-              <Suggestions>
-                {FOLLOW_UP_SUGGESTIONS.map((suggestion) => (
-                  <Suggestion
-                    key={suggestion}
-                    suggestion={suggestion}
-                    onClick={onSuggestionClick}
-                  />
-                ))}
-              </Suggestions>
             </div>
           )}
 

@@ -1,16 +1,139 @@
-# Bugfix Plan — Three Critical UX/Functionality Issues
+# Bugfix Plan — RAG System UX Issues
 
-> **Created:** 2026-03-08
-> **Status:** Planning — no code changes yet
+> **Created:** 2026-03-08  
+> **Updated:** 2026-03-09  
 > **Branch:** `improvements`
 
 ---
 
-## Table of Contents
+## Status Overview
 
-1. [Problem 1: Non-Sequential Citation Numbering](#problem-1-non-sequential-citation-numbering)
-2. [Problem 2: Follow-Up Queries Retrieve Wrong Documents](#problem-2-follow-up-queries-retrieve-wrong-documents)
-3. [Problem 3: Validator Retry Causes Visible Stream Reset](#problem-3-validator-retry-causes-visible-stream-reset)
+| # | Problem | Status | ClickUp |
+|---|---------|--------|---------|
+| P1 | Non-sequential citation numbering | ✅ **Complete** | `86ag0nmdw` |
+| P2 | Follow-up queries retrieve wrong documents | ✅ **Complete** | `86ag0nmf6` |
+| P3 | Validator retry causes visible stream reset | ✅ **Complete** | `86ag0nmgy` |
+| B1 | Duplicate thinking indicator during generator | 🔲 To Do | `86ag1c7j7` |
+| B2 | No streaming — response dumps all at once | 🔲 To Do | `86ag1c7m6` |
+| B3 | Citation markers don't match citation_map on follow-ups | 🔲 To Do | `86ag1c7n8` |
+
+---
+
+## ✅ Completed — Original Bugfix Round
+
+### P1 — Non-Sequential Citation Numbering
+
+**Symptom:** Responses showed `[1], [5], [10]` with gaps instead of sequential `[1], [2], [3]`.
+
+**Root cause:** `format_context()` labelled all N chunks as Source 1..N. The LLM only referenced some of them. No renumbering step existed.
+
+**Fix applied (`generator.py`):**
+- After LLM response, build `remap = {old: new for new, old in enumerate(sorted(referenced_markers), 1)}`
+- Run `re.sub(r'\[(\d+)\]', _renumber, full_response)` to rewrite markers in place
+- Use `remap.get(idx, idx)` when building `citation_map` and `citations`
+
+---
+
+### P2 — Follow-Up Queries Retrieve Wrong Documents
+
+**Symptom:** Follow-up like "can you explain it in more detail?" retrieved completely unrelated documents.
+
+**Root cause:** Classifier correctly identified `conversational_followup` but routed directly to `router`, which only reads `original_query`. No node ever resolved pronouns/vague references against conversation history before retrieval.
+
+**Fix applied:**
+- Created `backend/app/agents/nodes/query_rewriter.py` — LLM-based pronoun resolver using `messages` + `conversation_summary`
+- Updated `classifier.py` routing: `conversational_followup + needs_retrieval=True` → `query_rewriter` (new) instead of `router`
+- Added `builder.add_node("query_rewriter", ...)` and `builder.add_edge("query_rewriter", "router")` in `graph.py`
+- Writes to `retrieval_query` only (never mutates `original_query`)
+
+---
+
+### P3 — Validator Retry Causes Visible Stream Reset (original fix)
+
+**Symptom:** User saw tokens appear, then instantly disappear, then reappear — jarring flash on validator retry.
+
+**Root cause:** Tokens were streamed to the client during generation via `messages` mode. Validator ran after. On failure, `TOKEN_RESET` SSE → `resetStreamingMessage()` → visible content wiped.
+
+**Fix applied (first implementation):**
+- Buffered generator tokens server-side in `token_buffer: list[str]`
+- Emitted `ThinkingEvent` SSE events for UI progress (`start` → `validating` → `complete`/`retrying`)
+- Flushed entire buffer to client only after validator passed
+- Added `ThinkingEvent` SSE schema, Zod schema, Zustand state, `ThinkingIndicator` component
+
+**Known issues introduced by this fix → see B1, B2, B3 below.**
+
+---
+
+## 🔲 New Bugs — Post-P3 Fix Round
+
+### B1 — Duplicate Thinking Indicator (ClickUp: `86ag1c7j7`)
+
+**Symptom:** Two thinking indicators appear simultaneously when the generator node is active:
+1. `AgentStatus` (existing chain-of-thought accordion in message bubble) shows "Generator" as active step
+2. `ThinkingIndicator` (new component) shows "Generating response…" (`status=start`) at the same time
+
+**Root cause:** `ThinkingIndicator` renders for all statuses including `start`, but `start` fires at the same time `AgentStatus` activates the "Generator" step. Duplicate progress signal.
+
+**Fix plan (`frontend/components/chat/thinking-indicator.tsx`):**
+- Return `null` early when `thinkingStatus.status === 'start'`
+- `ThinkingIndicator` only shows for `validating` and `retrying` — states not surfaced by `AgentStatus`
+
+**Files:** `frontend/components/chat/thinking-indicator.tsx` (1-line change)
+
+---
+
+### B2 — No Streaming — Response Dumps All At Once (ClickUp: `86ag1c7m6`) ⬅ Priority 1
+
+**Symptom:** After validation passes, the entire response appears instantaneously — no progressive token-by-token streaming. With 500+ documents this means a blank screen for many seconds.
+
+**Root cause:** The `token_buffer` flush loop in `graph.py` emits all buffered tokens synchronously in a tight `for` loop. All HTTP chunks are written before the browser can render progressively. The buffer-and-flush approach eliminates streaming as a side effect.
+
+**Industry standard solution (from LangGraph docs):**  
+LangGraph's `custom` stream mode with `get_stream_writer()` allows a node to emit arbitrary data mid-execution, before it returns. The validator node can emit `thinking(complete)` + stream each word of `state['generated_response']` using the stream writer — which flushes each `writer()` call immediately as its own HTTP chunk.
+
+**Fix plan:**
+
+#### `backend/app/agents/nodes/validator.py`
+1. Import `get_stream_writer` from `langgraph.config`
+2. After validation **passes**: emit `writer({"type": "thinking", "status": "complete"})` then iterate words of `state['generated_response']` and emit `writer({"type": "token", "token": word})`
+3. After validation **fails** (retry): emit `writer({"type": "thinking", "status": "retrying", "attempt": N, "max_attempts": M})`
+
+#### `backend/app/agents/graph.py`
+1. Add `"custom"` to `stream_mode=["updates", "messages", "custom"]`
+2. Handle `mode == "custom"` chunks: route `type=token` → `TOKEN` SSE, `type=thinking` → `THINKING` SSE
+3. **Remove `token_buffer` entirely** — no messages-mode buffering needed
+4. Remove the flush/discard logic from the validator `updates` handler (now inside validator node via `custom` mode)
+
+**Why this also fixes B3:** The new approach streams from `state['generated_response']` — the post-`re.sub` renumbered text. Citation markers in the stream always match `citation_map` keys.
+
+**Files:**
+- `backend/app/agents/nodes/validator.py`
+- `backend/app/agents/graph.py`
+
+---
+
+### B3 — Citation Markers Don't Match citation_map on Follow-Ups (ClickUp: `86ag1c7n8`)
+
+**Symptom:** Follow-up query response shows `[11]` as raw text (not a chip). Sources panel shows only 1 source with `[4]`. Inconsistent between streamed text and citation panel.
+
+**Root cause:** `token_buffer` was populated from the `messages` stream mode — raw LLM tokens emitted BEFORE `generator_node` ran `re.sub` renumbering. So buffer contained original marker `[11]`, but `citation_map` had remapped key `4`. Stream and map were out of sync.
+
+**Fix plan:** Automatically resolved by B2 fix. Validator streams from `state['generated_response']` (post-renumbered). Both the streamed text and `citation_map` originate from the same renumbering pass → always consistent.
+
+**Files:** Fixed as part of B2 changes.
+
+---
+
+## Implementation Order
+
+| Order | Bug | Effort | Impact |
+|-------|-----|--------|--------|
+| 1st | **B2** — No streaming (validator `custom` writer) | Medium (2 files) | Critical — streaming is broken |
+| 2nd | **B1** — Duplicate indicator | Trivial (1 line) | Low — cosmetic |
+| 3rd | **B3** — Citation mismatch | None — fixed by B2 | — |
+
+### B2 resolves B3 automatically. Implement B2 first, then B1.
+
 
 ---
 

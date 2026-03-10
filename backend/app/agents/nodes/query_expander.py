@@ -28,32 +28,32 @@ llm = ChatOpenAI(
 
 
 # Prompt templates
-DECOMPOSITION_PROMPT = """You are a technical research assistant. Break down this complex query into 2-3 focused sub-questions for retrieval.
+DECOMPOSITION_PROMPT = """You are a research assistant. Break down this complex query into 2-3 focused sub-questions for document retrieval.
 
 ORIGINAL QUERY: {query}
 
 Generate sub-questions that:
 - Cover different aspects of the main question
-- Are specific and searchable in technical documentation
+- Are specific and searchable within the user's uploaded documents
 - Together help answer the original question
 
 Return ONLY valid JSON in this exact format (no markdown, no explanation):
 {{"sub_queries": ["query1", "query2", "query3"]}}
 
-Example for "How do I configure authentication with the database?":
-{{"sub_queries": ["Authentication system configuration", "Database connection setup", "Integrating authentication with database"]}}"""
+Example for "What are the key terms and obligations in the service agreement?":
+{{"sub_queries": ["Key terms defined in the service agreement", "Obligations of each party", "Termination and renewal conditions"]}}"""
 
 
-HYDE_PROMPT = """You are a technical research assistant. Generate a detailed hypothetical answer to this vague query to help with search retrieval.
+HYDE_PROMPT = """You are a research assistant. Generate a detailed hypothetical answer to this vague query to help with document search retrieval.
 
 QUERY: {query}
 
-Write a 200-word technical answer that includes:
-- Specific technical terms and concepts
-- Potential solution keywords
-- Relevant framework or tool terminology
+Write a 200-word answer that includes:
+- Specific terms and concepts related to the query
+- Relevant keywords that would appear in documents about this topic
+- Domain-appropriate vocabulary
 
-This hypothetical answer will be used to find similar documentation.
+This hypothetical answer will be used to find similar content in the user's documents.
 
 Return ONLY the hypothetical answer text (no JSON, no preamble)."""
 
@@ -188,9 +188,19 @@ async def query_expander_node(state: AgentState) -> dict:
         return {"expanded_queries": []}
 
     complexity = state.get("query_complexity", "simple")
+    retry_count = state.get("retry_count", 0)
 
     logger.info(
-        f"⏱️  QUERY_EXPANDER NODE: Starting {complexity} query expansion")
+        f"⏱️  QUERY_EXPANDER NODE: Starting {complexity} query expansion"
+        f"{f' (retry {retry_count})' if retry_count else ''}")
+
+    # On retry (validator rejected the previous answer), always decompose even
+    # for "simple" queries — the single-query search already failed, so trying
+    # sub-queries gives the retriever a chance to find different chunks.
+    if retry_count > 0 and complexity == "simple":
+        logger.info(
+            "Retry detected for simple query — upgrading to sub-query decomposition")
+        complexity = "complex"
 
     # Select strategy based on complexity
     if complexity == "complex":

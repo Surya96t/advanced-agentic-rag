@@ -57,10 +57,10 @@ async def generate_simple_answer(state: AgentState) -> dict[str, Any]:
     )
 
     # Simple system prompt for conversational responses
-    system_msg = """You are a helpful documentation assistant. Respond naturally to the user.
+    system_msg = """You are a helpful document assistant. Respond naturally to the user.
 
 For greetings, be friendly and brief.
-For questions about your capabilities, explain you can answer questions about technical documentation using RAG.
+For questions about your capabilities, explain that you can answer questions based on the documents the user has uploaded.
 For follow-up questions, use the conversation context to provide helpful responses.
 For thanks, acknowledge graciously and offer further help.
 

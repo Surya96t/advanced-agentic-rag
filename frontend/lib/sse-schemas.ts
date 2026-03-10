@@ -105,6 +105,17 @@ export const ThreadTitleEventSchema = z.object({
   timestamp: z.string().optional(),
 })
 
+/** Emitted while the generator is running silently (buffered, before validation passes). */
+export const ThinkingEventSchema = z.object({
+  /** 'start' | 'validating' | 'retrying' | 'complete' */
+  status: z.string(),
+  message: z.string(),
+  attempt: z.number().default(1),
+  max_attempts: z.number().default(3),
+})
+
+export type ThinkingEvent = z.infer<typeof ThinkingEventSchema>
+
 /** Emitted after generator completes with a mapping from inline [N] marker to source. */
 export const CitationMarkerSchema = z.object({
   chunk_id: z.string(),
@@ -129,6 +140,7 @@ export type CitationMarker = z.infer<typeof CitationMarkerSchema>
 export const eventSchemas = {
   token: TokenEventSchema,
   token_reset: TokenResetEventSchema,
+  thinking: ThinkingEventSchema,
   citation: CitationEventSchema,
   agent_start: AgentStartEventSchema,
   agent_complete: AgentCompleteEventSchema,

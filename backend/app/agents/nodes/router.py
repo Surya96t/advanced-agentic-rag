@@ -229,10 +229,15 @@ async def router_node(state: AgentState) -> Command[Literal["retriever", "query_
     start_time = time.time()
     logger.info("⏱️  ROUTER NODE: Starting query complexity analysis")
 
-    # Extract query from state (either from original_query or last message)
+    # Extract query from state.
+    # If query_rewriter already resolved a follow-up into a standalone query,
+    # use that; otherwise fall back to original_query or last message.
     query: str = ""
 
-    if "original_query" in state and state["original_query"]:
+    if "retrieval_query" in state and state["retrieval_query"]:
+        query = state["retrieval_query"]
+        logger.info(f"Router using pre-set retrieval_query from query_rewriter: {query[:100]}")
+    elif "original_query" in state and state["original_query"]:
         query = state["original_query"]
     elif "messages" in state and state["messages"]:
         # Extract query from last user message

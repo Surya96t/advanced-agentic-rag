@@ -111,18 +111,18 @@ simple — Greetings, thanks, chitchat, meta questions. No retrieval needed.
 conversational_followup — Refers to or continues the prior turn. Retrieval depends on whether new info is needed.
   Q: "tell me more about that"        → conversational_followup, needs_retrieval=true
   Q: "can you give an example?"       → conversational_followup, needs_retrieval=true
-  Q: "what about edge cases?"         → conversational_followup, needs_retrieval=true
+  Q: "what about the exceptions?"     → conversational_followup, needs_retrieval=true
   Q: "how does that compare to X?"    → conversational_followup, needs_retrieval=true
-  Q: "can you go deeper on step 2?"   → conversational_followup, needs_retrieval=true
+  Q: "can you go deeper on point 2?"  → conversational_followup, needs_retrieval=true
   Q: "ok, so what would happen if…"   → conversational_followup, needs_retrieval=false
 
-complex_standalone — Self-contained technical question requiring full documentation lookup.
-  Q: "how do I implement JWT auth in FastAPI?"          → complex_standalone, needs_retrieval=true
-  Q: "explain async/await in Python"                   → complex_standalone, needs_retrieval=true
-  Q: "what are Convex mutations and how do I use them?" → complex_standalone, needs_retrieval=true
-  Q: "show me how to set up pgvector with Supabase"    → complex_standalone, needs_retrieval=true
-  Q: "how does LangGraph handle state checkpointing?"  → complex_standalone, needs_retrieval=true
-  Q: "walk me through building a RAG pipeline"         → complex_standalone, needs_retrieval=true
+complex_standalone — Self-contained question requiring full document lookup.
+  Q: "what are the key terms in the transportation agreement?"  → complex_standalone, needs_retrieval=true
+  Q: "summarize the termination clauses"                        → complex_standalone, needs_retrieval=true
+  Q: "what obligations does the shipper have?"                  → complex_standalone, needs_retrieval=true
+  Q: "explain the payment schedule in the contract"             → complex_standalone, needs_retrieval=true
+  Q: "what are the main findings in the report?"                → complex_standalone, needs_retrieval=true
+  Q: "how does the author define retrieval augmented generation?" → complex_standalone, needs_retrieval=true
 
 ---
 CONVERSATION CONTEXT (last few turns):
@@ -154,8 +154,13 @@ Respond with a QueryClassification object."""
             next_node = "simple_answer"
             pipeline_path = "simple"
             logger.info(f"  ↳ Routing to: {next_node} (no retrieval needed)")
+        elif result.query_type == "conversational_followup" and result.needs_retrieval:
+            # Vague follow-up needs pronoun resolution before retrieval
+            next_node = "query_rewriter"
+            pipeline_path = "complex"
+            logger.info(f"  ↳ Routing to: {next_node} (follow-up needs context-aware rewrite)")
         else:
-            # Route to router (full RAG pipeline)
+            # complex_standalone — route directly to router (full RAG pipeline)
             next_node = "router"
             pipeline_path = "complex"
             logger.info(f"  ↳ Routing to: {next_node} (retrieval needed)")
