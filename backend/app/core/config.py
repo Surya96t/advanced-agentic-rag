@@ -138,6 +138,12 @@ class Settings(BaseSettings):
     redis_connection_pool_size: int = Field(
         default=10, ge=1, le=100, description="Redis connection pool size")
 
+    # Response Cache Configuration
+    cache_enabled: bool = Field(
+        default=True, description="Enable Redis response caching for non-streaming chat")
+    cache_ttl_seconds: int = Field(
+        default=86400, ge=60, description="Cache TTL in seconds (default: 24 hours)")
+
     # Rate Limiting Configuration
     rate_limit_enabled: bool = Field(
         default=True, description="Enable rate limiting (disable for load testing)")

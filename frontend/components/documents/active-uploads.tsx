@@ -6,7 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { formatFileSize } from "@/lib/document-utils";
 
-export type UploadStatus = "pending" | "uploading" | "success" | "error";
+export type UploadStatus = "pending" | "uploading" | "processing" | "success" | "error";
 
 export interface UploadingFile {
   fileId: string;
@@ -41,6 +41,13 @@ function getStatusConfig(status: UploadStatus) {
         label: "Uploading...",
         animate: "animate-spin",
       };
+    case "processing":
+      return {
+        icon: Loader2,
+        color: "text-purple-500",
+        label: "Processing...",
+        animate: "animate-spin",
+      };
     case "success":
       return {
         icon: CheckCircle2,
@@ -65,12 +72,13 @@ export function ActiveUploads({ uploads, onRemove, onClearCompleted }: ActiveUpl
   if (uploads.length === 0) return null;
 
   const hasCompleted = uploads.some((upload) => upload.status === "success");
+  const hasActive = uploads.some((upload) => upload.status === "uploading" || upload.status === "processing");
 
   return (
     <div className="mb-6">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-medium text-muted-foreground">
-          Active Uploads ({uploads.length})
+          {hasActive ? "Active Uploads" : "Uploads"} ({uploads.length})
         </h3>
         {hasCompleted && (
           <Button 
@@ -138,6 +146,7 @@ export function ActiveUploads({ uploads, onRemove, onClearCompleted }: ActiveUpl
                     />
                     <span className={statusConfig.color}>
                       {upload.status === "uploading" && (upload.progress !== undefined ? `${upload.progress}%` : "Uploading...")}
+                      {upload.status === "processing" && "Processing in background..."}
                       {upload.status === "pending" && statusConfig.label}
                       {upload.status === "success" && statusConfig.label}
                       {upload.status === "error" && upload.error}

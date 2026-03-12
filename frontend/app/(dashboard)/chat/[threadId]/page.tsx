@@ -15,6 +15,7 @@ import { RateLimitBanner } from '@/components/rate-limit-banner'
 import { useChat } from '@/hooks/useChat'
 import { useRateLimitStore } from '@/stores/rate-limit-store'
 import { useChatStore } from '@/stores/chat-store'
+import { StreamingDebugOverlay } from '@/components/chat/streaming-debug-overlay'
 
 export default function ChatThreadPage() {
   const params = useParams()
@@ -92,6 +93,9 @@ export default function ChatThreadPage() {
           }
         />
       </div>
+
+      {/* Dev-only streaming performance overlay */}
+      <StreamingDebugOverlay streamingMetrics={streamingMetrics} />
     </>
   )
 }

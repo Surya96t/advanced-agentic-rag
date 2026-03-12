@@ -86,6 +86,48 @@ export default function DocumentsPage() {
   };
 
   /**
+   * Poll for ingestion task completion every 2 seconds.
+   * Resolves when the task reaches SUCCESS or FAILURE.
+   */
+  const pollTaskStatus = useCallback((taskId: string, fileId: string): void => {
+    const intervalId = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/documents/status/${encodeURIComponent(taskId)}`)
+        if (!res.ok) {
+          // Non-fatal poll failure — keep polling
+          return
+        }
+
+        const data: { task_id: string; status: string; result?: unknown; error?: string } =
+          await res.json()
+
+        if (data.status === "success") {
+          clearInterval(intervalId)
+          setUploadingFiles((prev) =>
+            prev.map((f) =>
+              f.fileId === fileId ? { ...f, status: "success", progress: 100 } : f
+            )
+          )
+          toast.success("Document processed successfully")
+          await fetchDocuments()
+        } else if (data.status === "failure") {
+          clearInterval(intervalId)
+          const errorMessage = data.error ?? "Processing failed"
+          setUploadingFiles((prev) =>
+            prev.map((f) =>
+              f.fileId === fileId ? { ...f, status: "error", error: errorMessage } : f
+            )
+          )
+          toast.error("Document processing failed", { description: errorMessage })
+        }
+        // "processing" → keep polling
+      } catch {
+        // Network hiccup — keep polling silently
+      }
+    }, 2000)
+  }, [fetchDocuments])
+
+  /**
    * Upload a single file
    */
   const uploadFile = useCallback(async (file: File, fileId: string) => {
@@ -104,21 +146,34 @@ export default function DocumentsPage() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Upload failed");
+        const error = await response.json()
+        throw new Error(error.error || "Upload failed")
       }
 
+      if (response.status === 202) {
+        // Celery task dispatched — switch to "processing" and start polling
+        const data: { task_id: string; status: string } = await response.json()
+        setUploadingFiles((prev) =>
+          prev.map((f) =>
+            f.fileId === fileId ? { ...f, status: "processing", progress: undefined } : f
+          )
+        )
+        pollTaskStatus(data.task_id, fileId)
+        return
+      }
+
+      // Fallback: synchronous 201 (should not happen with Celery, but kept for safety)
       // Mark as success (set progress to 100 for completed state)
       setUploadingFiles((prev) =>
         prev.map((f) =>
           f.fileId === fileId ? { ...f, status: "success", progress: 100 } : f
         )
-      );
+      )
 
-      toast.success(`${file.name} uploaded successfully`);
+      toast.success(`${file.name} uploaded successfully`)
 
       // Refresh documents list
-      await fetchDocuments();
+      await fetchDocuments()
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Upload failed";
       setUploadingFiles((prev) =>
@@ -130,11 +185,7 @@ export default function DocumentsPage() {
         description: errorMessage,
       });
     }
-  }, []);
-
-  /**
-   * Handle file selection from upload zone
-   */
+  }, [pollTaskStatus]);
   const handleFilesSelected = useCallback(async (files: File[]) => {
     // Validate and filter files
     const validatedFiles: UploadingFile[] = [];
@@ -334,7 +385,7 @@ export default function DocumentsPage() {
             onFilesSelected={handleFilesSelected}
             isDragging={isDragging}
             onDragStateChange={setIsDragging}
-            disabled={uploadingFiles.some((f) => f.status === "uploading")}
+            disabled={uploadingFiles.some((f) => f.status === "uploading" || f.status === "processing")}
           />
         </div>
       </div>

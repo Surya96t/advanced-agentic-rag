@@ -238,6 +238,7 @@ class DocumentRepository:
                 self.db.table(self.table_name)
                 .select("*")
                 .eq("content_hash", file_hash)
+                .eq("user_id", user_id)
                 .execute()
             )
 
@@ -313,6 +314,10 @@ class DocumentRepository:
 
             # Build query
             query = self.db.table(self.table_name).select("*")
+
+            # Always filter by user_id — service role key bypasses RLS so we
+            # must enforce ownership explicitly here.
+            query = query.eq("user_id", user_id)
 
             # Apply filters
             if source_id:

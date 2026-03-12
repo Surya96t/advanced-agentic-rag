@@ -72,6 +72,10 @@ export interface StreamingMetrics {
   lastTokenTime: number | null
   tokensPerSecond: number
   qualityScore: number | null
+  /** Milliseconds from sendMessage to first token received */
+  timeToFirstToken: number | null
+  /** Milliseconds between consecutive tokens — used for p50/p95/p99 */
+  interTokenLatencies: number[]
 }
 
 export interface Thread {
@@ -141,6 +145,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     lastTokenTime: null,
     tokensPerSecond: 0,
     qualityScore: null,
+    timeToFirstToken: null,
+    interTokenLatencies: [],
   },
   thinkingStatus: null,
   
@@ -207,7 +213,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Initialize timing on first token
       const startTime = streamingMetrics.startTime ?? now
       const tokenCount = streamingMetrics.tokenCount + 1
-      
+      const isFirstToken = streamingMetrics.tokenCount === 0
+
+      // TTFT: only set once on the very first token
+      const timeToFirstToken = isFirstToken
+        ? now - startTime
+        : streamingMetrics.timeToFirstToken
+
+      // Inter-token latency: push gap since last token (skip for first token)
+      const interTokenLatencies = isFirstToken
+        ? streamingMetrics.interTokenLatencies
+        : [...streamingMetrics.interTokenLatencies, now - (streamingMetrics.lastTokenTime ?? now)]
+
       // Calculate tokens per second
       const elapsedSeconds = (now - startTime) / 1000
       const tokensPerSecond = elapsedSeconds > 0 ? tokenCount / elapsedSeconds : 0
@@ -224,6 +241,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           startTime,
           lastTokenTime: now,
           tokensPerSecond,
+          timeToFirstToken,
+          interTokenLatencies,
         },
       }
     }),
@@ -244,6 +263,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           lastTokenTime: null,
           tokensPerSecond: 0,
           qualityScore: null,
+          timeToFirstToken: null,
+          interTokenLatencies: [],
         },
       }
     }),
@@ -392,6 +413,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         lastTokenTime: null,
         tokensPerSecond: 0,
         qualityScore: null,
+        timeToFirstToken: null,
+        interTokenLatencies: [],
       },
     }),
 

@@ -27,11 +27,14 @@ For now, we process synchronously to keep it simple.
 Phase 4 will add background job processing with Celery/Redis.
 """
 
+import base64
+import mimetypes
 from typing import Annotated
 from uuid import UUID
 import re
 from pathlib import Path
 
+from celery.result import AsyncResult
 from fastapi import (
     APIRouter,
     Depends,
@@ -44,14 +47,9 @@ from fastapi import (
 )
 
 from app.api.deps import UserID, RateLimitInfo
-from supabase import Client
 
-from app.database.client import SupabaseClient
-from app.database.repositories.chunks import ChunkRepository
-from app.database.repositories.documents import DocumentRepository
-from app.ingestion.embeddings import get_embedding_client
-from app.ingestion.pipeline import IngestionPipeline
 from app.core.storage import StorageClient, StorageDeleteError, StorageUploadError, get_storage_client
+from app.ingestion.background import celery_app, ingest_document_task
 from app.schemas.document import (
     DocumentResponse,
     MAX_FILE_SIZE_BYTES,
@@ -74,49 +72,6 @@ router = APIRouter(prefix="/api/v1", tags=["ingestion"])
 # ============================================================================
 
 
-def get_db() -> Client:
-    """
-    Get Supabase database client.
-
-    Returns:
-        Supabase client instance
-
-    Learning Note:
-    FastAPI dependency injection:
-    - This function is called automatically by FastAPI
-    - Result is passed to route handlers
-    - Enables easy mocking in tests
-    """
-    return SupabaseClient.get_client()
-
-
-async def get_pipeline(db: Client = Depends(get_db)) -> IngestionPipeline:
-    """
-    Get ingestion pipeline with all dependencies.
-
-    Args:
-        db: Supabase client (injected by FastAPI)
-
-    Returns:
-        Configured IngestionPipeline instance
-
-    Learning Note:
-    Why create pipeline in dependency?
-    1. Reusability: Same pipeline setup for all endpoints
-    2. Testability: Easy to override in tests
-    3. Clean code: Route handlers stay focused on HTTP logic
-    """
-    doc_repo = DocumentRepository(db)
-    chunk_repo = ChunkRepository(db)
-    embedding_client = await get_embedding_client()
-
-    return IngestionPipeline(
-        doc_repo=doc_repo,
-        chunk_repo=chunk_repo,
-        embedding_client=embedding_client,
-    )
-
-
 def get_storage() -> StorageClient:
     """Get the application-wide StorageClient instance."""
     return get_storage_client()
@@ -129,45 +84,28 @@ def get_storage() -> StorageClient:
 
 @router.post(
     "/ingest",
-    response_model=DocumentResponse,
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_202_ACCEPTED,
     summary="Upload and ingest a document",
     description=(
         "Upload a document file for ingestion. "
         "Supported formats: Markdown (.md), PDF (.pdf), Text (.txt). "
         "Maximum file size: 10MB. "
-        "The document will be parsed, chunked, embedded, and stored in the vector database."
+        "Returns 202 immediately; poll GET /api/v1/ingest/status/{task_id} for progress."
     ),
     responses={
-        201: {
-            "description": "Document successfully ingested",
-            "model": DocumentResponse,
+        202: {
+            "description": "Document accepted for background processing",
+            "content": {
+                "application/json": {
+                    "example": {"task_id": "abc123", "status": "processing"}
+                }
+            },
         },
         400: {
             "description": "Invalid file type or size",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "error": "ValidationError",
-                        "message": "Invalid file type. Allowed extensions: .md, .pdf, .txt",
-                        "status_code": 400,
-                        "details": {},
-                    }
-                }
-            },
         },
         413: {
             "description": "File too large",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "error": "ValidationError",
-                        "message": "File too large. Maximum size: 10MB",
-                        "status_code": 413,
-                        "details": {},
-                    }
-                }
-            },
         },
         500: {
             "description": "Internal server error during processing",
@@ -186,9 +124,8 @@ async def ingest_document(
     rate_limit_info: RateLimitInfo,
     request: Request,
     response: Response,
-    pipeline: IngestionPipeline = Depends(get_pipeline),
     storage: StorageClient = Depends(get_storage),
-) -> DocumentResponse:
+) -> dict:
     """
     Upload and ingest a document.
 
@@ -428,7 +365,16 @@ async def ingest_document(
         safe_filename = raw_name[:255] or "file"
         storage_path = f"{user_id}/{doc_upload_id}/{safe_filename}"
 
-        content_type = file.content_type or "application/octet-stream"
+        # Derive the MIME type from the filename extension when the
+        # multipart field carries a generic or absent content-type.
+        # Supabase Storage rejects "application/octet-stream", so we fall
+        # back to the extension-based guess and then to "text/plain".
+        guessed_type, _ = mimetypes.guess_type(safe_filename)
+        content_type = (
+            file.content_type
+            if file.content_type and file.content_type != "application/octet-stream"
+            else (guessed_type or "text/plain")
+        )
         await storage.upload(
             data=file_content,
             path=storage_path,
@@ -471,58 +417,39 @@ async def ingest_document(
             )
 
     try:
-        document, is_duplicate = await pipeline.ingest_document(
-            file_bytes=file_content,
-            filename=file.filename,
-            user_id=user_id,
-            metadata={"document_title": file.filename},
-            storage_path=storage_path,
-        )
+        # Encode bytes as base64 for JSON-safe transport over Redis broker
+        file_bytes_b64 = base64.b64encode(file_content).decode("ascii")
 
-        # Duplicate detected — the existing document already has its own blob_path;
-        # the blob we just uploaded is orphaned and must be cleaned up.
-        if is_duplicate and storage_path:
-            await _delete_orphaned_blob(storage_path, "duplicate_document")
+        task = ingest_document_task.delay(
+            file_bytes_b64,
+            file.filename,
+            user_id,
+            storage_path,
+        )
 
         logger.info(
-            "Document ingestion completed",
-            document_id=str(document.id),
+            "Ingestion task dispatched",
+            task_id=task.id,
             filename=file.filename,
-            status=document.status.value,
-            chunk_count=document.metadata.get("chunk_count", 0)
-            if document.metadata
-            else 0,
             user_id=user_id,
-            is_duplicate=is_duplicate,
         )
 
-        # Convert to response schema
-        return DocumentResponse(
-            id=document.id,
-            source_id=document.source_id or UUID(
-                "00000000-0000-0000-0000-000000000000"),  # Default if None
-            title=document.title,
-            status=document.status,
-            token_count=document.chunk_count * 500,  # Rough estimate: 500 tokens per chunk
-            metadata=document.metadata,
-            created_at=document.created_at,
-            updated_at=document.updated_at,
-        )
+        return {"task_id": task.id, "status": "processing"}
 
     except Exception as e:
         logger.error(
-            "Document ingestion failed",
+            "Failed to dispatch ingestion task",
             filename=file.filename,
             error=str(e),
             user_id=user_id,
             exc_info=True,
         )
-        # Clean up orphaned blob so storage doesn't accumulate failed-ingest files.
+        # Clean up orphaned blob — task never ran so storage would leak
         if storage_path:
-            await _delete_orphaned_blob(storage_path, "pipeline_error")
+            await _delete_orphaned_blob(storage_path, "dispatch_error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Document ingestion failed. Please try again or contact support.",
+            detail="Failed to queue ingestion task. Please try again.",
         )
 
 
@@ -550,3 +477,49 @@ async def ingest_health() -> dict[str, str]:
         ```
     """
     return {"status": "ok", "endpoint": "ingest"}
+
+
+# ============================================================================
+# TASK STATUS
+# ============================================================================
+
+
+@router.get(
+    "/ingest/status/{task_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Poll ingestion task status",
+    description="Returns the current state of a background ingestion task.",
+)
+async def get_ingest_status(task_id: str) -> dict:
+    """
+    Poll the status of a background ingestion task dispatched by POST /ingest.
+
+    States returned:
+    - ``processing``  — task is queued or running
+    - ``success``     — pipeline completed; ``result`` contains document info
+    - ``failure``     — pipeline failed; ``error`` contains the message
+
+    Args:
+        task_id: Celery task ID returned by POST /ingest.
+
+    Returns:
+        dict with ``task_id``, ``status``, and optionally ``result`` or ``error``.
+    """
+    result = AsyncResult(task_id, app=celery_app)
+
+    state = result.state  # PENDING | STARTED | SUCCESS | FAILURE | RETRY
+
+    if state in ("PENDING", "STARTED", "RETRY"):
+        return {"task_id": task_id, "status": "processing"}
+
+    if state == "SUCCESS":
+        return {"task_id": task_id, "status": "success", "result": result.result}
+
+    # FAILURE or unknown
+    error_msg = str(result.result) if result.result else "Ingestion failed"
+    logger.warning(
+        "Ingestion task failed",
+        task_id=task_id,
+        error=error_msg,
+    )
+    return {"task_id": task_id, "status": "failure", "error": error_msg}
