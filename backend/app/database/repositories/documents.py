@@ -152,14 +152,9 @@ class DocumentRepository:
         """
         Get document by ID.
 
-        RLS Note:
-        Even though we pass user_id explicitly, RLS will enforce it.
-        This means if the document exists but belongs to another user,
-        the query will return empty (as if the document doesn't exist).
-
         Args:
             document_id: Document UUID
-            user_id: User ID for logging (RLS enforces ownership)
+            user_id: User ID — explicitly filtered to enforce ownership (service role bypasses RLS)
 
         Returns:
             Document model or None if not found
@@ -178,6 +173,7 @@ class DocumentRepository:
                 self.db.table(self.table_name)
                 .select("*")
                 .eq("id", str(document_id))
+                .eq("user_id", user_id)
                 .execute()
             )
 

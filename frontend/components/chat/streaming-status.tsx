@@ -65,19 +65,19 @@ export function StreamingStatus({
         </div>
       )}
 
-      {/* Quality Meter */}
+      {/* Quality Meter — backend score is 0.0–1.0; convert to 0–100 for display */}
       {qualityScore != null && (
-        <Badge 
-          variant={qualityScore >= 70 ? 'default' : 'destructive'}
+        <Badge
+          variant={qualityScore >= 0.7 ? 'default' : 'destructive'}
           className="h-5 px-2 gap-1"
         >
-          {qualityScore >= 70 ? (
+          {qualityScore >= 0.7 ? (
             <CheckCircle2 className="h-3 w-3" />
           ) : (
             <AlertCircle className="h-3 w-3" />
           )}
           <span className="font-mono">
-            {qualityScore.toFixed(0)}% quality
+            {(qualityScore * 100).toFixed(0)}% quality
           </span>
         </Badge>
       )}

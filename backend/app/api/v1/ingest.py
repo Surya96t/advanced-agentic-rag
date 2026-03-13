@@ -48,8 +48,13 @@ from fastapi import (
 
 from app.api.deps import UserID, RateLimitInfo
 
+from app.core.cache import _get_redis
 from app.core.storage import StorageClient, StorageDeleteError, StorageUploadError, get_storage_client
 from app.ingestion.background import celery_app, ingest_document_task
+
+# TTL must mirror celery_app result_expires so both expire together
+_TASK_DISPATCH_TTL = 3600  # seconds
+_TASK_DISPATCH_KEY_PREFIX = "task:dispatched:"
 from app.schemas.document import (
     DocumentResponse,
     MAX_FILE_SIZE_BYTES,
@@ -127,55 +132,41 @@ async def ingest_document(
     storage: StorageClient = Depends(get_storage),
 ) -> dict:
     """
-    Upload and ingest a document.
+    Upload and ingest a document asynchronously.
 
-    This endpoint handles the complete document ingestion workflow:
+    This endpoint handles the initial upload steps synchronously, then
+    dispatches the heavy processing work to a Celery background worker:
     1. Validate file type and size
-    2. Save file temporarily
-    3. Parse document content
-    4. Chunk text into semantic segments
-    5. Generate embeddings for each chunk
-    6. Store chunks in vector database
-    7. Return document record
+    2. Upload raw file to Supabase Storage
+    3. Dispatch Celery task for parsing, chunking, embedding, and storage
+
+    Poll GET /api/v1/ingest/status/{task_id} to track progress.
 
     Args:
         file: Uploaded file (multipart/form-data)
-        user_id: User ID in Clerk format (temporary, will be from JWT in Phase 6)
-        pipeline: Ingestion pipeline dependency
+        user_id: Authenticated user ID (from JWT via Clerk)
 
     Returns:
-        DocumentResponse: Created document with metadata
+        202 Accepted with task_id and initial status "processing"
 
     Raises:
         ValidationError: If file type or size is invalid
-        HTTPException: If processing fails
+        HTTPException: If the upload or task dispatch fails
 
     Example cURL:
         ```bash
-        curl -X POST "http://localhost:8000/api/v1/ingest?user_id=user_test123" \\
-             -F "file=@/path/to/document.md"
+        curl -X POST "http://localhost:8000/api/v1/ingest" \\
+             -H "Authorization: Bearer <token>" \\
+             -F "file=@/path/to/document.pdf"
         ```
 
     Example Response:
         ```json
         {
-            "id": "550e8400-e29b-41d4-a716-446655440000",
-            "source_id": "660e8400-e29b-41d4-a716-446655440000",
-            "title": "document.md",
-            "status": "completed",
-            "token_count": 2500,
-            "metadata": null,
-            "created_at": "2026-01-21T10:00:00Z",
-            "updated_at": "2026-01-21T10:00:30Z"
+            "task_id": "abc123-def456-...",
+            "status": "processing"
         }
         ```
-
-    TODO Phase 6:
-    - Add @require_auth decorator
-    - Extract user_id from JWT token
-    - Remove user_id query parameter
-    - Add rate limiting (e.g., 10 uploads per hour per user)
-    - Add user quota validation (e.g., max 100MB storage per user)
     """
     limit, remaining, reset_time = rate_limit_info
     response.headers["X-RateLimit-Limit"] = str(limit)
@@ -434,6 +425,24 @@ async def ingest_document(
             user_id=user_id,
         )
 
+        # Record the task ID so the status endpoint can distinguish
+        # genuinely-queued tasks from unknown/expired IDs (both return
+        # PENDING from Celery's AsyncResult).
+        try:
+            redis = _get_redis()
+            await redis.setex(
+                f"{_TASK_DISPATCH_KEY_PREFIX}{task.id}",
+                _TASK_DISPATCH_TTL,
+                "1",
+            )
+        except Exception as _redis_exc:  # noqa: BLE001
+            # Non-fatal — polling will degrade gracefully without the key
+            logger.warning(
+                "Failed to record task dispatch key in Redis",
+                task_id=task.id,
+                error=str(_redis_exc),
+            )
+
         return {"task_id": task.id, "status": "processing"}
 
     except Exception as e:
@@ -510,6 +519,32 @@ async def get_ingest_status(task_id: str) -> dict:
     state = result.state  # PENDING | STARTED | SUCCESS | FAILURE | RETRY
 
     if state in ("PENDING", "STARTED", "RETRY"):
+        # PENDING is also returned for unknown/expired task IDs.
+        # Consult Redis to confirm this ID was actually dispatched.
+        if state == "PENDING":
+            try:
+                redis = _get_redis()
+                exists = await redis.exists(f"{_TASK_DISPATCH_KEY_PREFIX}{task_id}")
+            except Exception as _redis_exc:  # noqa: BLE001
+                # Redis unavailable — fail open and report as processing
+                logger.warning(
+                    "Redis unavailable during task existence check; assuming processing",
+                    task_id=task_id,
+                    error=str(_redis_exc),
+                )
+                exists = True
+
+            if not exists:
+                logger.warning(
+                    "Task ID not found in dispatch registry — unknown or expired",
+                    task_id=task_id,
+                )
+                return {
+                    "task_id": task_id,
+                    "status": "failure",
+                    "error": "Task not found or has expired. Please re-upload the document.",
+                }
+
         return {"task_id": task_id, "status": "processing"}
 
     if state == "SUCCESS":

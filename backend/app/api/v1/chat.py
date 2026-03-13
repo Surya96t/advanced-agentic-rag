@@ -588,9 +588,12 @@ async def chat(
                     "Returning cached response",
                     extra={"user_id": user_id, "thread_id": str(thread_id)},
                 )
+                # Override thread-scoped fields so the cached payload from a
+                # prior request cannot leak a different thread's identity.
+                sanitized = {**cached, "thread_id": str(thread_id)}
                 from fastapi.responses import JSONResponse
                 return JSONResponse(
-                    content=cached,
+                    content=sanitized,
                     headers={
                         "X-RateLimit-Limit": str(limit),
                         "X-RateLimit-Remaining": str(remaining),

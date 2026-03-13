@@ -184,17 +184,19 @@ def load_cuad_samples(
 
     if sample:
         # Stratified by filename so we get even coverage across contracts
-        per_contract = max(1, sample // len({s["filename"] for s in samples}))
-        selected: list[dict[str, Any]] = []
-        seen: dict[str, int] = {}
-        for s in samples:
-            count = seen.get(s["filename"], 0)
-            if count < per_contract:
-                selected.append(s)
-                seen[s["filename"]] = count + 1
-            if len(selected) >= sample:
-                break
-        samples = selected
+        filenames = {s["filename"] for s in samples}
+        if filenames:
+            per_contract = max(1, sample // len(filenames))
+            selected: list[dict[str, Any]] = []
+            seen: dict[str, int] = {}
+            for s in samples:
+                count = seen.get(s["filename"], 0)
+                if count < per_contract:
+                    selected.append(s)
+                    seen[s["filename"]] = count + 1
+                if len(selected) >= sample:
+                    break
+            samples = selected
 
     logger.info(f"Loaded {len(samples)} Q&A pairs from {len({s['filename'] for s in samples})} contracts")
     return samples

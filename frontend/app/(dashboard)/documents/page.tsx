@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import { UploadZone } from "@/components/documents/upload-zone";
@@ -58,6 +58,16 @@ export default function DocumentsPage() {
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
+  // Ref holding cleanup functions for all active polling intervals
+  const pollCleanupRef = useRef<Array<() => void>>([]);
+
+  // Cancel all active polls on unmount
+  useEffect(() => {
+    return () => {
+      pollCleanupRef.current.forEach((cleanup) => cleanup());
+    };
+  }, []);
+
   // Fetch documents on mount
   useEffect(() => {
     fetchDocuments();
@@ -87,10 +97,31 @@ export default function DocumentsPage() {
 
   /**
    * Poll for ingestion task completion every 2 seconds.
-   * Resolves when the task reaches SUCCESS or FAILURE.
+   * Resolves when the task reaches SUCCESS or FAILURE, or after maxAttempts.
    */
+  const POLL_INTERVAL_MS = 2000;
+  const MAX_POLL_ATTEMPTS = 150; // 5 minutes
+
   const pollTaskStatus = useCallback((taskId: string, fileId: string): void => {
+    let attempts = 0;
+
     const intervalId = setInterval(async () => {
+      attempts += 1;
+
+      // Hard timeout — stop polling and treat as failure
+      if (attempts > MAX_POLL_ATTEMPTS) {
+        clearInterval(intervalId);
+        pollCleanupRef.current = pollCleanupRef.current.filter((fn) => fn !== cleanup);
+        const timeoutMsg = "Processing timed out. Please check back later or re-upload.";
+        setUploadingFiles((prev) =>
+          prev.map((f) =>
+            f.fileId === fileId ? { ...f, status: "error", error: timeoutMsg } : f
+          )
+        );
+        toast.error("Document processing timed out", { description: timeoutMsg });
+        return;
+      }
+
       try {
         const res = await fetch(`/api/documents/status/${encodeURIComponent(taskId)}`)
         if (!res.ok) {
@@ -103,6 +134,7 @@ export default function DocumentsPage() {
 
         if (data.status === "success") {
           clearInterval(intervalId)
+          pollCleanupRef.current = pollCleanupRef.current.filter((fn) => fn !== cleanup);
           setUploadingFiles((prev) =>
             prev.map((f) =>
               f.fileId === fileId ? { ...f, status: "success", progress: 100 } : f
@@ -112,6 +144,7 @@ export default function DocumentsPage() {
           await fetchDocuments()
         } else if (data.status === "failure") {
           clearInterval(intervalId)
+          pollCleanupRef.current = pollCleanupRef.current.filter((fn) => fn !== cleanup);
           const errorMessage = data.error ?? "Processing failed"
           setUploadingFiles((prev) =>
             prev.map((f) =>
@@ -124,7 +157,11 @@ export default function DocumentsPage() {
       } catch {
         // Network hiccup — keep polling silently
       }
-    }, 2000)
+    }, POLL_INTERVAL_MS)
+
+    // Register cleanup so the interval is cleared on unmount
+    const cleanup = () => clearInterval(intervalId);
+    pollCleanupRef.current.push(cleanup);
   }, [fetchDocuments])
 
   /**

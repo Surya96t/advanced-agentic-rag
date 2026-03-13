@@ -22,9 +22,68 @@ import base64
 from celery import Celery
 
 from app.core.config import settings
+from app.utils.errors import (
+    AuthenticationError,
+    AuthorizationError,
+    ChunkingError,
+    ConflictError,
+    DatabaseError,
+    DocumentProcessingError,
+    EmbeddingError,
+    ExternalServiceError,
+    NotFoundError,
+    ValidationError,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# Transient error detection
+# ---------------------------------------------------------------------------
+
+# Errors that will never succeed on retry — fail immediately.
+_PERMANENT_ERRORS = (
+    ValidationError,
+    AuthenticationError,
+    AuthorizationError,
+    NotFoundError,
+    ConflictError,
+    ChunkingError,
+    DocumentProcessingError,
+)
+
+# Errors that may succeed on retry (network blips, 5xx, temporary service issues).
+_TRANSIENT_ERRORS = (
+    DatabaseError,
+    ExternalServiceError,
+    EmbeddingError,
+)
+
+
+def _is_transient(exc: BaseException) -> bool:
+    """
+    Return True if *exc* is likely transient and worth retrying.
+
+    Matches our app-level transient error types plus common network /
+    timeout exceptions from httpx and the standard library.
+    """
+    if isinstance(exc, _PERMANENT_ERRORS):
+        return False
+    if isinstance(exc, _TRANSIENT_ERRORS):
+        return True
+    # Network / timeout errors from httpx (used by openai SDK) and stdlib
+    try:
+        import httpx
+        if isinstance(exc, (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError)):
+            return True
+    except ImportError:
+        pass
+    import socket
+    if isinstance(exc, (TimeoutError, ConnectionError, socket.timeout, OSError)):
+        return True
+    return False
+
 
 # ---------------------------------------------------------------------------
 # Celery application
@@ -152,4 +211,7 @@ def ingest_document_task(
             error=str(exc),
             exc_info=True,
         )
-        raise self.retry(exc=exc)
+        if _is_transient(exc):
+            raise self.retry(exc=exc)
+        # Permanent error — fail immediately without consuming retry budget
+        raise

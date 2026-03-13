@@ -20,12 +20,23 @@ function fmt(value: number | null, unit: string, decimals = 0): string {
   return `${value.toFixed(decimals)}${unit}`
 }
 
+/**
+ * Renders a fixed-position debug overlay displaying live streaming performance
+ * metrics during development.
+ *
+ * The hook is always called unconditionally (Rules of Hooks); the overlay is
+ * hidden in production and before any tokens have been received.
+ *
+ * @param props.streamingMetrics - Live metrics snapshot from the chat store.
+ * @returns A fixed overlay element in development, or `null` in production /
+ *   before streaming begins.
+ */
 export function StreamingDebugOverlay({ streamingMetrics }: StreamingDebugOverlayProps) {
+  // Hook must be called unconditionally on every render (Rules of Hooks)
+  const { ttft, tps, tokenCount, p50, p95, p99 } = useStreamingMetrics(streamingMetrics)
+
   // Strip entirely from production builds
   if (process.env.NODE_ENV !== 'development') return null
-
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const { ttft, tps, tokenCount, p50, p95, p99 } = useStreamingMetrics(streamingMetrics)
 
   // Hide until streaming has actually started
   if (tokenCount === 0) return null

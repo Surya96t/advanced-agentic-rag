@@ -441,6 +441,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         lastTokenTime: null,
         tokensPerSecond: 0,
         qualityScore: null,
+        timeToFirstToken: null,
+        interTokenLatencies: [],
       },
     }),
   
