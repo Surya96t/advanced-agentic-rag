@@ -24,6 +24,7 @@ A production-grade Retrieval-Augmented Generation system with multi-stage chunki
 
 - Node.js 18+ and pnpm
 - Python 3.12+
+- Docker (for Redis — used by Celery background worker)
 - Supabase account
 - OpenAI API key
 - Clerk account (for authentication)
@@ -71,8 +72,23 @@ cd advanced-agentic-rag
 
 6. **Start the development server:**
    ```bash
-   uvicorn app.main:app --reload --port 8000
+   uv run uvicorn app.main:app --reload
    ```
+
+7. **Start Redis (required for background ingestion):**
+   ```bash
+   docker compose up -d
+   ```
+
+8. **Start the Celery worker (in a separate terminal):**
+   ```bash
+   cd backend
+   source .venv/bin/activate
+   celery -A app.ingestion.background worker --loglevel=info
+   ```
+
+   > The worker processes document ingestion (parse → chunk → embed → store) in the background.
+   > The FastAPI server returns `202 Accepted` immediately on upload; the frontend polls for completion.
 
 ### Frontend Setup
 

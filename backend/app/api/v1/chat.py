@@ -23,6 +23,7 @@ from fastapi.responses import StreamingResponse
 
 from app.agents.graph import run_agent, stream_agent
 from app.api.deps import UserID, RateLimitInfo
+from app.core import cache as response_cache
 from app.core.config import settings
 from app.database.pool import DatabasePool
 from app.schemas.chat import ChatRequest, ChatResponse
@@ -573,12 +574,50 @@ async def chat(
                 extra={"user_id": user_id, "thread_id": str(thread_id)}
             )
 
+            # Cache check — only for single-turn queries (new threads).
+            # Existing threads have evolving conversation state, so we skip caching.
+            cached = None
+            if is_new_thread:
+                cached = await response_cache.get_cached_response(
+                    user_id=user_id,
+                    query=chat_request.message,
+                )
+
+            if cached is not None:
+                logger.info(
+                    "Returning cached response",
+                    extra={"user_id": user_id, "thread_id": str(thread_id)},
+                )
+                # Override thread-scoped fields so the cached payload from a
+                # prior request cannot leak a different thread's identity.
+                sanitized = {**cached, "thread_id": str(thread_id)}
+                from fastapi.responses import JSONResponse
+                return JSONResponse(
+                    content=sanitized,
+                    headers={
+                        "X-RateLimit-Limit": str(limit),
+                        "X-RateLimit-Remaining": str(remaining),
+                        "X-RateLimit-Reset": str(reset_time),
+                        "X-Cache": "HIT",
+                    }
+                )
+
             # Run agent and wait for completion
             result = await run_agent(
                 query=chat_request.message,
                 thread_id=thread_id,
                 user_id=user_id,
             )
+
+            result_dict = result.model_dump() if hasattr(result, 'model_dump') else result
+
+            # Store in cache (only for new single-turn threads, fails open)
+            if is_new_thread:
+                await response_cache.cache_response(
+                    user_id=user_id,
+                    query=chat_request.message,
+                    response=result_dict,
+                )
 
             logger.info(
                 "Chat completed (non-streaming)",
@@ -592,7 +631,7 @@ async def chat(
             # Return JSONResponse with rate limit headers
             from fastapi.responses import JSONResponse
             return JSONResponse(
-                content=result.model_dump() if hasattr(result, 'model_dump') else result,
+                content=result_dict,
                 headers={
                     "X-RateLimit-Limit": str(limit),
                     "X-RateLimit-Remaining": str(remaining),

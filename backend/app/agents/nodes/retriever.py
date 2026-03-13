@@ -244,18 +244,22 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
     logger.info(f"  ↳ Re-ranking took {rerank_time:.3f}s")
 
     # Step 4: Build sources for citation
+    # All SearchResult fields required by ChatResponse.sources must be included:
+    # `content` and `rank` were previously omitted, causing ChatResponse validation errors.
     sources = [
         {
             "chunk_id": str(result.chunk_id),
             "document_id": str(result.document_id),
             # Use the actual document_title field, not metadata!
             "document_title": result.document_title,
+            "content": result.content,
             "score": result.score,  # RRF or reranked score
             # Original cosine similarity for display
             "original_score": result.original_score,
+            "rank": idx + 1,  # 1-indexed position in reranked list
             "source": result.source,
         }
-        for result in reranked_results
+        for idx, result in enumerate(reranked_results)
     ]
 
     elapsed_time = time.time() - start_time

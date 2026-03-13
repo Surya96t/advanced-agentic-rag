@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 
 from app.api.deps import UserID, RateLimitInfo
-from app.core.storage import StorageClient, StorageNotFoundError, StorageSignedUrlError, get_storage_client
+from app.core.storage import StorageClient, StorageDeleteError, StorageNotFoundError, StorageSignedUrlError, get_storage_client
 from app.database.client import get_db
 from app.database.repositories.documents import DocumentRepository
 from app.database.models import Document
@@ -145,15 +145,20 @@ def list_documents(
         )
 
 
+def _get_storage() -> StorageClient:
+    return get_storage_client()
+
+
 @router.delete(
     "/{document_id}",
     response_model=DocumentDeleteResponse,
     summary="Delete a document",
     description="Delete a document and all its associated chunks",
 )
-def delete_document(
+async def delete_document(
     document_id: UUID,
-    user_id: UserID
+    user_id: UserID,
+    storage: StorageClient = Depends(_get_storage),
 ) -> DocumentDeleteResponse:
     """
     Delete a document and all its chunks.
@@ -233,6 +238,33 @@ def delete_document(
             }
         )
 
+        # Best-effort blob deletion — DB is already committed at this point.
+        # If storage deletion fails, log the error but do not fail the request.
+        # StorageNotFoundError is treated as success (file already gone).
+        if document.blob_path:
+            try:
+                await storage.delete(document.blob_path)
+                logger.info(
+                    "Storage blob deleted",
+                    extra={"document_id": str(document_id), "blob_path": document.blob_path}
+                )
+            except StorageNotFoundError:
+                # File already absent from storage — treat as success.
+                logger.info(
+                    "Storage blob already absent (no-op)",
+                    extra={"document_id": str(document_id), "blob_path": document.blob_path}
+                )
+            except StorageDeleteError as exc:
+                # Log but do not surface to the caller — DB deletion succeeded.
+                logger.warning(
+                    "Failed to delete storage blob; orphaned file may remain",
+                    extra={
+                        "document_id": str(document_id),
+                        "blob_path": document.blob_path,
+                        "error": str(exc),
+                    }
+                )
+
         return DocumentDeleteResponse(
             deleted=True,
             document_id=document_id,
@@ -262,10 +294,6 @@ def delete_document(
 # ============================================================================
 # GET /{document_id}/signed-url
 # ============================================================================
-
-
-def _get_storage() -> StorageClient:
-    return get_storage_client()
 
 
 @router.get(
