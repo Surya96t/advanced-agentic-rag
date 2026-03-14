@@ -2,12 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth, currentUser } from '@clerk/nextjs/server'
 
 /**
- * Sync current user to Supabase users table
- * POST /api/auth/sync
+ * Synchronizes the currently authenticated Clerk user to the backend users table.
+ *
+ * Attempts to retrieve the authenticated user and an auth token, then POSTs the user's
+ * id, primary email, and full name to the backend sync endpoint.
+ *
+ * @returns A NextResponse containing the backend's JSON result on success; on failure
+ *          returns a JSON error object with an appropriate HTTP status (e.g., 401, 404, 500,
+ *          or the backend's status code).
  */
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth()
+    const { userId, getToken } = await auth()
     if (!userId) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -24,12 +30,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const token = await getToken()
+    if (!token) {
+      return NextResponse.json(
+        { error: 'Failed to retrieve auth token' },
+        { status: 401 }
+      )
+    }
+
     // Call backend to sync user
     const FASTAPI_BASE_URL = process.env.FASTAPI_BASE_URL || 'http://localhost:8000'
     const response = await fetch(`${FASTAPI_BASE_URL}/api/v1/users/sync`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify({
         user_id: userId,
