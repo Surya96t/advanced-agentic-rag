@@ -86,7 +86,7 @@ export default function FeedbackPage() {
         <div className="mb-6 text-center">
           <h1 className="text-2xl font-semibold tracking-tight mb-2">Send Feedback</h1>
           <p className="text-sm text-muted-foreground">
-            We value your input! Let us know about any bugs, features you'd like to see, or general thoughts.
+            We value your input! Let us know about any bugs, features you&apos;d like to see, or general thoughts.
           </p>
         </div>
         

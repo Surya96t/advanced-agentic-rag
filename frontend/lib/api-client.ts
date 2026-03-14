@@ -35,7 +35,7 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}): Pro
 /**
  * Helper to fetch and parse JSON
  */
-export async function apiJSON<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
+export async function apiJSON<T = unknown>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const response = await apiFetch(endpoint, options);
   
   if (!response.ok) {

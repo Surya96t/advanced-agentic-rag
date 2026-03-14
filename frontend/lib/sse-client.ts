@@ -2,7 +2,7 @@ export interface SSEClientConfig {
   url: string
   method?: string
   headers?: Record<string, string>
-  body?: any
+  body?: unknown
   maxRetries?: number
   baseDelay?: number
   maxDelay?: number
@@ -189,8 +189,8 @@ export class SSEClient {
           }
         }
       }
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
         return
       }
 
@@ -212,7 +212,7 @@ export class SSEClient {
       }
 
       if (this.config.onError) {
-        this.config.onError(error, this.retryCount)
+        this.config.onError(error instanceof Error ? error : new Error(String(error)), this.retryCount)
       }
       throw error
     }
