@@ -87,17 +87,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   React.useEffect(() => {
     setMounted(true)
   }, [])
-  React.useEffect(() => {
-    console.log('[Sidebar] Threads updated:', threads.length, 'threads')
-    console.log('[Sidebar] Current thread ID:', currentThreadId)
-  }, [threads, currentThreadId])
+
   
   const handleNewChat = (e: React.MouseEvent) => {
     // CRITICAL: Prevent event bubbling to avoid triggering thread clicks
     e.preventDefault()
     e.stopPropagation()
-    
-    console.log('[Sidebar] New Chat clicked - using lazy creation')
     
     // Use new lazy creation method (no API call)
     createNewChat()
@@ -107,8 +102,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   }
   
   const handleThreadClick = (threadId: string) => {
-    console.log('[Sidebar] Thread clicked:', threadId)
-    
     // Validate threadId before navigation
     if (!threadId) {
       console.error('[Sidebar] Cannot navigate: threadId is null/undefined/empty')
@@ -159,7 +152,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     
     // Validate title
     if (!trimmedTitle) {
-      console.log('[Sidebar] Empty title, canceling edit')
       handleCancelEdit()
       return
     }
@@ -167,12 +159,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     // Check if title actually changed
     const currentThread = threads.find(t => t.id === threadId)
     if (trimmedTitle === currentThread?.title) {
-      console.log('[Sidebar] Title unchanged, canceling edit')
       handleCancelEdit()
       return
     }
-    
-    console.log('[Sidebar] Saving new title:', trimmedTitle)
     
     try {
       isSavingRef.current = true

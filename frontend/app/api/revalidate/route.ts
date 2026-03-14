@@ -56,8 +56,6 @@ export async function POST(request: NextRequest) {
     // Revalidate the cache tag
     try {
       revalidateTag(tag, 'default')
-      
-      console.log(`[Revalidate] Cache invalidated for tag: ${tag}`)
 
       return NextResponse.json({ 
         revalidated: true, 

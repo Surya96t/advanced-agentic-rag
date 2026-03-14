@@ -3,14 +3,33 @@
 # Base schemas
 from app.schemas.base import BaseSchema, TimestampSchema
 
+# Chat schemas (Agentic RAG)
+from app.schemas.chat import (
+    ChatRequest,
+    ChatResponse,
+    FeedbackRequest,
+)
+
 # Document schemas
 from app.schemas.document import (
-    DocumentUploadRequest,
+    DocumentDeleteResponse,
+    DocumentListResponse,
     DocumentResponse,
     DocumentUpdateRequest,
+    DocumentUploadRequest,
     DocumentUploadResponse,
-    DocumentListResponse,
-    DocumentDeleteResponse,
+)
+
+# Event schemas (SSE streaming)
+from app.schemas.events import (
+    AgentCompleteEvent,
+    AgentStartEvent,
+    CitationEvent,
+    EndEvent,
+    ProgressEvent,
+    SSEEventType,
+    TokenEvent,
+    ValidationEvent,
 )
 
 # Request schemas
@@ -31,25 +50,6 @@ from app.schemas.responses import (
 from app.schemas.retrieval import (
     SearchConfig,
     SearchResult,
-)
-
-# Event schemas (SSE streaming)
-from app.schemas.events import (
-    AgentCompleteEvent,
-    AgentStartEvent,
-    CitationEvent,
-    EndEvent,
-    ProgressEvent,
-    SSEEventType,
-    TokenEvent,
-    ValidationEvent,
-)
-
-# Chat schemas (Agentic RAG)
-from app.schemas.chat import (
-    ChatRequest,
-    ChatResponse,
-    FeedbackRequest,
 )
 
 __all__ = [

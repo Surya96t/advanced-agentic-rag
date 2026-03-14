@@ -21,8 +21,6 @@ export function UserSync() {
 
         if (!response.ok) {
           console.error("Failed to sync user:", await response.text());
-        } else {
-          console.log("User synced successfully");
         }
       } catch (error) {
         console.error("Error syncing user:", error);

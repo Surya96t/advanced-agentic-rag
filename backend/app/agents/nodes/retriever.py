@@ -6,6 +6,7 @@ and applies re-ranking for optimal chunk selection.
 """
 
 import time
+
 from langgraph.types import RunnableConfig
 
 from app.agents.state import AgentState
@@ -94,8 +95,7 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
         # SECURITY: In production, user_id is REQUIRED
         # Fail fast rather than using a fallback that could leak data
         if settings.environment == "production":
-            logger.error(
-                "user_id is required in production but was not provided")
+            logger.error("user_id is required in production but was not provided")
             raise ValueError(
                 "user_id is required for retrieval in production environment. "
                 "Ensure authentication middleware is properly configured."
@@ -119,7 +119,8 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
         retrieval_query = (state.get("retrieval_query") or state.get("original_query", "")).strip()
         if not retrieval_query:
             logger.error(
-                "No queries available: expanded_queries, retrieval_query, and original_query are all empty")
+                "No queries available: expanded_queries, retrieval_query, and original_query are all empty"
+            )
             raise ValueError(
                 "Cannot perform retrieval: no query provided. "
                 "State must contain either 'expanded_queries' or 'retrieval_query'."
@@ -140,13 +141,13 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
 
     # Search configuration — sourced from settings so values are overridable via .env
     search_config = SearchConfig(
-        top_k=settings.vector_search_top_k,   # candidate pool before re-ranking
+        top_k=settings.vector_search_top_k,  # candidate pool before re-ranking
         min_similarity=settings.vector_search_min_similarity,
         hybrid_alpha=settings.hybrid_search_alpha,
     )
 
     # Fallback similarity threshold when reranker is unavailable
-    MIN_SIMILARITY_FALLBACK = 0.1
+    MIN_SIMILARITY_FALLBACK = 0.1  # noqa: N806
 
     # Step 1: Search each query
     search_start = time.time()
@@ -155,11 +156,7 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
         logger.info(f"Searching query {idx}/{len(queries)}: {query[:100]}...")
 
         try:
-            results = await searcher.search(
-                query=query,
-                user_id=user_id,
-                config=search_config
-            )
+            results = await searcher.search(query=query, user_id=user_id, config=search_config)
 
             logger.info(f"Query {idx} returned {len(results)} results")
             all_results.extend(results)
@@ -174,12 +171,11 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
 
     if not all_results:
         elapsed_time = time.time() - start_time
-        logger.warning(
-            f"⏱️  RETRIEVER NODE: Completed in {elapsed_time:.3f}s | No results found")
+        logger.warning(f"⏱️  RETRIEVER NODE: Completed in {elapsed_time:.3f}s | No results found")
         return {
             "retrieved_chunks": [],
             "sources": [],
-            "metadata": {"retrieval": {"queries_searched": len(queries), "total_results": 0}}
+            "metadata": {"retrieval": {"queries_searched": len(queries), "total_results": 0}},
         }
 
     logger.info(f"Total results from all queries: {len(all_results)}")
@@ -195,8 +191,7 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
 
     deduplicated = list(unique_results.values())
     dedup_time = time.time() - dedup_start
-    logger.info(
-        f"  ↳ Deduplication took {dedup_time:.3f}s | {len(deduplicated)} unique chunks")
+    logger.info(f"  ↳ Deduplication took {dedup_time:.3f}s | {len(deduplicated)} unique chunks")
 
     # Step 3: Re-rank using FlashRank
     rerank_start = time.time()
@@ -206,7 +201,8 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
     if not rerank_query:
         # This shouldn't happen after validation above, but handle defensively
         logger.warning(
-            "retrieval_query missing during re-ranking, using first expanded query as fallback")
+            "retrieval_query missing during re-ranking, using first expanded query as fallback"
+        )
         rerank_query = queries[0].strip() if queries else ""
 
     # Skip reranking if reranker is not available
@@ -214,31 +210,29 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
         logger.warning("Reranker not available, using hybrid search scores with stricter filtering")
         # Filter by minimum similarity threshold before selecting top results
         filtered_results = [r for r in deduplicated if r.score >= MIN_SIMILARITY_FALLBACK]
-        reranked_results = sorted(
-            filtered_results, key=lambda x: x.score, reverse=True)[:5]
-        logger.info(f"Fallback filtering: {len(deduplicated)} → {len(filtered_results)} (>= {MIN_SIMILARITY_FALLBACK}) → top 5")
+        reranked_results = sorted(filtered_results, key=lambda x: x.score, reverse=True)[:5]
+        logger.info(
+            f"Fallback filtering: {len(deduplicated)} → {len(filtered_results)} (>= {MIN_SIMILARITY_FALLBACK}) → top 5"
+        )
     else:
         logger.info("Re-ranking results with FlashRank")
         rerank_config = RerankConfig(top_k=settings.rerank_top_k)  # configurable via .env
 
         try:
             reranked_results = await reranker.rerank(
-                query=rerank_query,
-                results=deduplicated,
-                config=rerank_config
+                query=rerank_query, results=deduplicated, config=rerank_config
             )
 
-            logger.info(
-                f"Re-ranking complete: {len(reranked_results)} top results selected")
-
+            logger.info(f"Re-ranking complete: {len(reranked_results)} top results selected")
 
         except Exception as e:
             logger.error(f"Re-ranking failed: {e}, using hybrid scores with stricter filtering")
             # Fallback: filter by minimum similarity threshold then use hybrid search scores
             filtered_results = [r for r in deduplicated if r.score >= MIN_SIMILARITY_FALLBACK]
-            reranked_results = sorted(
-                filtered_results, key=lambda x: x.score, reverse=True)[:5]
-            logger.info(f"Fallback filtering: {len(deduplicated)} → {len(filtered_results)} (>= {MIN_SIMILARITY_FALLBACK})")
+            reranked_results = sorted(filtered_results, key=lambda x: x.score, reverse=True)[:5]
+            logger.info(
+                f"Fallback filtering: {len(deduplicated)} → {len(filtered_results)} (>= {MIN_SIMILARITY_FALLBACK})"
+            )
 
     rerank_time = time.time() - rerank_start
     logger.info(f"  ↳ Re-ranking took {rerank_time:.3f}s")
@@ -284,8 +278,8 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
                     "search": f"{search_time:.3f}s",
                     "dedup": f"{dedup_time:.3f}s",
                     "rerank": f"{rerank_time:.3f}s",
-                    "total": f"{elapsed_time:.3f}s"
-                }
+                    "total": f"{elapsed_time:.3f}s",
+                },
             }
-        }
+        },
     }

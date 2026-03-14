@@ -23,7 +23,7 @@ from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # Helper function for UTC timestamps
@@ -50,6 +50,7 @@ class DocumentStatus(str, Enum):
     Learning Note:
     Using Enum ensures only valid statuses can be set, preventing typos.
     """
+
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -68,6 +69,7 @@ class ChunkType(str, Enum):
     This enables "small-to-big" retrieval: search small chunks,
     return parent chunks for more context.
     """
+
     PARENT = "parent"
     CHILD = "child"
 
@@ -85,13 +87,12 @@ class TimestampMixin(BaseModel):
     Mixins are reusable pieces of model definitions.
     All database records should track when they were created/modified.
     """
+
     created_at: datetime = Field(
-        default_factory=utc_now,
-        description="When this record was created (UTC)"
+        default_factory=utc_now, description="When this record was created (UTC)"
     )
     updated_at: datetime = Field(
-        default_factory=utc_now,
-        description="When this record was last updated (UTC)"
+        default_factory=utc_now, description="When this record was last updated (UTC)"
     )
 
 
@@ -117,34 +118,30 @@ class Source(TimestampMixin):
     - name: Display name shown in UI
     - description: Optional context for the AI agent
     """
-    id: UUID = Field(
-        description="Unique identifier for this source"
-    )
-    user_id: str = Field(
-        description="Clerk user ID who owns this source"
-    )
+
+    id: UUID = Field(description="Unique identifier for this source")
+    user_id: str = Field(description="Clerk user ID who owns this source")
     name: str = Field(
         min_length=1,
         max_length=255,
-        description="Human-readable name (e.g., 'Prisma Documentation')"
+        description="Human-readable name (e.g., 'Prisma Documentation')",
     )
     description: str | None = Field(
-        default=None,
-        description="Optional context for the AI (e.g., 'Use for database queries')"
+        default=None, description="Optional context for the AI (e.g., 'Use for database queries')"
     )
 
-    class Config:
-        """Pydantic configuration."""
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "550e8400-e29b-41d4-a716-446655440000",
                 "user_id": "user_2bXYZ123",
                 "name": "LangGraph Documentation",
                 "description": "Official LangGraph docs for building agentic workflows",
                 "created_at": "2026-01-19T10:00:00Z",
-                "updated_at": "2026-01-19T10:00:00Z"
+                "updated_at": "2026-01-19T10:00:00Z",
             }
         }
+    )
 
 
 # ============================================================================
@@ -183,53 +180,33 @@ class Document(TimestampMixin):
     - blob_path: Optional path in Supabase Storage
     - metadata: Flexible JSONB metadata (tags, categories, etc.)
     """
-    id: UUID = Field(
-        default_factory=uuid4,
-        description="Unique identifier for this document"
-    )
-    user_id: str = Field(
-        description="Owner user ID (Clerk user ID, enforced by RLS)"
-    )
-    title: str = Field(
-        min_length=1,
-        max_length=500,
-        description="Document title or filename"
-    )
-    file_type: str = Field(
-        description="File format (markdown, pdf, txt, etc.)"
-    )
-    file_size: int = Field(
-        ge=0,
-        description="File size in bytes"
-    )
-    content_hash: str = Field(
-        description="SHA256 hash of content for deduplication"
-    )
+
+    id: UUID = Field(default_factory=uuid4, description="Unique identifier for this document")
+    user_id: str = Field(description="Owner user ID (Clerk user ID, enforced by RLS)")
+    title: str = Field(min_length=1, max_length=500, description="Document title or filename")
+    file_type: str = Field(description="File format (markdown, pdf, txt, etc.)")
+    file_size: int = Field(ge=0, description="File size in bytes")
+    content_hash: str = Field(description="SHA256 hash of content for deduplication")
     chunk_count: int = Field(
-        default=0,
-        ge=0,
-        description="Number of chunks created from this document"
+        default=0, ge=0, description="Number of chunks created from this document"
     )
     status: DocumentStatus = Field(
-        default=DocumentStatus.PENDING,
-        description="Current processing status"
+        default=DocumentStatus.PENDING, description="Current processing status"
     )
     source_id: UUID | None = Field(
-        default=None,
-        description="Optional parent source/collection this document belongs to"
+        default=None, description="Optional parent source/collection this document belongs to"
     )
     blob_path: str | None = Field(
         default=None,
-        description="Optional path in Supabase Storage (e.g., 'user_123/docs/guide.md')"
+        description="Optional path in Supabase Storage (e.g., 'user_123/docs/guide.md')",
     )
     metadata: dict[str, Any] = Field(
         default_factory=dict,
-        description="Flexible JSONB metadata (tags, categories, parser info, etc.)"
+        description="Flexible JSONB metadata (tags, categories, parser info, etc.)",
     )
 
-    class Config:
-        """Pydantic configuration."""
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "660e8400-e29b-41d4-a716-446655440001",
                 "user_id": "user_2bXYZ123",  # Clerk user ID format
@@ -244,12 +221,13 @@ class Document(TimestampMixin):
                 "metadata": {
                     "source": "langgraph-docs",
                     "category": "quickstart",
-                    "original_filename": "quickstart.md"
+                    "original_filename": "quickstart.md",
                 },
                 "created_at": "2026-01-19T10:05:00Z",
-                "updated_at": "2026-01-19T10:07:00Z"
+                "updated_at": "2026-01-19T10:07:00Z",
             }
         }
+    )
 
 
 # ============================================================================
@@ -297,38 +275,25 @@ class DocumentChunk(TimestampMixin):
     - parent_chunk_id: For parent-child chunking
     - chunk_type: PARENT or CHILD
     """
-    id: UUID = Field(
-        description="Unique identifier for this chunk"
-    )
-    document_id: UUID = Field(
-        description="Parent document this chunk was extracted from"
-    )
-    user_id: str = Field(
-        description="Owner (denormalized for RLS performance)"
-    )
-    chunk_index: int = Field(
-        ge=0,
-        description="Sequential order in document (0-based)"
-    )
-    content: str = Field(
-        min_length=1,
-        description="The actual text content of this chunk"
-    )
+
+    id: UUID = Field(description="Unique identifier for this chunk")
+    document_id: UUID = Field(description="Parent document this chunk was extracted from")
+    user_id: str = Field(description="Owner (denormalized for RLS performance)")
+    chunk_index: int = Field(ge=0, description="Sequential order in document (0-based)")
+    content: str = Field(min_length=1, description="The actual text content of this chunk")
     metadata: dict[str, Any] = Field(
         default_factory=dict,
-        description="Flexible JSONB storage for chunk context (headers, page nums, etc.)"
+        description="Flexible JSONB storage for chunk context (headers, page nums, etc.)",
     )
     embedding: list[float] | None = Field(
         default=None,
-        description="Vector embedding (generated async by OpenAI text-embedding-3-small)"
+        description="Vector embedding (generated async by OpenAI text-embedding-3-small)",
     )
     parent_chunk_id: UUID | None = Field(
-        default=None,
-        description="If this is a child chunk, references the parent chunk"
+        default=None, description="If this is a child chunk, references the parent chunk"
     )
     chunk_type: ChunkType = Field(
-        default=ChunkType.PARENT,
-        description="PARENT (context) or CHILD (searchable)"
+        default=ChunkType.PARENT, description="PARENT (context) or CHILD (searchable)"
     )
 
     @field_validator("embedding")
@@ -348,13 +313,11 @@ class DocumentChunk(TimestampMixin):
         - Industry standard: Most production RAG systems use 1536
         """
         if v is not None and len(v) != 1536:
-            raise ValueError(
-                f"Embedding must be 1536 dimensions, got {len(v)}")
+            raise ValueError(f"Embedding must be 1536 dimensions, got {len(v)}")
         return v
 
-    class Config:
-        """Pydantic configuration."""
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "770e8400-e29b-41d4-a716-446655440002",
                 "document_id": "660e8400-e29b-41d4-a716-446655440001",
@@ -365,15 +328,16 @@ class DocumentChunk(TimestampMixin):
                     "header": "Introduction",
                     "chunk_strategy": "recursive",
                     "semantic_density": 0.82,
-                    "context_prefix": "[Doc: LangGraph Quick Start | Section: Introduction]"
+                    "context_prefix": "[Doc: LangGraph Quick Start | Section: Introduction]",
                 },
                 "embedding": [0.123, -0.456, 0.789, "... (1536 dimensions)"],
                 "parent_chunk_id": None,
                 "chunk_type": "parent",
                 "created_at": "2026-01-19T10:07:00Z",
-                "updated_at": "2026-01-19T10:07:00Z"
+                "updated_at": "2026-01-19T10:07:00Z",
             }
         }
+    )
 
 
 # ============================================================================
@@ -391,6 +355,7 @@ class FeedbackType(str, Enum):
     - GENERAL: General comments
     - OTHER: Everything else
     """
+
     BUG = "bug"
     FEATURE_REQUEST = "feature_request"
     GENERAL = "general"
@@ -408,29 +373,15 @@ class Feedback(TimestampMixin):
     - message: The actual feedback content
     - rating: 1-5 star rating
     """
-    id: UUID = Field(
-        default_factory=uuid4,
-        description="Unique identifier for this feedback"
-    )
-    user_id: str = Field(
-        description="Clerk user ID who submitted the feedback"
-    )
-    feedback_type: FeedbackType = Field(
-        description="Type of feedback (bug, feature, etc.)"
-    )
-    message: str = Field(
-        min_length=10,
-        description="Feedback content"
-    )
-    rating: int = Field(
-        ge=1,
-        le=5,
-        description="Rating from 1 to 5"
-    )
 
-    class Config:
-        """Pydantic configuration."""
-        json_schema_extra = {
+    id: UUID = Field(default_factory=uuid4, description="Unique identifier for this feedback")
+    user_id: str = Field(description="Clerk user ID who submitted the feedback")
+    feedback_type: FeedbackType = Field(description="Type of feedback (bug, feature, etc.)")
+    message: str = Field(min_length=10, description="Feedback content")
+    rating: int = Field(ge=1, le=5, description="Rating from 1 to 5")
+
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "770e8400-e29b-41d4-a716-446655440003",
                 "user_id": "user_2bXYZ123",
@@ -438,7 +389,7 @@ class Feedback(TimestampMixin):
                 "message": "It would be great to have dark mode support.",
                 "rating": 5,
                 "created_at": "2026-02-17T12:00:00Z",
-                "updated_at": "2026-02-17T12:00:00Z"
+                "updated_at": "2026-02-17T12:00:00Z",
             }
         }
-
+    )

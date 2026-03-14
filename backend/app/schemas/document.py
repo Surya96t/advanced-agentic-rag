@@ -19,15 +19,12 @@ Why separate schemas from database models?
 """
 
 from datetime import datetime
-from enum import Enum
-from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Re-export DocumentStatus for API use
 from app.database.models import DocumentStatus
-
 
 # ============================================================================
 # CONSTANTS - File upload limits
@@ -69,18 +66,17 @@ class DocumentUploadRequest(BaseModel):
     Note: The actual file is sent as multipart/form-data,
     not included in this schema. FastAPI handles it separately.
     """
-    source_id: UUID = Field(
-        description="ID of the source (folder) to upload to"
-    )
+
+    source_id: UUID = Field(description="ID of the source (folder) to upload to")
     title: str | None = Field(
         default=None,
         max_length=500,
-        description="Optional custom title (defaults to filename if not provided)"
+        description="Optional custom title (defaults to filename if not provided)",
     )
     metadata: dict[str, str] | None = Field(
         default=None,
         description="Optional metadata (tags, categories, etc.)",
-        examples=[{"tags": "authentication,api", "category": "reference"}]
+        examples=[{"tags": "authentication,api", "category": "reference"}],
     )
 
     model_config = ConfigDict(
@@ -88,10 +84,7 @@ class DocumentUploadRequest(BaseModel):
             "example": {
                 "source_id": "550e8400-e29b-41d4-a716-446655440000",
                 "title": "LangGraph Quick Start Guide",
-                "metadata": {
-                    "tags": "langgraph,tutorial",
-                    "category": "getting-started"
-                }
+                "metadata": {"tags": "langgraph,tutorial", "category": "getting-started"},
             }
         }
     )
@@ -109,15 +102,12 @@ class DocumentUpdateRequest(BaseModel):
     Note: Cannot update status or processing-related fields.
     Those are managed by the ingestion pipeline.
     """
+
     title: str | None = Field(
-        default=None,
-        min_length=1,
-        max_length=500,
-        description="New title for the document"
+        default=None, min_length=1, max_length=500, description="New title for the document"
     )
     metadata: dict[str, str] | None = Field(
-        default=None,
-        description="Updated metadata (replaces existing)"
+        default=None, description="Updated metadata (replaces existing)"
     )
 
     @field_validator("title")
@@ -132,10 +122,7 @@ class DocumentUpdateRequest(BaseModel):
         json_schema_extra={
             "example": {
                 "title": "Updated Guide Title",
-                "metadata": {
-                    "tags": "langgraph,advanced",
-                    "category": "tutorials"
-                }
+                "metadata": {"tags": "langgraph,advanced", "category": "tutorials"},
             }
         }
     )
@@ -165,31 +152,19 @@ class DocumentResponse(BaseModel):
     - created_at: When uploaded
     - updated_at: Last modification
     """
-    id: UUID = Field(
-        description="Unique identifier for this document"
-    )
-    source_id: UUID = Field(
-        description="Parent source this document belongs to"
-    )
-    title: str = Field(
-        description="Document title or filename"
-    )
+
+    id: UUID = Field(description="Unique identifier for this document")
+    source_id: UUID = Field(description="Parent source this document belongs to")
+    title: str = Field(description="Document title or filename")
     status: DocumentStatus = Field(
         description="Current processing status (pending, processing, completed, failed)"
     )
-    token_count: int = Field(
-        description="Total tokens in document (for cost estimation)"
-    )
+    token_count: int = Field(description="Total tokens in document (for cost estimation)")
     metadata: dict[str, str] | None = Field(
-        default=None,
-        description="User-provided metadata (tags, categories, etc.)"
+        default=None, description="User-provided metadata (tags, categories, etc.)"
     )
-    created_at: datetime = Field(
-        description="When the document was uploaded (UTC)"
-    )
-    updated_at: datetime = Field(
-        description="When the document was last updated (UTC)"
-    )
+    created_at: datetime = Field(description="When the document was uploaded (UTC)")
+    updated_at: datetime = Field(description="When the document was last updated (UTC)")
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -199,12 +174,9 @@ class DocumentResponse(BaseModel):
                 "title": "LangGraph Quick Start",
                 "status": "completed",
                 "token_count": 2500,
-                "metadata": {
-                    "tags": "langgraph,tutorial",
-                    "category": "getting-started"
-                },
+                "metadata": {"tags": "langgraph,tutorial", "category": "getting-started"},
                 "created_at": "2026-01-19T10:05:00Z",
-                "updated_at": "2026-01-19T10:07:00Z"
+                "updated_at": "2026-01-19T10:07:00Z",
             }
         }
     )
@@ -223,12 +195,11 @@ class DocumentUploadResponse(BaseModel):
     The frontend can poll the status endpoint to check processing progress.
     Processing happens asynchronously in the background after the response is sent.
     """
-    document: DocumentResponse = Field(
-        description="The created document record"
-    )
+
+    document: DocumentResponse = Field(description="The created document record")
     message: str = Field(
         default="Document uploaded successfully. Processing will begin shortly.",
-        description="Success message"
+        description="Success message",
     )
 
     model_config = ConfigDict(
@@ -242,9 +213,9 @@ class DocumentUploadResponse(BaseModel):
                     "token_count": 0,
                     "metadata": {"tags": "langgraph,tutorial"},
                     "created_at": "2026-01-19T10:05:00Z",
-                    "updated_at": "2026-01-19T10:05:00Z"
+                    "updated_at": "2026-01-19T10:05:00Z",
                 },
-                "message": "Document uploaded successfully. Processing will begin shortly."
+                "message": "Document uploaded successfully. Processing will begin shortly.",
             }
         }
     )
@@ -266,25 +237,12 @@ class DocumentListResponse(BaseModel):
     - Enables infinite scroll in frontend
     - Reduces API response time
     """
-    documents: list[DocumentResponse] = Field(
-        description="Array of document records"
-    )
-    total: int = Field(
-        ge=0,
-        description="Total number of documents matching the query"
-    )
-    page: int = Field(
-        ge=1,
-        description="Current page number (1-indexed)"
-    )
-    page_size: int = Field(
-        ge=1,
-        le=MAX_PAGE_SIZE,
-        description="Number of items per page"
-    )
-    has_more: bool = Field(
-        description="Whether there are more pages available"
-    )
+
+    documents: list[DocumentResponse] = Field(description="Array of document records")
+    total: int = Field(ge=0, description="Total number of documents matching the query")
+    page: int = Field(ge=1, description="Current page number (1-indexed)")
+    page_size: int = Field(ge=1, le=MAX_PAGE_SIZE, description="Number of items per page")
+    has_more: bool = Field(description="Whether there are more pages available")
 
     @property
     def total_pages(self) -> int:
@@ -305,13 +263,13 @@ class DocumentListResponse(BaseModel):
                         "token_count": 2500,
                         "metadata": {"tags": "langgraph,tutorial"},
                         "created_at": "2026-01-19T10:05:00Z",
-                        "updated_at": "2026-01-19T10:07:00Z"
+                        "updated_at": "2026-01-19T10:07:00Z",
                     }
                 ],
                 "total": 42,
                 "page": 1,
                 "page_size": 20,
-                "has_more": True
+                "has_more": True,
             }
         }
     )
@@ -331,19 +289,18 @@ class DocumentDeleteResponse(BaseModel):
     - id: ID of the deleted document
     - message: Confirmation message
     """
-    id: UUID = Field(
-        description="ID of the deleted document"
-    )
+
+    id: UUID = Field(description="ID of the deleted document")
     message: str = Field(
         default="Document and associated chunks deleted successfully",
-        description="Confirmation message"
+        description="Confirmation message",
     )
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "id": "660e8400-e29b-41d4-a716-446655440001",
-                "message": "Document and associated chunks deleted successfully"
+                "message": "Document and associated chunks deleted successfully",
             }
         }
     )
@@ -369,24 +326,15 @@ class DocumentListFilters(BaseModel):
     - page: Page number (default: 1)
     - page_size: Items per page (default: 20, max: 100)
     """
-    source_id: UUID | None = Field(
-        default=None,
-        description="Filter by parent source ID"
-    )
-    status: DocumentStatus | None = Field(
-        default=None,
-        description="Filter by processing status"
-    )
-    page: int = Field(
-        default=1,
-        ge=1,
-        description="Page number (1-indexed)"
-    )
+
+    source_id: UUID | None = Field(default=None, description="Filter by parent source ID")
+    status: DocumentStatus | None = Field(default=None, description="Filter by processing status")
+    page: int = Field(default=1, ge=1, description="Page number (1-indexed)")
     page_size: int = Field(
         default=DEFAULT_PAGE_SIZE,
         ge=1,
         le=MAX_PAGE_SIZE,
-        description="Number of items per page (max 100)"
+        description="Number of items per page (max 100)",
     )
 
     model_config = ConfigDict(
@@ -395,7 +343,7 @@ class DocumentListFilters(BaseModel):
                 "source_id": "550e8400-e29b-41d4-a716-446655440000",
                 "status": "completed",
                 "page": 1,
-                "page_size": 20
+                "page_size": 20,
             }
         }
     )
@@ -421,6 +369,7 @@ def validate_file_extension(filename: str) -> bool:
     not the full path, to avoid security issues.
     """
     import os
+
     _, ext = os.path.splitext(filename.lower())
     return ext in ALLOWED_EXTENSIONS
 

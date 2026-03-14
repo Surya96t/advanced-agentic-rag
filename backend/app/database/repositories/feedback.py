@@ -3,7 +3,6 @@ Feedback repository for handling database operations.
 """
 
 from typing import List
-from uuid import UUID
 
 from supabase import Client
 
@@ -36,14 +35,14 @@ class FeedbackRepository:
         # Prepare data for insertion
         data = feedback.model_dump()
         data["user_id"] = user_id
-        
+
         # Insert into Supabase
         # Note: id and created_at are handled by database defaults
         response = self.client.table(self.table_name).insert(data).execute()
-        
+
         if not response.data:
             raise Exception("Failed to create feedback entry")
-            
+
         return FeedbackResponse(**response.data[0])
 
     def get_by_user(self, user_id: str) -> List[FeedbackResponse]:
@@ -56,11 +55,12 @@ class FeedbackRepository:
         Returns:
             List of Feedback objects
         """
-        response = self.client.table(self.table_name)\
-            .select("*")\
-            .eq("user_id", user_id)\
-            .order("created_at", desc=True)\
+        response = (
+            self.client.table(self.table_name)
+            .select("*")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
             .execute()
+        )
 
         return [FeedbackResponse(**item) for item in response.data]
-

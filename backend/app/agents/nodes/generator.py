@@ -79,8 +79,10 @@ def format_context(chunks: list[SearchResult]) -> str:
         # Prefer top-level document_title, fallback to metadata, then filename
         doc_title = getattr(chunk, "document_title", None)
         if not doc_title:
-            doc_title = chunk.metadata.get("document_title", chunk.metadata.get("filename", "Unknown Document"))
-        
+            doc_title = chunk.metadata.get(
+                "document_title", chunk.metadata.get("filename", "Unknown Document")
+            )
+
         content = chunk.content.strip()
         score = chunk.score
 
@@ -118,9 +120,7 @@ def count_tokens(text: str, model: str = "gpt-4") -> int:
 
         return len(encoding.encode(text))
     except Exception as e:
-        logger.warning(
-            f"Failed to count tokens with tiktoken: {e}, using word count approximation"
-        )
+        logger.warning(f"Failed to count tokens with tiktoken: {e}, using word count approximation")
         # Fallback: rough approximation (1 token ≈ 0.75 words)
         return int(len(text.split()) * 1.33)
 
@@ -161,8 +161,7 @@ def count_chat_tokens(messages: list, model: str = "gpt-4") -> int:
 
         return total_tokens
     except Exception as e:
-        logger.warning(
-            f"Failed to count chat tokens: {e}, falling back to simple count")
+        logger.warning(f"Failed to count chat tokens: {e}, falling back to simple count")
         # Fallback: sum content tokens + conservative overhead
         return sum(count_tokens(msg.content, model) for msg in messages) + (len(messages) * 4) + 3
 
@@ -207,13 +206,11 @@ async def generator_node(state: AgentState) -> dict:
     chunks = state.get("retrieved_chunks", [])
 
     if not chunks:
-        logger.warning(
-            "No chunks retrieved, generating response without context")
+        logger.warning("No chunks retrieved, generating response without context")
         context = "No relevant documentation found. Please provide a general answer based on your knowledge."
     else:
         context = format_context(chunks)
-        logger.info(
-            f"Formatted context from {len(chunks)} chunks ({len(context)} chars)")
+        logger.info(f"Formatted context from {len(chunks)} chunks ({len(context)} chars)")
 
     # Build context-aware system prompt
     system_prompt_parts = [SYSTEM_PROMPT]
@@ -221,11 +218,10 @@ async def generator_node(state: AgentState) -> dict:
     # Add conversation summary if available
     conversation_summary = state.get("conversation_summary", "")
     if conversation_summary:
-        system_prompt_parts.append(
-            f"\n\nPrevious conversation context:\n{conversation_summary}"
-        )
+        system_prompt_parts.append(f"\n\nPrevious conversation context:\n{conversation_summary}")
         logger.info(
-            f"Added conversation summary to system prompt ({len(conversation_summary)} chars)")
+            f"Added conversation summary to system prompt ({len(conversation_summary)} chars)"
+        )
 
     # Honour format/style instructions extracted by query_expander (e.g. "briefly", "in bullet points")
     format_instructions = state.get("format_instructions", "")
@@ -241,10 +237,7 @@ async def generator_node(state: AgentState) -> dict:
     # Build messages
     messages = [
         SystemMessage(content=system_prompt),
-        HumanMessage(content=USER_PROMPT_TEMPLATE.format(
-            query=query,
-            context=context
-        ))
+        HumanMessage(content=USER_PROMPT_TEMPLATE.format(query=query, context=context)),
     ]
 
     logger.info("Calling LLM for response generation")
@@ -263,12 +256,10 @@ async def generator_node(state: AgentState) -> dict:
 
         # Calculate accurate token counts using tiktoken after streaming completes
         # Use chat-aware token counting to account for ChatML formatting overhead
-        prompt_tokens = count_chat_tokens(
-            messages, model=settings.openai_model)
+        prompt_tokens = count_chat_tokens(messages, model=settings.openai_model)
 
         # Compute completion tokens (generated response)
-        completion_tokens = count_tokens(
-            full_response, model=settings.openai_model)
+        completion_tokens = count_tokens(full_response, model=settings.openai_model)
         total_tokens = prompt_tokens + completion_tokens
 
         end_time = time.time()
@@ -283,12 +274,11 @@ async def generator_node(state: AgentState) -> dict:
         # Calculate cost based on actual token counts
         # GPT-4: ~$0.03/1K prompt tokens, ~$0.06/1K completion tokens
         # Adjust these rates based on your actual model pricing
-        estimated_cost = (prompt_tokens * 0.00003) + \
-            (completion_tokens * 0.00006)
+        estimated_cost = (prompt_tokens * 0.00003) + (completion_tokens * 0.00006)
 
         # Build citation_map only for markers the LLM actually referenced.
         # Scan the response for [N] patterns and include only those entries.
-        referenced_markers = {int(m) for m in re.findall(r'\[(\d+)\]', full_response)}
+        referenced_markers = {int(m) for m in re.findall(r"\[(\d+)\]", full_response)}
 
         # Re-number citations to be sequential ([1],[5],[10] → [1],[2],[3]).
         # Build a mapping from the original chunk index to a new sequential index.
@@ -296,14 +286,14 @@ async def generator_node(state: AgentState) -> dict:
         remap: dict[int, int] = {old: new for new, old in enumerate(sorted_markers, 1)}
 
         if remap:
+
             def _renumber(match: re.Match) -> str:
                 original = int(match.group(1))
                 return f"[{remap.get(original, original)}]"
 
-            full_response = re.sub(r'\[(\d+)\]', _renumber, full_response)
+            full_response = re.sub(r"\[(\d+)\]", _renumber, full_response)
             logger.info(
-                f"Re-numbered citations: {sorted_markers} → "
-                f"{[remap[m] for m in sorted_markers]}"
+                f"Re-numbered citations: {sorted_markers} → {[remap[m] for m in sorted_markers]}"
             )
 
         citation_map: dict[int, dict] = {}
@@ -319,24 +309,28 @@ async def generator_node(state: AgentState) -> dict:
                     "score": chunk.score,
                     "source": chunk.source,
                 }
-                citations.append({
-                    "index": new_idx,
-                    "chunk_id": str(chunk.chunk_id),
-                    "document_id": str(chunk.document_id),
-                    "document_title": chunk.document_title,
-                    "content": chunk.content,
-                    "preview": chunk.content[:200],
-                    "score": chunk.score,
-                    "original_score": chunk.original_score,
-                    "source": chunk.source,
-                })
+                citations.append(
+                    {
+                        "index": new_idx,
+                        "chunk_id": str(chunk.chunk_id),
+                        "document_id": str(chunk.document_id),
+                        "document_title": chunk.document_title,
+                        "content": chunk.content,
+                        "preview": chunk.content[:200],
+                        "score": chunk.score,
+                        "original_score": chunk.original_score,
+                        "source": chunk.source,
+                    }
+                )
 
         logger.info(
             f"LLM referenced markers {sorted_markers} → remapped to {sorted(citation_map.keys())}, "
             f"citation_map has {len(citation_map)} of {len(chunks)} chunks"
         )
 
-        logger.info(f"Built {len(citations)} citations and {len(citation_map)} citation_map entries")
+        logger.info(
+            f"Built {len(citations)} citations and {len(citation_map)} citation_map entries"
+        )
 
         # Return state update.
         # NOTE: We do NOT add an AIMessage to messages here. The validator
@@ -356,7 +350,7 @@ async def generator_node(state: AgentState) -> dict:
                     "estimated_cost_usd": round(estimated_cost, 6),
                     "chunks_used": len(chunks),
                 }
-            }
+            },
         }
 
     except Exception as e:
@@ -373,5 +367,5 @@ async def generator_node(state: AgentState) -> dict:
                     "error": str(e),
                     "chunks_used": len(chunks),
                 }
-            }
+            },
         }

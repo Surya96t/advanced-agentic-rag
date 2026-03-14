@@ -42,7 +42,7 @@ from typing import Any, Callable
 from uuid import UUID
 
 from app.database.client import SupabaseClient
-from app.database.models import Document, DocumentChunk, DocumentStatus
+from app.database.models import Document, DocumentStatus
 from app.database.repositories.chunks import ChunkRepository
 from app.database.repositories.documents import DocumentRepository
 from app.ingestion.chunkers.base import BaseChunker, Chunk, ChunkType
@@ -105,8 +105,7 @@ class IngestionProgress:
         Returns:
             Dictionary with progress information
         """
-        elapsed = (datetime.now(timezone.utc) -
-                   self.started_at).total_seconds()
+        elapsed = (datetime.now(timezone.utc) - self.started_at).total_seconds()
 
         return {
             "stage": self.current_stage,
@@ -274,8 +273,7 @@ class IngestionPipeline:
             # Step 2: Parse document (10-20%)
             emit_progress("parsing", 10, "Extracting text from document")
             parsed_doc = await self._parse_document(file_bytes, filename)
-            emit_progress(
-                "parsing", 20, f"Extracted {len(parsed_doc.content)} characters")
+            emit_progress("parsing", 20, f"Extracted {len(parsed_doc.content)} characters")
 
             # Step 3: Create document record (25%)
             emit_progress("creating", 25, "Creating document record")
@@ -361,7 +359,7 @@ class IngestionPipeline:
             emit_progress("error", 0, f"Error: {str(e)}")
 
             # Try to mark document as failed if it was created
-            if 'document' in locals():
+            if "document" in locals():
                 try:
                     await self._finalize_document(
                         document_id=document.id,  # type: ignore
@@ -371,8 +369,7 @@ class IngestionPipeline:
                         error_message=str(e),
                     )
                 except Exception as cleanup_error:
-                    logger.error("Failed to mark document as failed",
-                                 error=str(cleanup_error))
+                    logger.error("Failed to mark document as failed", error=str(cleanup_error))
 
             raise
 
@@ -444,6 +441,7 @@ class IngestionPipeline:
             chunker: BaseChunker = self.chunker
             if contextual:
                 from app.ingestion.chunkers.contextual import ContextualChunker
+
                 chunker = ContextualChunker(base_chunker=self.chunker)
 
             chunks = await chunker.achunk(
@@ -499,14 +497,10 @@ class IngestionPipeline:
             # If all chunks are PARENT (e.g. RecursiveChunker default), embed them all.
             has_children = any(c.chunk_type == ChunkType.CHILD for c in chunks)
             embeddable_indices = [
-                i for i, c in enumerate(chunks)
-                if has_children and c.chunk_type == ChunkType.PARENT
+                i for i, c in enumerate(chunks) if has_children and c.chunk_type == ChunkType.PARENT
             ]
             # Invert: we want indices of chunks TO embed (non-parents, or all if no children)
-            embeddable_indices = [
-                i for i in range(len(chunks))
-                if i not in set(embeddable_indices)
-            ]
+            embeddable_indices = [i for i in range(len(chunks)) if i not in set(embeddable_indices)]
             embeddable_texts = [chunks[i].content for i in embeddable_indices]
 
             if not embeddable_texts:
@@ -624,9 +618,7 @@ class IngestionPipeline:
                 # Build the set of parent chunk_indices that will be inserted,
                 # so we can detect broken references before touching the DB.
                 parent_chunk_indices = {
-                    chunk.chunk_index
-                    for chunk in chunks
-                    if chunk.chunk_type == ChunkType.PARENT
+                    chunk.chunk_index for chunk in chunks if chunk.chunk_type == ChunkType.PARENT
                 }
 
                 # Pre-validate every child before inserting either batch.
@@ -668,9 +660,7 @@ class IngestionPipeline:
                 created_parents = self.chunk_repo.create_batch(parent_dicts)
 
                 # Build chunk_index → DB UUID mapping
-                parent_uuid_map: dict[int, UUID] = {
-                    p.chunk_index: p.id for p in created_parents
-                }
+                parent_uuid_map: dict[int, UUID] = {p.chunk_index: p.id for p in created_parents}
 
                 # Phase 2: insert child chunks with parent_chunk_id resolved.
                 # Use direct key access (not .get()) so a missing mapping raises

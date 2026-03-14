@@ -49,7 +49,7 @@ async def generate_title(user_message: str) -> str:
         response = await llm.ainvoke(_TITLE_PROMPT.format(message=user_message[:500]))
         title = response.content.strip()
         # Strip surrounding quotes that the model sometimes adds
-        title = title.strip('"\'')
+        title = title.strip("\"'")
         return title[:100] if title else _truncate(user_message)
     except Exception:
         logger.warning("Title generation failed, falling back to truncation", exc_info=True)

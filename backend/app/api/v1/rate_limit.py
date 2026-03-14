@@ -8,8 +8,8 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.api.deps import UserID
-from app.core.rate_limiter import get_rate_limiter
 from app.core.config import settings
+from app.core.rate_limiter import get_rate_limiter
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -66,7 +66,7 @@ def get_rate_limit_status(user_id: UserID) -> RateLimitStatusResponse:
     limiter = get_rate_limiter()
 
     # Sentinel returned by peek_rate_limit when Redis is unavailable.
-    _UNAVAILABLE = EndpointLimitStatus(limit=-1, remaining=-1, reset=-1)
+    _UNAVAILABLE = EndpointLimitStatus(limit=-1, remaining=-1, reset=-1)  # noqa: N806
 
     def _peek(endpoint: str) -> EndpointLimitStatus:
         result = limiter.peek_rate_limit(user_id, endpoint)
@@ -85,4 +85,3 @@ def get_rate_limit_status(user_id: UserID) -> RateLimitStatusResponse:
         documents=_peek("documents"),
         enabled=True,
     )
-

@@ -46,8 +46,7 @@ def format_messages_for_classifier(messages: list) -> str:
             lines.append(f"User: {msg.content}")
         elif isinstance(msg, AIMessage):
             # Truncate long AI responses
-            content = msg.content[:200] + \
-                "..." if len(msg.content) > 200 else msg.content
+            content = msg.content[:200] + "..." if len(msg.content) > 200 else msg.content
             lines.append(f"Assistant: {content}")
     return "\n".join(lines) if lines else "No previous context"
 
@@ -136,8 +135,7 @@ Respond with a QueryClassification object."""
     try:
         result: QueryClassification = await llm.ainvoke(
             [
-                SystemMessage(
-                    content="You are a query classification expert."),
+                SystemMessage(content="You are a query classification expert."),
                 HumanMessage(content=classification_prompt),
             ]
         )
@@ -177,8 +175,7 @@ Respond with a QueryClassification object."""
         )
 
     except Exception as e:
-        logger.error(
-            f"Classification failed: {e}, defaulting to complex_standalone")
+        logger.error(f"Classification failed: {e}, defaulting to complex_standalone")
         # Default to complex path on error (safe fallback)
         return Command(
             update={

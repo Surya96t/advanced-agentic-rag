@@ -179,32 +179,6 @@ class TestAtomicDeletion:
         assert result["chunks_deleted"] == 0
         assert doc_repo.get_by_id(test_document.id, test_user_id) is None
 
-    @pytest.mark.skip(reason="RLS bypassed when using service role key - will test in Phase 6 with JWT auth")
-    def test_rls_enforcement_different_user(
-        self, doc_repo, test_document, test_chunks
-    ):
-        """
-        Test that RLS prevents deleting another user's document.
-
-        NOTE: This test is skipped because the backend uses SUPABASE_SERVICE_ROLE_KEY
-        which bypasses RLS policies. In Phase 6, when JWT authentication is added,
-        this test will validate that users cannot delete each other's documents.
-
-        Verifies:
-        - User A cannot delete User B's document
-        - NotFoundError is raised (RLS hides the document)
-        - Original document and chunks remain intact
-        """
-        different_user_id = "different_user_123"
-
-        with pytest.raises(NotFoundError):
-            doc_repo.delete_with_chunks(test_document.id, different_user_id)
-
-        # Verify document still exists
-        doc = doc_repo.get_by_id(test_document.id, "test_user_atomic_delete")
-        assert doc is not None
-        assert doc.user_id == "test_user_atomic_delete"
-
     def test_deletion_with_parent_child_chunks(
         self, doc_repo, chunk_repo, test_document, test_user_id
     ):

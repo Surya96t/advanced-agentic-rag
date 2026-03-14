@@ -8,15 +8,6 @@ export function RateLimitBanner() {
   const { limit, remaining, resetTime, isRateLimited } = useRateLimitStore()
   const [timeRemaining, setTimeRemaining] = useState<number>(0)
 
-  useEffect(() => {
-    console.log('[Rate Limit Banner] State changed:', {
-      limit,
-      remaining,
-      resetTime,
-      isRateLimited,
-      resetDate: resetTime ? new Date(resetTime * 1000).toLocaleString() : null
-    })
-  }, [limit, remaining, resetTime, isRateLimited])
 
   useEffect(() => {
     if (!resetTime) {

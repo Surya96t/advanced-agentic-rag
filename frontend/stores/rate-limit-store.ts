@@ -15,13 +15,6 @@ export const useRateLimitStore = create<RateLimitState>((set) => ({
   resetTime: null,
   isRateLimited: false,
   setRateLimit: (limit, remaining, resetTime) => {
-    console.log('[Rate Limit Store] Setting rate limit:', {
-      limit,
-      remaining,
-      resetTime,
-      isRateLimited: remaining === 0,
-      resetDate: new Date(resetTime * 1000).toLocaleString()
-    })
     set({
       limit,
       remaining,
@@ -30,7 +23,6 @@ export const useRateLimitStore = create<RateLimitState>((set) => ({
     })
   },
   clearRateLimit: () => {
-    console.log('[Rate Limit Store] Clearing rate limit')
     set({
       limit: null,
       remaining: null,

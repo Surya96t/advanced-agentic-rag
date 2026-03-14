@@ -54,7 +54,7 @@ class StreamMetrics:
     def record_token(self, token: str):
         """Record a streamed token."""
         self.tokens_sent += 1
-        self.bytes_sent += len(token.encode('utf-8'))
+        self.bytes_sent += len(token.encode("utf-8"))
         self.events_sent += 1
 
     def record_citation(self):
@@ -109,8 +109,10 @@ class StreamMetrics:
                 "error_count": len(self.errors),
                 "disconnected": self.disconnected,
                 "cancelled": self.cancelled,
-                "tokens_per_second": round(self.tokens_sent / duration_s, 2) if duration_s > 0 else 0,
-            }
+                "tokens_per_second": round(self.tokens_sent / duration_s, 2)
+                if duration_s > 0
+                else 0,
+            },
         )
 
         # Log errors separately if any
@@ -121,7 +123,7 @@ class StreamMetrics:
                     "user_id": self.user_id,
                     "thread_id": self.thread_id,
                     "errors": self.errors,
-                }
+                },
             )
 
     def to_dict(self) -> dict:

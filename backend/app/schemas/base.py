@@ -37,9 +37,7 @@ class BaseSchema(BaseModel):
         # Extra fields are forbidden
         extra="forbid",
         # Custom JSON schema configuration
-        json_schema_extra={
-            "examples": []
-        }
+        json_schema_extra={"examples": []},
     )
 
 
@@ -47,12 +45,10 @@ class TimestampSchema(BaseSchema):
     """Schema with timezone-aware created_at and updated_at timestamps."""
 
     created_at: datetime = Field(
-        default_factory=utc_now,
-        description="Timestamp when the record was created"
+        default_factory=utc_now, description="Timestamp when the record was created"
     )
     updated_at: datetime = Field(
-        default_factory=utc_now,
-        description="Timestamp when the record was last updated"
+        default_factory=utc_now, description="Timestamp when the record was last updated"
     )
 
 
@@ -73,10 +69,7 @@ class PaginationParams(BaseSchema):
 
     page: int = Field(default=1, ge=1, description="Page number (1-indexed)")
     page_size: int = Field(
-        default=20,
-        ge=1,
-        le=100,
-        description="Number of items per page (max 100)"
+        default=20, ge=1, le=100, description="Number of items per page (max 100)"
     )
 
     @property
@@ -120,8 +113,7 @@ class PaginatedResponse(BaseSchema, Generic[T]):
         Returns:
             PaginatedResponse: Paginated response object
         """
-        total_pages = (total + pagination.page_size -
-                       1) // pagination.page_size
+        total_pages = (total + pagination.page_size - 1) // pagination.page_size
 
         return cls(
             items=items,
@@ -135,8 +127,7 @@ class PaginatedResponse(BaseSchema, Generic[T]):
 class ErrorDetail(BaseSchema):
     """Detailed error information."""
 
-    field: str | None = Field(
-        default=None, description="Field that caused the error")
+    field: str | None = Field(default=None, description="Field that caused the error")
     message: str = Field(..., description="Error message")
     code: str | None = Field(default=None, description="Error code")
 
@@ -148,13 +139,9 @@ class ErrorResponse(BaseSchema):
     message: str = Field(..., description="Human-readable error message")
     status_code: int = Field(..., description="HTTP status code")
     details: list[ErrorDetail] | dict[str, Any] = Field(
-        default_factory=list,
-        description="Additional error details"
+        default_factory=list, description="Additional error details"
     )
-    timestamp: datetime = Field(
-        default_factory=utc_now,
-        description="When the error occurred"
-    )
+    timestamp: datetime = Field(default_factory=utc_now, description="When the error occurred")
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -163,13 +150,9 @@ class ErrorResponse(BaseSchema):
                 "message": "Invalid input data",
                 "status_code": 400,
                 "details": [
-                    {
-                        "field": "email",
-                        "message": "Invalid email format",
-                        "code": "invalid_email"
-                    }
+                    {"field": "email", "message": "Invalid email format", "code": "invalid_email"}
                 ],
-                "timestamp": "2026-01-19T12:00:00Z"
+                "timestamp": "2026-01-19T12:00:00Z",
             }
         }
     )
@@ -180,17 +163,14 @@ class SuccessResponse(BaseSchema):
 
     success: bool = Field(default=True, description="Operation success status")
     message: str = Field(..., description="Success message")
-    data: dict[str, Any] | None = Field(
-        default=None, description="Optional response data")
+    data: dict[str, Any] | None = Field(default=None, description="Optional response data")
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "success": True,
                 "message": "Document uploaded successfully",
-                "data": {
-                    "document_id": "550e8400-e29b-41d4-a716-446655440000"
-                }
+                "data": {"document_id": "550e8400-e29b-41d4-a716-446655440000"},
             }
         }
     )
@@ -203,8 +183,7 @@ class HealthResponse(BaseSchema):
     environment: str = Field(..., description="Current environment")
     version: str = Field(..., description="Application version")
     services: dict[str, str] = Field(
-        default_factory=dict,
-        description="Status of dependent services"
+        default_factory=dict, description="Status of dependent services"
     )
 
     model_config = ConfigDict(
@@ -213,10 +192,7 @@ class HealthResponse(BaseSchema):
                 "status": "healthy",
                 "environment": "development",
                 "version": "0.1.0",
-                "services": {
-                    "database": "healthy",
-                    "api": "healthy"
-                }
+                "services": {"database": "healthy", "api": "healthy"},
             }
         }
     )
@@ -227,13 +203,9 @@ class HealthCheckResponse(BaseSchema):
 
     status: str = Field(..., description="Service status (healthy/unhealthy)")
     version: str = Field(..., description="Application version")
-    timestamp: datetime = Field(
-        default_factory=utc_now,
-        description="Health check timestamp"
-    )
+    timestamp: datetime = Field(default_factory=utc_now, description="Health check timestamp")
     services: dict[str, bool] = Field(
-        default_factory=dict,
-        description="Status of dependent services"
+        default_factory=dict, description="Status of dependent services"
     )
 
     model_config = ConfigDict(
@@ -242,11 +214,7 @@ class HealthCheckResponse(BaseSchema):
                 "status": "healthy",
                 "version": "0.1.0",
                 "timestamp": "2026-01-19T12:00:00Z",
-                "services": {
-                    "database": True,
-                    "openai": True,
-                    "supabase": True
-                }
+                "services": {"database": True, "openai": True, "supabase": True},
             }
         }
     )

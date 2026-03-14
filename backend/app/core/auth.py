@@ -64,8 +64,7 @@ class JWKSClient:
             return self._jwks
         except httpx.HTTPError as e:
             logger.error(f"Failed to fetch JWKS from {jwks_url}: {e}")
-            raise AuthenticationError(
-                "Unable to verify token: JWKS unavailable")
+            raise AuthenticationError("Unable to verify token: JWKS unavailable")
 
 
 # Singleton instance
@@ -104,8 +103,7 @@ def verify_jwt_token(token: str) -> dict:
             },
         )
 
-        logger.debug(
-            f"Successfully verified JWT for user: {payload.get('sub')}")
+        logger.debug(f"Successfully verified JWT for user: {payload.get('sub')}")
         return payload
 
     except JWTError as e:
@@ -113,18 +111,18 @@ def verify_jwt_token(token: str) -> dict:
         logger.error(f"Expected issuer: {settings.clerk_issuer_url}")
         # Try to decode without verification to see actual issuer (for debugging issuer mismatches)
         try:
-            import json
             import base64
-            payload_b64 = token.split('.')[1]
+            import json
+
+            payload_b64 = token.split(".")[1]
             # Add padding if needed
-            payload_b64 += '=' * (4 - len(payload_b64) % 4)
+            payload_b64 += "=" * (4 - len(payload_b64) % 4)
             payload_decoded = json.loads(base64.urlsafe_b64decode(payload_b64))
             # Only log issuer for debugging - do NOT log full claims (may contain PII)
-            actual_issuer = payload_decoded.get('iss', 'unknown')
+            actual_issuer = payload_decoded.get("iss", "unknown")
             logger.error(f"Actual token issuer: {actual_issuer}")
         except Exception as decode_error:
-            logger.error(
-                f"Could not decode token for debugging: {decode_error}")
+            logger.error(f"Could not decode token for debugging: {decode_error}")
         raise AuthenticationError(f"Invalid token: {str(e)}")
     except Exception as e:
         logger.error(f"Unexpected error during JWT verification: {e}")

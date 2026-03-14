@@ -19,9 +19,7 @@ Why do we need a parser?
 4. Extensibility: Easy to add new file formats (DOCX, HTML, etc.)
 """
 
-import os
 from pathlib import Path
-from typing import BinaryIO
 
 from pypdf import PdfReader
 
@@ -63,8 +61,7 @@ class ParsedDocument:
 
     def __repr__(self) -> str:
         """String representation for debugging."""
-        content_preview = self.content[:100] + \
-            "..." if len(self.content) > 100 else self.content
+        content_preview = self.content[:100] + "..." if len(self.content) > 100 else self.content
         return (
             f"ParsedDocument(content_length={len(self.content)}, "
             f"page_count={self.page_count}, "
@@ -225,6 +222,7 @@ class DocumentParser:
             except UnicodeDecodeError:
                 # Fallback to chardet for encoding detection
                 import chardet
+
                 with open(file_path, "rb") as f:
                     raw_data = f.read()
                 detected = chardet.detect(raw_data)
@@ -328,8 +326,7 @@ class DocumentParser:
                         page_text = page.extract_text()
                         if page_text.strip():
                             # Add page marker for chunking context
-                            pages_text.append(
-                                f"[Page {page_num}]\n{page_text}")
+                            pages_text.append(f"[Page {page_num}]\n{page_text}")
                     except Exception as e:
                         logger.warning(
                             "Failed to extract text from page",
@@ -408,6 +405,7 @@ class DocumentParser:
             except UnicodeDecodeError:
                 # Fallback to chardet for encoding detection
                 import chardet
+
                 with open(file_path, "rb") as f:
                     raw_data = f.read()
                 detected = chardet.detect(raw_data)
@@ -514,7 +512,7 @@ class DocumentParser:
 
         except Exception as e:
             # Clean up temp file on error
-            if 'temp_path' in locals() and temp_path.exists():
+            if "temp_path" in locals() and temp_path.exists():
                 temp_path.unlink()
 
             logger.error(

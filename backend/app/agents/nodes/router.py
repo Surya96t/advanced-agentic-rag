@@ -9,7 +9,7 @@ import re
 import time
 from typing import Literal
 
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.types import Command
 
@@ -34,7 +34,6 @@ _FORMAT_PATTERNS: list[tuple[str, str]] = [
     # ── Multi-word / highly-specific patterns ─────────────────────────────────
     # These are specific enough that they rarely appear as domain terms;
     # kept unanchored so they match regardless of position in the query.
-
     # Sentence count: "in 3 sentences", "in a sentence", "in one sentence"
     (r"\bin\s+(?:a|an|one|\d+)\s+sentences?\b", "in N sentences"),
     # Bullet formats
@@ -47,7 +46,6 @@ _FORMAT_PATTERNS: list[tuple[str, str]] = [
     (r"\bstep[- ]by[- ]step\b", "step by step"),
     # Table format
     (r"\b(?:in|as)\s+a\s+table\b", "in a table"),
-
     # ── Single-word / short-phrase modifiers — anchored to end-of-string ──────
     # Without anchoring, terms like "summarize", "detailed", "verbose" are
     # indistinguishable from genuine subject matter (e.g. "how do I summarize
@@ -92,12 +90,13 @@ def _strip_format_instructions(query: str) -> tuple[str, str]:
         if match:
             instruction = label if label else match.group().strip()
             instructions.append(instruction)
-            cleaned = cleaned[: match.start()] + cleaned[match.end():]
+            cleaned = cleaned[: match.start()] + cleaned[match.end() :]
 
     # Collapse multiple spaces and strip punctuation artefacts left by removal
     cleaned = re.sub(r"\s{2,}", " ", cleaned).strip().strip(",").strip()
 
     return cleaned, ", ".join(instructions)
+
 
 # Lightweight LLM for routing decisions (lower temp for determinism)
 _router_llm = ChatOpenAI(
@@ -108,16 +107,44 @@ _router_llm = ChatOpenAI(
 
 # Vague terms that indicate ambiguous queries
 VAGUE_TERMS = {
-    "issue", "issues", "problem", "problems", "error", "errors",
-    "help", "trouble", "not working", "doesn't work", "won't work",
-    "broken", "fix", "debug", "stuck", "failing", "failed"
+    "issue",
+    "issues",
+    "problem",
+    "problems",
+    "error",
+    "errors",
+    "help",
+    "trouble",
+    "not working",
+    "doesn't work",
+    "won't work",
+    "broken",
+    "fix",
+    "debug",
+    "stuck",
+    "failing",
+    "failed",
 }
 
 # Common framework/tool names (partial list for named entity detection)
 FRAMEWORK_NAMES = {
-    "prisma", "clerk", "next.js", "nextjs", "react", "typescript",
-    "javascript", "node", "python", "convex", "supabase", "langgraph",
-    "langchain", "openai", "vercel", "postgres", "postgresql"
+    "prisma",
+    "clerk",
+    "next.js",
+    "nextjs",
+    "react",
+    "typescript",
+    "javascript",
+    "node",
+    "python",
+    "convex",
+    "supabase",
+    "langgraph",
+    "langchain",
+    "openai",
+    "vercel",
+    "postgres",
+    "postgresql",
 }
 
 
@@ -151,9 +178,7 @@ def analyze_query_complexity(query: str) -> tuple[Literal["simple", "complex", "
     question_marks = query.count("?")
 
     # Check for boolean operators
-    has_boolean_operators = bool(
-        re.search(r'\b(and|or|plus|along with)\b', query_lower)
-    )
+    has_boolean_operators = bool(re.search(r"\b(and|or|plus|along with)\b", query_lower))
 
     # Assign confidence based on how many strong signals are present
     complex_signals = (
@@ -189,10 +214,12 @@ async def _llm_classify_complexity(query: str) -> Literal["simple", "complex", "
         "Respond with ONLY the single word: simple, complex, or ambiguous."
     )
     try:
-        response = await _router_llm.ainvoke([
-            SystemMessage(content=system),
-            HumanMessage(content=f"Query: {query}"),
-        ])
+        response = await _router_llm.ainvoke(
+            [
+                SystemMessage(content=system),
+                HumanMessage(content=f"Query: {query}"),
+            ]
+        )
         label = response.content.strip().lower()
         if label in ("simple", "complex", "ambiguous"):
             return label  # type: ignore[return-value]
@@ -244,7 +271,7 @@ async def router_node(state: AgentState) -> Command[Literal["retriever", "query_
         last_message = state["messages"][-1]
 
         # Handle different message formats from Studio/LangChain
-        if hasattr(last_message, 'content'):
+        if hasattr(last_message, "content"):
             # Standard LangChain message object
             content = last_message.content
 
@@ -252,12 +279,12 @@ async def router_node(state: AgentState) -> Command[Literal["retriever", "query_
             if isinstance(content, list):
                 # Extract text from all text parts
                 text_parts = [
-                    part.get('text', '') if isinstance(
-                        part, dict) else str(part)
+                    part.get("text", "") if isinstance(part, dict) else str(part)
                     for part in content
-                    if (isinstance(part, dict) and part.get('type') == 'text') or not isinstance(part, dict)
+                    if (isinstance(part, dict) and part.get("type") == "text")
+                    or not isinstance(part, dict)
                 ]
-                query = ' '.join(text_parts).strip()
+                query = " ".join(text_parts).strip()
             else:
                 # Content is already a string
                 query = str(content).strip()
@@ -265,13 +292,11 @@ async def router_node(state: AgentState) -> Command[Literal["retriever", "query_
             # Fallback for non-standard message format
             query = str(last_message).strip()
     else:
-        raise ValueError(
-            "No query found in state. Provide either 'original_query' or 'messages'.")
+        raise ValueError("No query found in state. Provide either 'original_query' or 'messages'.")
 
     # Ensure query is not empty
     if not query:
-        raise ValueError(
-            "Extracted query is empty. Please provide a valid question.")
+        raise ValueError("Extracted query is empty. Please provide a valid question.")
 
     # Strip format/style instructions (e.g. "briefly", "in bullet points")
     # before complexity analysis and retrieval.  These words produce low
@@ -291,8 +316,7 @@ async def router_node(state: AgentState) -> Command[Literal["retriever", "query_
                 "keeping original query for retrieval."
             )
 
-    logger.info(
-        f"Router node: Analyzing query complexity for: {query[:100]}...")
+    logger.info(f"Router node: Analyzing query complexity for: {query[:100]}...")
 
     # Analyse complexity (returns classification + confidence)
     complexity, confidence = analyze_query_complexity(query)
@@ -305,9 +329,7 @@ async def router_node(state: AgentState) -> Command[Literal["retriever", "query_
         )
         llm_complexity = await _llm_classify_complexity(query)
         if llm_complexity != complexity:
-            logger.info(
-                f"LLM overrode heuristic: {complexity} → {llm_complexity}"
-            )
+            logger.info(f"LLM overrode heuristic: {complexity} → {llm_complexity}")
         complexity = llm_complexity
 
     # Determine next node
@@ -320,7 +342,8 @@ async def router_node(state: AgentState) -> Command[Literal["retriever", "query_
 
     elapsed_time = time.time() - start_time
     logger.info(
-        f"⏱️  ROUTER NODE: Completed in {elapsed_time:.3f}s | Complexity: {complexity} | Next: {next_node}")
+        f"⏱️  ROUTER NODE: Completed in {elapsed_time:.3f}s | Complexity: {complexity} | Next: {next_node}"
+    )
 
     # Return Command with state update and routing
     return Command(
@@ -329,7 +352,7 @@ async def router_node(state: AgentState) -> Command[Literal["retriever", "query_
             "retrieval_query": query,  # Cleaned query (format instructions stripped) — used by retriever/expander
             "format_instructions": format_instructions,  # For generator to honour
         },
-        goto=next_node
+        goto=next_node,
     )
 
 

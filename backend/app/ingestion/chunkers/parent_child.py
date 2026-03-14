@@ -173,4 +173,3 @@ class ParentChildChunker(BaseChunker):
 
     def get_strategy_name(self) -> ChunkStrategy:
         return ChunkStrategy.PARENT_CHILD
-

@@ -39,13 +39,7 @@ export default function ChatThreadPage() {
       return
     }
     
-    console.log(`[ChatThreadPage] Loading thread: ${threadId}`)
     loadThread(threadId)
-    
-    // Cleanup log
-    return () => {
-      console.log('[ChatThreadPage] Component unmounting, threadId:', threadId)
-    }
   }, [threadId, loadThread, rawThreadId]) // Include rawThreadId to detect string "undefined"
 
   const hasMessages = messages.length > 0

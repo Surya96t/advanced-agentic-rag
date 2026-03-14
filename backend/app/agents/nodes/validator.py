@@ -26,34 +26,29 @@ logger = get_logger(__name__)
 # ─────────────────────────────────────────────────────────────────────────────
 # Thresholds (sourced from settings so they can be overridden via .env)
 # ─────────────────────────────────────────────────────────────────────────────
-PASS_THRESHOLD = settings.validation_pass_threshold      # default 0.5
-RETRY_THRESHOLD = settings.validation_retry_threshold    # default 0.4
-MAX_RETRIES = settings.validation_max_retries            # default 2
+PASS_THRESHOLD = settings.validation_pass_threshold  # default 0.5
+RETRY_THRESHOLD = settings.validation_retry_threshold  # default 0.4
+MAX_RETRIES = settings.validation_max_retries  # default 2
 
 # ─────────────────────────────────────────────────────────────────────────────
 # LLM + structured-output model
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class LLMValidation(BaseModel):
     """Structured output returned by the LLM validator."""
 
-    passed: bool = Field(
-        description="True if the response is satisfactory overall"
-    )
+    passed: bool = Field(description="True if the response is satisfactory overall")
     score: float = Field(
-        ge=0.0, le=1.0,
-        description="Overall quality score from 0.0 (terrible) to 1.0 (excellent)"
+        ge=0.0, le=1.0, description="Overall quality score from 0.0 (terrible) to 1.0 (excellent)"
     )
     issues: list[str] = Field(
-        default_factory=list,
-        description="Specific quality issues found (empty if none)"
+        default_factory=list, description="Specific quality issues found (empty if none)"
     )
-    reasoning: str = Field(
-        description="Brief explanation of the quality assessment"
-    )
+    reasoning: str = Field(description="Brief explanation of the quality assessment")
     validation_skipped: bool = Field(
         default=False,
-        description="True when the LLM validator was unavailable and result is a safe fallback"
+        description="True when the LLM validator was unavailable and result is a safe fallback",
     )
 
 
@@ -67,6 +62,7 @@ _validator_llm = ChatOpenAI(
 # ─────────────────────────────────────────────────────────────────────────────
 # LLM validation helper
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 async def _llm_validate(
     query: str,
@@ -131,6 +127,7 @@ async def _llm_validate(
 # Node
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @trace_node("validator")
 async def validator_node(state: AgentState) -> Command[Literal["query_expander", "__end__"]]:
     """
@@ -157,12 +154,13 @@ async def validator_node(state: AgentState) -> Command[Literal["query_expander",
     # validator evaluates against the real intent, not a vague "tell me more".
     query = state.get("retrieval_query") or state.get("original_query", state.get("query", ""))
     retry_count = state.get("retry_count", 0)
-    max_retries = MAX_RETRIES
 
     # Build a short context preview from the top-3 chunks
-    context_preview = "\n---\n".join(
-        chunk.content[:400] for chunk in chunks[:3]
-    ) if chunks else "(no context retrieved)"
+    context_preview = (
+        "\n---\n".join(chunk.content[:400] for chunk in chunks[:3])
+        if chunks
+        else "(no context retrieved)"
+    )
 
     # Call the LLM validator
     llm_result = await _llm_validate(query, response, context_preview)
@@ -191,11 +189,13 @@ async def validator_node(state: AgentState) -> Command[Literal["query_expander",
             update={
                 "validation_result": validation_result,
                 "generated_response": response,
-                "messages": [AIMessage(
-                    content=response,
-                    additional_kwargs={"citations": citations, "citation_map": citation_map},
-                    response_metadata={"citations": citations, "citation_map": citation_map},
-                )],
+                "messages": [
+                    AIMessage(
+                        content=response,
+                        additional_kwargs={"citations": citations, "citation_map": citation_map},
+                        response_metadata={"citations": citations, "citation_map": citation_map},
+                    )
+                ],
             },
             goto="__end__",
         )
@@ -216,11 +216,13 @@ async def validator_node(state: AgentState) -> Command[Literal["query_expander",
             update={
                 "validation_result": validation_result,
                 "generated_response": response,
-                "messages": [AIMessage(
-                    content=response,
-                    additional_kwargs={"citations": citations, "citation_map": citation_map},
-                    response_metadata={"citations": citations, "citation_map": citation_map},
-                )],
+                "messages": [
+                    AIMessage(
+                        content=response,
+                        additional_kwargs={"citations": citations, "citation_map": citation_map},
+                        response_metadata={"citations": citations, "citation_map": citation_map},
+                    )
+                ],
             },
             goto="__end__",
         )

@@ -12,8 +12,8 @@ Reference: https://www.anthropic.com/news/contextual-retrieval
 import asyncio
 from typing import Any
 
-from openai import AsyncOpenAI
 from langsmith.wrappers import wrap_openai
+from openai import AsyncOpenAI
 
 from app.core.config import settings
 from app.ingestion.chunkers.base import BaseChunker, Chunk, ChunkStrategy
@@ -86,9 +86,7 @@ class ContextualChunker(BaseChunker):
         super().__init__(chunk_size=1, chunk_overlap=0, metadata_prefix=metadata_prefix)
 
         if concurrency <= 0:
-            raise ValueError(
-                f"concurrency must be a positive integer, got {concurrency!r}"
-            )
+            raise ValueError(f"concurrency must be a positive integer, got {concurrency!r}")
 
         self._base_chunker = base_chunker
         self._model = model
@@ -228,4 +226,3 @@ class ContextualChunker(BaseChunker):
     def get_strategy_name(self) -> ChunkStrategy:
         """Return the chunking strategy identifier."""
         return ChunkStrategy.CONTEXTUAL
-

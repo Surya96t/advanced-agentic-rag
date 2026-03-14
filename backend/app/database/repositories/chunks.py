@@ -19,14 +19,14 @@ Why is this the most complex repository?
 4. Performance Critical: This is called millions of times in production
 """
 
-from datetime import UTC, datetime
 import json
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
 from supabase import Client
 
-from app.database.models import DocumentChunk, ChunkType
+from app.database.models import ChunkType, DocumentChunk
 from app.utils.errors import DatabaseError, NotFoundError
 from app.utils.logger import get_logger
 
@@ -146,7 +146,9 @@ class ChunkRepository:
                     "content": chunk["content"],
                     "metadata": chunk.get("metadata", {}),
                     "embedding": chunk.get("embedding"),
-                    "parent_chunk_id": str(chunk["parent_chunk_id"]) if chunk.get("parent_chunk_id") else None,
+                    "parent_chunk_id": str(chunk["parent_chunk_id"])
+                    if chunk.get("parent_chunk_id")
+                    else None,
                     "chunk_type": chunk.get("chunk_type", ChunkType.PARENT.value),
                     "created_at": now.isoformat(),
                     "updated_at": now.isoformat(),
@@ -154,8 +156,7 @@ class ChunkRepository:
                 prepared_chunks.append(chunk_data)
 
             # Batch insert
-            result = self.db.table(self.table_name).insert(
-                prepared_chunks).execute()
+            result = self.db.table(self.table_name).insert(prepared_chunks).execute()
 
             if not result.data:
                 raise DatabaseError(
@@ -177,7 +178,9 @@ class ChunkRepository:
                     **chunk_data,
                     "id": UUID(chunk_data["id"]),
                     "document_id": UUID(chunk_data["document_id"]),
-                    "parent_chunk_id": UUID(chunk_data["parent_chunk_id"]) if chunk_data.get("parent_chunk_id") else None,
+                    "parent_chunk_id": UUID(chunk_data["parent_chunk_id"])
+                    if chunk_data.get("parent_chunk_id")
+                    else None,
                     "created_at": datetime.fromisoformat(chunk_data["created_at"]),
                     "updated_at": datetime.fromisoformat(chunk_data["updated_at"]),
                 }
@@ -218,12 +221,7 @@ class ChunkRepository:
                 user_id=user_id,
             )
 
-            result = (
-                self.db.table(self.table_name)
-                .select("*")
-                .eq("id", str(chunk_id))
-                .execute()
-            )
+            result = self.db.table(self.table_name).select("*").eq("id", str(chunk_id)).execute()
 
             if not result.data or len(result.data) == 0:
                 logger.debug(
@@ -239,8 +237,7 @@ class ChunkRepository:
 
             # Parse embedding from string format
             chunk_data = result.data[0]
-            chunk_data["embedding"] = _parse_embedding(
-                chunk_data.get("embedding"))
+            chunk_data["embedding"] = _parse_embedding(chunk_data.get("embedding"))
 
             return DocumentChunk(**chunk_data)
 
@@ -290,11 +287,7 @@ class ChunkRepository:
                 user_id=user_id,
             )
 
-            query = (
-                self.db.table(self.table_name)
-                .select("*")
-                .eq("document_id", str(document_id))
-            )
+            query = self.db.table(self.table_name).select("*").eq("document_id", str(document_id))
 
             if chunk_type:
                 query = query.eq("chunk_type", chunk_type.value)
@@ -309,8 +302,7 @@ class ChunkRepository:
             if result.data:
                 for chunk_data in result.data:
                     # Parse embedding from string format
-                    chunk_data["embedding"] = _parse_embedding(
-                        chunk_data.get("embedding"))
+                    chunk_data["embedding"] = _parse_embedding(chunk_data.get("embedding"))
                     chunks.append(DocumentChunk(**chunk_data))
 
             logger.debug(
@@ -429,8 +421,7 @@ class ChunkRepository:
             if result.data:
                 for chunk_data in result.data:
                     # Parse embedding from string format
-                    chunk_data["embedding"] = _parse_embedding(
-                        chunk_data.get("embedding"))
+                    chunk_data["embedding"] = _parse_embedding(chunk_data.get("embedding"))
                     chunks.append(DocumentChunk(**chunk_data))
 
             logger.debug(
@@ -530,8 +521,7 @@ class ChunkRepository:
             chunks_with_scores = []
             for chunk_data in result.data:
                 # Parse embedding from string format
-                chunk_data["embedding"] = _parse_embedding(
-                    chunk_data.get("embedding"))
+                chunk_data["embedding"] = _parse_embedding(chunk_data.get("embedding"))
                 chunk = DocumentChunk(**chunk_data)
                 if chunk.embedding:
                     # Cosine distance calculation
@@ -539,10 +529,8 @@ class ChunkRepository:
                     chunk_vec = np.array(chunk.embedding)
 
                     # Normalize vectors
-                    query_norm = query_vec / \
-                        (np.linalg.norm(query_vec) + 1e-10)
-                    chunk_norm = chunk_vec / \
-                        (np.linalg.norm(chunk_vec) + 1e-10)
+                    query_norm = query_vec / (np.linalg.norm(query_vec) + 1e-10)
+                    chunk_norm = chunk_vec / (np.linalg.norm(chunk_vec) + 1e-10)
 
                     # Cosine similarity
                     cosine_sim = np.dot(query_norm, chunk_norm)
@@ -611,10 +599,7 @@ class ChunkRepository:
             }
 
             result = (
-                self.db.table(self.table_name)
-                .update(update_data)
-                .eq("id", str(chunk_id))
-                .execute()
+                self.db.table(self.table_name).update(update_data).eq("id", str(chunk_id)).execute()
             )
 
             if not result.data or len(result.data) == 0:
@@ -630,8 +615,7 @@ class ChunkRepository:
 
             # Parse embedding from string format
             chunk_data = result.data[0]
-            chunk_data["embedding"] = _parse_embedding(
-                chunk_data.get("embedding"))
+            chunk_data["embedding"] = _parse_embedding(chunk_data.get("embedding"))
 
             return DocumentChunk(**chunk_data)
 

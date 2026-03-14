@@ -30,7 +30,6 @@ and c                            results.append(
 """
 
 import asyncio
-from typing import Any
 from uuid import UUID
 
 from supabase import Client
@@ -137,6 +136,7 @@ class VectorSearcher:
         try:
             # Step 1: Generate query embedding
             import time
+
             start_embed = time.time()
             logger.debug("Generating query embedding")
             query_embedding = await self.embedder.embed_single(query)
@@ -154,7 +154,7 @@ class VectorSearcher:
                     "query_embedding": query_embedding,
                     "match_count": config.top_k,
                     "filter_user_id": user_id,
-                }
+                },
             )
             result = await asyncio.to_thread(rpc_call.execute)
             db_time = time.time() - start_db
@@ -185,8 +185,7 @@ class VectorSearcher:
                     SearchResult(
                         chunk_id=UUID(row["id"]),
                         document_id=UUID(row["document_id"]),
-                        document_title=row.get(
-                            "document_title", "Unknown Document"),
+                        document_title=row.get("document_title", "Unknown Document"),
                         content=row["content"],
                         metadata=row.get("metadata", {}),
                         score=similarity,
@@ -269,7 +268,7 @@ class VectorSearcher:
                     "query_embedding": embedding,
                     "match_count": config.top_k,
                     "filter_user_id": user_id,
-                }
+                },
             )
             result = await asyncio.to_thread(rpc_call.execute)
 
@@ -291,8 +290,7 @@ class VectorSearcher:
                     SearchResult(
                         chunk_id=UUID(row["id"]),
                         document_id=UUID(row["document_id"]),
-                        document_title=row.get(
-                            "document_title", "Unknown Document"),
+                        document_title=row.get("document_title", "Unknown Document"),
                         content=row["content"],
                         metadata=row.get("metadata", {}),
                         score=similarity,

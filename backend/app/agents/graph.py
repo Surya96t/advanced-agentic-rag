@@ -10,47 +10,44 @@ This module assembles the complete agentic RAG workflow graph with:
 """
 
 import asyncio
+import time
+from typing import AsyncIterator
+from uuid import UUID, uuid4
 
-from app.utils.logger import get_logger
-from app.schemas.events import (
-    SSEEventType,
-    AgentStartEvent,
-    AgentCompleteEvent,
-    AgentErrorEvent,
-    ProgressEvent,
-    TokenEvent,
-    TokenResetEvent,
-    ThinkingEvent,
-    CitationEvent,
-    ValidationEvent,
-    EndEvent,
-    ContextStatusEvent,
-    ConversationSummaryEvent,
-    QueryClassificationEvent,
-    CitationMapEvent,
-)
-from app.schemas.chat import ChatResponse
-from app.core.config import settings
+from langgraph.graph import END, START, StateGraph
+
 from app.agents.nodes import (
-    router_node,
+    generator_node,
     query_expander_node,
     query_rewriter_node,
     retriever_node,
-    generator_node,
+    router_node,
     validator_node,
 )
+from app.agents.nodes.classifier import classify_query
+
 # Import new conversational nodes
 from app.agents.nodes.context_loader import load_conversation_context
-from app.agents.nodes.classifier import classify_query
 from app.agents.nodes.simple_answer import generate_simple_answer
-from app.agents.nodes.router import route_after_classification
 from app.agents.state import AgentState, create_initial_state
-import time
-
-from langchain_core.messages import HumanMessage
-from langgraph.graph import StateGraph, START, END
-from uuid import UUID, uuid4
-from typing import AsyncIterator
+from app.core.config import settings
+from app.schemas.chat import ChatResponse
+from app.schemas.events import (
+    AgentCompleteEvent,
+    AgentErrorEvent,
+    AgentStartEvent,
+    CitationEvent,
+    CitationMapEvent,
+    ContextStatusEvent,
+    ConversationSummaryEvent,
+    EndEvent,
+    QueryClassificationEvent,
+    SSEEventType,
+    ThinkingEvent,
+    TokenEvent,
+    ValidationEvent,
+)
+from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -164,12 +161,11 @@ async def get_checkpointer():
         conn_string = settings.supabase_connection_string
 
         logger.debug(
-            f"Using Supabase Session Pooler for checkpointing (supports prepared statements)")
+            "Using Supabase Session Pooler for checkpointing (supports prepared statements)"
+        )
 
         # from_conn_string returns an async context manager
-        checkpointer = AsyncPostgresSaver.from_conn_string(
-            conn_string=conn_string
-        )
+        checkpointer = AsyncPostgresSaver.from_conn_string(conn_string=conn_string)
 
         logger.info("Checkpointer context manager created successfully")
         return checkpointer
@@ -188,8 +184,7 @@ async def get_checkpointer():
 logger.info("Compiling graph for LangGraph Studio (no checkpointing)")
 _builder = build_graph()
 graph = _builder.compile()
-logger.info(
-    "✅ Studio graph compiled (use get_graph() for production with checkpointing)")
+logger.info("✅ Studio graph compiled (use get_graph() for production with checkpointing)")
 
 
 def get_graph(checkpointer=None):
@@ -301,9 +296,7 @@ async def run_agent(
     except ValueError as e:
         logger.error(f"Invalid thread_id provided: {e}")
         return ChatResponse(
-            content=f"Invalid thread_id: {str(e)}",
-            sources=[],
-            metadata={"error": str(e)}
+            content=f"Invalid thread_id: {str(e)}", sources=[], metadata={"error": str(e)}
         )
 
     logger.info(f"Running agent workflow for query: {query[:100]}...")
@@ -349,8 +342,7 @@ async def run_agent(
         # Build response from final state
         response = ChatResponse(
             thread_id=thread_id,
-            content=final_state.get(
-                "generated_response", "No response generated."),
+            content=final_state.get("generated_response", "No response generated."),
             sources=final_state.get("sources", []),
             metadata={
                 "thread_id": str(thread_id),
@@ -360,7 +352,7 @@ async def run_agent(
                 "total_duration_ms": total_duration_ms,
                 "node_executions": node_executions,
                 **final_state.get("metadata", {}),
-            }
+            },
         )
 
         logger.info(
@@ -383,7 +375,7 @@ async def run_agent(
                 "thread_id": str(thread_id),
                 "query": query,
                 "error": str(e),
-            }
+            },
         )
 
 
@@ -434,7 +426,7 @@ async def stream_agent(
                 thread_id="invalid",
                 success=False,
                 error=str(e),
-            ).model_dump_json(exclude_none=True)
+            ).model_dump_json(exclude_none=True),
         }
         return
 
@@ -495,7 +487,7 @@ async def stream_agent(
                             "data": AgentCompleteEvent(
                                 agent=current_node,
                                 result={},
-                            ).model_dump_json()
+                            ).model_dump_json(),
                         }
 
                     # Start new node
@@ -505,7 +497,7 @@ async def stream_agent(
                         "data": AgentStartEvent(
                             agent=node_name,
                             message=f"Executing {node_name} node",
-                        ).model_dump_json()
+                        ).model_dump_json(),
                     }
 
                     # Emit thinking(start) when the generator begins so the
@@ -518,7 +510,7 @@ async def stream_agent(
                                 message="Generating response...",
                                 attempt=attempt,
                                 max_attempts=max_attempts,
-                            ).model_dump_json()
+                            ).model_dump_json(),
                         }
                     elif node_name == "validator":
                         yield {
@@ -528,14 +520,13 @@ async def stream_agent(
                                 message="Verifying response quality...",
                                 attempt=attempt,
                                 max_attempts=max_attempts,
-                            ).model_dump_json()
+                            ).model_dump_json(),
                         }
 
                 # Process specific update types
                 # Citation events from retriever
                 if node_name == "retriever" and "sources" in node_update:
-                    logger.info(
-                        f"Processing {len(node_update['sources'])} sources from retriever")
+                    logger.info(f"Processing {len(node_update['sources'])} sources from retriever")
                     for source in node_update["sources"]:
                         chunk_id = source.get("chunk_id")
                         document_id = source.get("document_id")
@@ -544,7 +535,9 @@ async def stream_agent(
                         original_score = source.get("original_score")
 
                         # Format original_score for logging
-                        original_score_str = f"{original_score:.4f}" if original_score is not None else "N/A"
+                        original_score_str = (
+                            f"{original_score:.4f}" if original_score is not None else "N/A"
+                        )
 
                         logger.info(
                             f"📄 Citation: chunk_id={chunk_id}, document_id={document_id}, "
@@ -564,18 +557,19 @@ async def stream_agent(
                             "data": CitationEvent(
                                 chunk_id=chunk_id,
                                 document_id=document_id,
-                                document_title=source.get(
-                                    "document_title", "Unknown Document"),
+                                document_title=source.get("document_title", "Unknown Document"),
                                 score=rrf_score,
                                 original_score=original_score,  # Include original score for display
                                 source=source.get("source", "unknown"),
-                                preview=source.get("content", "")[
-                                    :200] if source.get("content") else None,
-                            ).model_dump_json(exclude_none=True)
+                                preview=source.get("content", "")[:200]
+                                if source.get("content")
+                                else None,
+                            ).model_dump_json(exclude_none=True),
                         }
                 elif node_name == "retriever":
                     logger.warning(
-                        f"Retriever node update missing 'sources' field. Keys: {list(node_update.keys())}")
+                        f"Retriever node update missing 'sources' field. Keys: {list(node_update.keys())}"
+                    )
 
                 # Context status events from context_loader
                 if node_name == "context_loader" and "context_window_tokens" in node_update:
@@ -583,8 +577,7 @@ async def stream_agent(
                     max_tokens = settings.max_conversation_tokens
                     message_count = len(node_update.get("messages", []))
                     remaining = max(0, max_tokens - total_tokens)
-                    percentage = (total_tokens / max_tokens *
-                                  100) if max_tokens > 0 else 0
+                    percentage = (total_tokens / max_tokens * 100) if max_tokens > 0 else 0
 
                     yield {
                         "event": SSEEventType.CONTEXT_STATUS.value,
@@ -594,11 +587,12 @@ async def stream_agent(
                             remaining_tokens=remaining,
                             message_count=message_count,
                             percentage_used=round(percentage, 2),
-                        ).model_dump_json()
+                        ).model_dump_json(),
                     }
 
                     logger.info(
-                        f"📊 Context status: {total_tokens}/{max_tokens} tokens ({percentage:.1f}%)")
+                        f"📊 Context status: {total_tokens}/{max_tokens} tokens ({percentage:.1f}%)"
+                    )
 
                 # Conversation summary events from context_loader
                 if node_name == "context_loader" and "conversation_summary" in node_update:
@@ -608,22 +602,19 @@ async def stream_agent(
                         messages = node_update.get("messages", [])
                         messages_kept = len(messages)
                         # This is an approximation; actual count would need to be passed from context_loader
-                        messages_summarized = node_update.get(
-                            "messages_summarized", 0)
+                        messages_summarized = node_update.get("messages_summarized", 0)
 
                         yield {
                             "event": SSEEventType.CONVERSATION_SUMMARY.value,
                             "data": ConversationSummaryEvent(
                                 summary=summary,
                                 # At least 1 if summary exists
-                                messages_summarized=max(
-                                    1, messages_summarized),
+                                messages_summarized=max(1, messages_summarized),
                                 messages_kept=messages_kept,
-                            ).model_dump_json()
+                            ).model_dump_json(),
                         }
 
-                        logger.info(
-                            f"📝 Conversation summary generated ({len(summary)} chars)")
+                        logger.info(f"📝 Conversation summary generated ({len(summary)} chars)")
 
                 # Query classification events from classifier
                 if node_name == "classifier" and "query_type" in node_update:
@@ -637,8 +628,7 @@ async def stream_agent(
                         "conversational_followup": "Follow-up to conversation - using context only",
                         "complex_standalone": "Complex query requiring retrieval",
                     }
-                    reasoning = reasoning_map.get(
-                        query_type, "Query classification determined")
+                    reasoning = reasoning_map.get(query_type, "Query classification determined")
 
                     yield {
                         "event": SSEEventType.QUERY_CLASSIFICATION.value,
@@ -647,18 +637,15 @@ async def stream_agent(
                             needs_retrieval=needs_retrieval,
                             reasoning=reasoning,
                             pipeline_path=pipeline_path,
-                        ).model_dump_json()
+                        ).model_dump_json(),
                     }
 
-                    logger.info(
-                        f"🔍 Query classified: {query_type} (retrieval={needs_retrieval})")
+                    logger.info(f"🔍 Query classified: {query_type} (retrieval={needs_retrieval})")
 
                 # Diagnostic: log the rewritten query so we can trace it
                 if node_name == "query_rewriter" and "retrieval_query" in node_update:
                     rewritten = node_update["retrieval_query"]
-                    logger.info(
-                        f"✏️  Query rewritten: '{rewritten[:120]}'"
-                    )
+                    logger.info(f"✏️  Query rewritten: '{rewritten[:120]}'")
 
                 # Diagnostic: log what the router decided
                 if node_name == "router" and "retrieval_query" in node_update:
@@ -684,7 +671,7 @@ async def stream_agent(
                             passed=passed,
                             score=validation.get("score", 0.0),
                             issues=validation.get("issues", []),
-                        ).model_dump_json()
+                        ).model_dump_json(),
                     }
 
                     approved_response = node_update.get("generated_response")
@@ -697,7 +684,7 @@ async def stream_agent(
                                 message="Response ready",
                                 attempt=attempt,
                                 max_attempts=max_attempts,
-                            ).model_dump_json()
+                            ).model_dump_json(),
                         }
 
                         words = approved_response.split(" ")
@@ -709,7 +696,7 @@ async def stream_agent(
                                     "data": TokenEvent(
                                         token=token,
                                         model=settings.openai_model,
-                                    ).model_dump_json()
+                                    ).model_dump_json(),
                                 }
                                 # Real delay so tokens are flushed as separate
                                 # HTTP chunks — this is what makes streaming
@@ -726,7 +713,7 @@ async def stream_agent(
                                 message=f"Improving response (attempt {attempt}/{max_attempts})...",
                                 attempt=attempt,
                                 max_attempts=max_attempts,
-                            ).model_dump_json()
+                            ).model_dump_json(),
                         }
 
                 # Citation map event from generator — emit immediately so the
@@ -738,27 +725,21 @@ async def stream_agent(
                             "event": SSEEventType.CITATION_MAP.value,
                             "data": CitationMapEvent(
                                 markers={str(k): v for k, v in raw_map.items()}
-                            ).model_dump_json()
+                            ).model_dump_json(),
                         }
-                        logger.info(
-                            f"📌 Emitted citation_map with {len(raw_map)} markers"
-                        )
+                        logger.info(f"📌 Emitted citation_map with {len(raw_map)} markers")
 
             elif mode == "messages":
                 # simple_answer tokens — no validation loop, stream directly.
                 msg_chunk, metadata = data
                 node = metadata.get("langgraph_node")
-                if (
-                    node == "simple_answer"
-                    and hasattr(msg_chunk, "content")
-                    and msg_chunk.content
-                ):
+                if node == "simple_answer" and hasattr(msg_chunk, "content") and msg_chunk.content:
                     yield {
                         "event": SSEEventType.TOKEN.value,
                         "data": TokenEvent(
                             token=msg_chunk.content,
                             model=settings.openai_model,
-                        ).model_dump_json()
+                        ).model_dump_json(),
                     }
 
         # Complete final node
@@ -768,7 +749,7 @@ async def stream_agent(
                 "data": AgentCompleteEvent(
                     agent=current_node,
                     result={},
-                ).model_dump_json()
+                ).model_dump_json(),
             }
 
         # Final end event
@@ -777,7 +758,7 @@ async def stream_agent(
             "data": EndEvent(
                 thread_id=str(thread_id),
                 success=True,
-            ).model_dump_json(exclude_none=True)
+            ).model_dump_json(exclude_none=True),
         }
 
         logger.info(f"Streaming complete for thread {thread_id}")
@@ -792,7 +773,7 @@ async def stream_agent(
                 "data": AgentErrorEvent(
                     agent=current_node,
                     error=str(e),
-                ).model_dump_json()
+                ).model_dump_json(),
             }
 
         yield {
@@ -801,7 +782,7 @@ async def stream_agent(
                 thread_id=str(thread_id),
                 success=False,
                 error=str(e),
-            ).model_dump_json(exclude_none=True)
+            ).model_dump_json(exclude_none=True),
         }
 
 
@@ -895,7 +876,7 @@ async def resume_agent(
                 "error": error_msg,
                 "thread_id": str(thread_id),
                 "user_id": user_id,
-            }
+            },
         )
 
     # Validate thread_id
@@ -905,9 +886,7 @@ async def resume_agent(
     except ValueError as e:
         logger.error(f"Invalid thread_id provided: {e}")
         return ChatResponse(
-            content=f"Invalid thread_id: {str(e)}",
-            sources=[],
-            metadata={"error": str(e)}
+            content=f"Invalid thread_id: {str(e)}", sources=[], metadata={"error": str(e)}
         )
 
     logger.info(f"Resuming agent workflow for thread {thread_id_str}")
@@ -929,14 +908,13 @@ async def resume_agent(
 
         # Build response
         response = ChatResponse(
-            content=final_state.get(
-                "generated_response", "No response generated."),
+            content=final_state.get("generated_response", "No response generated."),
             sources=final_state.get("sources", []),
             metadata={
                 "thread_id": thread_id_str,
                 "resumed": True,
                 **final_state.get("metadata", {}),
-            }
+            },
         )
 
         logger.info(f"Resumed workflow complete for thread {thread_id_str}")
@@ -947,7 +925,7 @@ async def resume_agent(
         return ChatResponse(
             content=f"Failed to resume: {str(e)}",
             sources=[],
-            metadata={"thread_id": thread_id_str, "error": str(e)}
+            metadata={"thread_id": thread_id_str, "error": str(e)},
         )
 
 

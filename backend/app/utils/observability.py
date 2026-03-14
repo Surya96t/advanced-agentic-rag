@@ -44,9 +44,7 @@ async def trace_node_execution(
     """
     start = time.time()
     user_id: str = state.get("user_id", "unknown")
-    query_preview: str = str(
-        state.get("original_query") or state.get("query") or ""
-    )[:80]
+    query_preview: str = str(state.get("original_query") or state.get("query") or "")[:80]
 
     logger.info(
         "node_start",

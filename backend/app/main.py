@@ -4,7 +4,6 @@ FastAPI application initialization and configuration.
 This is the main entry point for the Integration Forge backend API.
 """
 
-from app.api import v1
 import time
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator
@@ -13,7 +12,10 @@ from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from redis.exceptions import RedisError
 
+from app.api import v1
+from app.core.cache import _get_redis
 from app.core.config import settings
 from app.database.client import SupabaseClient
 from app.database.pool import DatabasePool  # Added import
@@ -55,7 +57,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         # Initialize connection pool for raw SQL
         await DatabasePool.open()
-        
+
         # Verify database connection
         is_healthy = SupabaseClient.health_check()
         if not is_healthy:
@@ -75,8 +77,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             checkpointer_instance = await checkpointer_cm.__aenter__()
 
             # Call setup() to create tables if they don't exist (idempotent)
-            logger.info(
-                "Running checkpointer setup (creates tables if needed)")
+            logger.info("Running checkpointer setup (creates tables if needed)")
             await checkpointer_instance.setup()
 
             # Store checkpointer in app state for use in routes
@@ -113,7 +114,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         await DatabasePool.close()
     except Exception as e:
-         logger.error(f"Error closing database pool: {e}")
+        logger.error(f"Error closing database pool: {e}")
 
     SupabaseClient.close()
     logger.info("Application shutdown complete")
@@ -256,13 +257,10 @@ async def validation_error_handler(
             ctx_value = error.get("ctx")
             # Verify ctx is dict-like before calling .items()
             if isinstance(ctx_value, dict):
-                serializable_error["ctx"] = {
-                    k: str(v) for k, v in ctx_value.items()
-                }
+                serializable_error["ctx"] = {k: str(v) for k, v in ctx_value.items()}
             else:
                 # If ctx is not a dict, convert it to a safe string representation
-                serializable_error["ctx"] = str(
-                    ctx_value) if ctx_value is not None else None
+                serializable_error["ctx"] = str(ctx_value) if ctx_value is not None else None
         serializable_errors.append(serializable_error)
 
     return JSONResponse(
@@ -297,9 +295,7 @@ async def generic_error_handler(request: Request, exc: Exception) -> JSONRespons
 
     # Don't leak internal errors in production
     error_message = (
-        "An unexpected error occurred"
-        if settings.environment == "production"
-        else str(exc)
+        "An unexpected error occurred" if settings.environment == "production" else str(exc)
     )
 
     return JSONResponse(
@@ -337,18 +333,26 @@ async def health_check() -> HealthResponse:
     # Check database health
     db_healthy = SupabaseClient.health_check()
 
-    # Determine overall status
+    # Check Redis health (fail-open: outage means degraded, not down)
+    redis_status = "unavailable"
+    try:
+        await _get_redis().ping()
+        redis_status = "healthy"
+    except (RedisError, Exception):
+        pass
+
+    # Determine overall status — Redis outage does not flip overall health
     is_healthy = db_healthy
     status_value = "healthy" if is_healthy else "unhealthy"
 
     # Build service details
     services = {
         "database": "healthy" if db_healthy else "unhealthy",
+        "redis": redis_status,
         "api": "healthy",
     }
 
-    logger.debug("Health check completed",
-                 status=status_value, services=services)
+    logger.debug("Health check completed", status=status_value, services=services)
 
     return HealthResponse(
         status=status_value,

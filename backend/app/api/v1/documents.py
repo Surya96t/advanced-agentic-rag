@@ -3,21 +3,24 @@ Document management API endpoints.
 
 This module provides CRUD operations for managing documents in the system.
 
-Phase 5: Uses hardcoded user_id for testing without authentication
-Phase 6: Will add JWT authentication and enforce RLS policies
 """
 
 import asyncio
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-from app.api.deps import UserID, RateLimitInfo
-from app.core.storage import StorageClient, StorageDeleteError, StorageNotFoundError, StorageSignedUrlError, get_storage_client
+from app.api.deps import RateLimitInfo, UserID
+from app.core.storage import (
+    StorageClient,
+    StorageDeleteError,
+    StorageNotFoundError,
+    StorageSignedUrlError,
+    get_storage_client,
+)
 from app.database.client import get_db
 from app.database.repositories.documents import DocumentRepository
-from app.database.models import Document
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -34,12 +37,10 @@ class DocumentListItem(BaseModel):
     title: str
     source_id: UUID | None
     status: str
-    chunk_count: int | None = Field(
-        default=None, description="Number of chunks (if available)")
+    chunk_count: int | None = Field(default=None, description="Number of chunks (if available)")
     created_at: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DocumentListResponse(BaseModel):
@@ -83,9 +84,6 @@ def list_documents(
     """
     List all documents for the current user.
 
-    Phase 5: Uses hardcoded user_id from dependency
-    Phase 6: Will use JWT-authenticated user_id
-
     Args:
         user_id: Current user ID (injected via dependency)
 
@@ -125,23 +123,18 @@ def list_documents(
 
         logger.info(
             "Documents listed successfully",
-            extra={"user_id": user_id, "count": len(document_items)}
+            extra={"user_id": user_id, "count": len(document_items)},
         )
 
-        return DocumentListResponse(
-            documents=document_items,
-            total=total_count
-        )
+        return DocumentListResponse(documents=document_items, total=total_count)
 
     except Exception as e:
         logger.error(
-            "Failed to list documents",
-            extra={"user_id": user_id, "error": str(e)},
-            exc_info=True
+            "Failed to list documents", extra={"user_id": user_id, "error": str(e)}, exc_info=True
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve documents: {str(e)}"
+            detail=f"Failed to retrieve documents: {str(e)}",
         )
 
 
@@ -165,12 +158,9 @@ async def delete_document(
 
     This endpoint:
     1. Verifies the document exists
-    2. Checks user ownership (RLS simulation)
+    2. Checks user ownership
     3. Deletes all associated chunks
     4. Deletes the document
-
-    Phase 5: Simulates RLS by checking user_id match
-    Phase 6: Will enforce RLS at database layer with JWT
 
     Args:
         document_id: UUID of document to delete
@@ -184,10 +174,7 @@ async def delete_document(
         HTTPException: 403 if user doesn't own document
         HTTPException: 500 if database error occurs
     """
-    logger.info(
-        "Deleting document",
-        extra={"user_id": user_id, "document_id": str(document_id)}
-    )
+    logger.info("Deleting document", extra={"user_id": user_id, "document_id": str(document_id)})
 
     try:
         # Get Supabase client and repositories
@@ -198,27 +185,25 @@ async def delete_document(
         document = doc_repo.get_by_id(document_id, user_id)
         if not document:
             logger.warning(
-                "Document not found",
-                extra={"document_id": str(document_id), "user_id": user_id}
+                "Document not found", extra={"document_id": str(document_id), "user_id": user_id}
             )
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Document {document_id} not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"Document {document_id} not found"
             )
 
-        # Check ownership (RLS simulation for Phase 5)
+        # Check ownership
         if document.user_id != user_id:
             logger.warning(
                 "Unauthorized document deletion attempt",
                 extra={
                     "document_id": str(document_id),
                     "user_id": user_id,
-                    "owner_id": document.user_id
-                }
+                    "owner_id": document.user_id,
+                },
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to delete this document"
+                detail="You don't have permission to delete this document",
             )
 
         # Atomic deletion using PostgreSQL RPC (see migration 005)
@@ -234,8 +219,8 @@ async def delete_document(
                 "document_id": str(document_id),
                 "user_id": user_id,
                 "chunks_deleted": result.get("chunks_deleted", 0),
-                "title": result.get("title", "unknown")
-            }
+                "title": result.get("title", "unknown"),
+            },
         )
 
         # Best-effort blob deletion — DB is already committed at this point.
@@ -246,13 +231,13 @@ async def delete_document(
                 await storage.delete(document.blob_path)
                 logger.info(
                     "Storage blob deleted",
-                    extra={"document_id": str(document_id), "blob_path": document.blob_path}
+                    extra={"document_id": str(document_id), "blob_path": document.blob_path},
                 )
             except StorageNotFoundError:
                 # File already absent from storage — treat as success.
                 logger.info(
                     "Storage blob already absent (no-op)",
-                    extra={"document_id": str(document_id), "blob_path": document.blob_path}
+                    extra={"document_id": str(document_id), "blob_path": document.blob_path},
                 )
             except StorageDeleteError as exc:
                 # Log but do not surface to the caller — DB deletion succeeded.
@@ -262,13 +247,11 @@ async def delete_document(
                         "document_id": str(document_id),
                         "blob_path": document.blob_path,
                         "error": str(exc),
-                    }
+                    },
                 )
 
         return DocumentDeleteResponse(
-            deleted=True,
-            document_id=document_id,
-            chunks_deleted=result.get("chunks_deleted", 0)
+            deleted=True, document_id=document_id, chunks_deleted=result.get("chunks_deleted", 0)
         )
 
     except HTTPException:
@@ -278,16 +261,12 @@ async def delete_document(
     except Exception as e:
         logger.error(
             "Failed to delete document",
-            extra={
-                "document_id": str(document_id),
-                "user_id": user_id,
-                "error": str(e)
-            },
-            exc_info=True
+            extra={"document_id": str(document_id), "user_id": user_id, "error": str(e)},
+            exc_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete document: {str(e)}"
+            detail=f"Failed to delete document: {str(e)}",
         )
 
 

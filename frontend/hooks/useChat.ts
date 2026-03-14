@@ -80,9 +80,11 @@ export function useChat(threadId?: string) {
     if (event === 'token') {
       tokenCountRef.current++
       if (tokenCountRef.current % 20 === 1) {
+        // eslint-disable-next-line no-console
         console.log(`%c[SSE] token #${tokenCountRef.current}`, style, data)
       }
     } else {
+      // eslint-disable-next-line no-console
       console.log(`%c[SSE] ${event}`, style, data)
     }
   }
@@ -100,7 +102,6 @@ export function useChat(threadId?: string) {
       // We check if messages are empty to verify it's truly a "new" chat state
       // If messages exist, we might have just created a thread and are waiting for redirect
       if (messages.length === 0) {
-        console.log('[useChat] Clearing threadId for new chat')
         setCurrentThreadId(null)
       }
     }
@@ -180,34 +181,17 @@ export function useChat(threadId?: string) {
             const remaining = headers.get('X-RateLimit-Remaining')
             const reset = headers.get('X-RateLimit-Reset')
 
-            console.log('[Rate Limit] Headers received:', {
-              limit,
-              remaining,
-              reset,
-              resetDate: reset ? new Date(parseInt(reset) * 1000).toLocaleString() : null
-            })
-
             if (limit && remaining && reset) {
               const limitNum = parseInt(limit)
               const remainingNum = parseInt(remaining)
               const resetNum = parseInt(reset)
-              
+
               // Skip if rate limiting is disabled (limit=0)
               if (limitNum === 0) {
-                console.log('[Rate Limit] Rate limiting disabled (limit=0), skipping')
                 return
               }
-              
-              console.log('[Rate Limit] Updating store:', {
-                limit: limitNum,
-                remaining: remainingNum,
-                reset: resetNum,
-                isRateLimited: remainingNum === 0
-              })
-              
+
               setRateLimit(limitNum, remainingNum, resetNum)
-            } else {
-              console.log('[Rate Limit] Missing headers, not updating store')
             }
           },
           onEvent: (event) => {
@@ -443,7 +427,6 @@ export function useChat(threadId?: string) {
             }
           },
           onReconnect: (retryCount) => {
-            console.log(`[SSE] Reconnecting (attempt ${retryCount})...`)
             toast.info('Reconnecting...')
           },
         })
@@ -452,10 +435,6 @@ export function useChat(threadId?: string) {
 
         // Connect and stream
         await client.connect()
-
-        // Log metrics
-        const metrics = client.getMetrics()
-        console.log('[SSE] Stream metrics:', metrics)
 
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Failed to send message'
@@ -504,7 +483,6 @@ export function useChat(threadId?: string) {
    */
   const cancelStream = useCallback(() => {
     if (abortControllerRef.current) {
-      console.log('[SSE] Cancelling stream')
       abortControllerRef.current.abort()
       sseClientRef.current?.cancel()
       toast.info('Generation cancelled')

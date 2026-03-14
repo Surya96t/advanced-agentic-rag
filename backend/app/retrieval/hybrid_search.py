@@ -5,9 +5,8 @@ This module implements hybrid search by combining vector and text search
 results using Reciprocal Rank Fusion (RRF) for optimal retrieval performance.
 """
 
-from uuid import UUID
-
 import asyncio
+from uuid import UUID
 
 from supabase import Client
 
@@ -79,12 +78,12 @@ class HybridSearcher:
 
     Score Interpretation (After Alpha-Weighting):
     The API returns alpha-weighted RRF scores: alpha * RRF_vector + (1-alpha) * RRF_text
-    
+
     With k=60 and default alpha=0.5 (balanced):
     - Maximum possible score (rank 1 in both lists): 1/61 ≈ 0.0164
     - Typical good matches: 0.005 to 0.015
     - Scores are NOT cosine similarity (0.0-1.0). Low absolute values are normal.
-    
+
     Note: Alpha adjusts vector vs text weighting but maximum stays ~0.0164 regardless of alpha
     because the formula is a weighted average of the two RRF components.
 
@@ -282,14 +281,8 @@ class HybridSearcher:
         )
 
         # Build rank maps: chunk_id -> rank
-        vector_ranks: dict[UUID, int] = {
-            result.chunk_id: result.rank
-            for result in vector_results
-        }
-        text_ranks: dict[UUID, int] = {
-            result.chunk_id: result.rank
-            for result in text_results
-        }
+        vector_ranks: dict[UUID, int] = {result.chunk_id: result.rank for result in vector_results}
+        text_ranks: dict[UUID, int] = {result.chunk_id: result.rank for result in text_results}
 
         # Build chunk map for metadata (use vector first, fallback to text)
         chunk_map: dict[UUID, SearchResult] = {}
@@ -414,9 +407,7 @@ class HybridSearcher:
             logger.warning("Parent-swap info query failed; returning originals", error=str(exc))
             return results
 
-        chunk_info: dict[str, dict] = {
-            row["id"]: row for row in (info_result.data or [])
-        }
+        chunk_info: dict[str, dict] = {row["id"]: row for row in (info_result.data or [])}
 
         # Step 2: find which results are children with a parent
         parent_ids_needed: set[str] = {
@@ -445,8 +436,7 @@ class HybridSearcher:
             return results
 
         parent_content: dict[str, str] = {
-            row["id"]: row["content"]
-            for row in (parent_result.data or [])
+            row["id"]: row["content"] for row in (parent_result.data or [])
         }
 
         # Step 4: rebuild result list with swapped content

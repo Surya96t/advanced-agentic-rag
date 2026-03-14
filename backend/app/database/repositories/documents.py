@@ -21,12 +21,12 @@ Why use repository pattern?
 
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from supabase import Client
 
 from app.database.models import Document, DocumentStatus
-from app.utils.errors import DatabaseError, NotFoundError, ConflictError
+from app.utils.errors import DatabaseError, NotFoundError
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -99,7 +99,9 @@ class DocumentRepository:
                 "file_size": document.file_size,
                 "content_hash": document.content_hash,
                 "chunk_count": document.chunk_count,
-                "status": document.status.value if isinstance(document.status, DocumentStatus) else document.status,
+                "status": document.status.value
+                if isinstance(document.status, DocumentStatus)
+                else document.status,
                 "metadata": document.metadata,
                 "created_at": now.isoformat(),
                 "updated_at": now.isoformat(),
@@ -119,8 +121,7 @@ class DocumentRepository:
             )
 
             # Insert into database
-            result = self.db.table(self.table_name).insert(
-                document_data).execute()
+            result = self.db.table(self.table_name).insert(document_data).execute()
 
             if not result.data or len(result.data) == 0:
                 raise DatabaseError(
@@ -335,8 +336,7 @@ class DocumentRepository:
             # Execute query
             result = query.execute()
 
-            documents = [Document(**doc)
-                         for doc in result.data] if result.data else []
+            documents = [Document(**doc) for doc in result.data] if result.data else []
 
             logger.debug(
                 "Documents retrieved",
@@ -421,10 +421,7 @@ class DocumentRepository:
                 )
                 # Just fetch and return current document
                 result = (
-                    self.db.table(self.table_name)
-                    .select("*")
-                    .eq("id", str(document_id))
-                    .execute()
+                    self.db.table(self.table_name).select("*").eq("id", str(document_id)).execute()
                 )
                 if not result.data or len(result.data) == 0:
                     raise NotFoundError(
@@ -585,12 +582,7 @@ class DocumentRepository:
                 user_id=user_id,
             )
 
-            result = (
-                self.db.table(self.table_name)
-                .delete()
-                .eq("id", str(document_id))
-                .execute()
-            )
+            result = self.db.table(self.table_name).delete().eq("id", str(document_id)).execute()
 
             # Check if any rows were deleted
             deleted = result.data and len(result.data) > 0
@@ -680,8 +672,7 @@ class DocumentRepository:
             # Call PostgreSQL stored procedure for atomic deletion
             # See migration 005_add_delete_document_function.sql
             result = self.db.rpc(
-                "delete_document_with_chunks",
-                {"doc_id": str(document_id)}
+                "delete_document_with_chunks", {"doc_id": str(document_id)}
             ).execute()
 
             if not result.data:
@@ -694,10 +685,7 @@ class DocumentRepository:
 
             # Check if deletion was successful
             if not deletion_result.get("deleted", False):
-                error_msg = deletion_result.get(
-                    "error",
-                    "Document not found or access denied"
-                )
+                error_msg = deletion_result.get("error", "Document not found or access denied")
                 logger.warning(
                     "Document deletion failed",
                     document_id=str(document_id),

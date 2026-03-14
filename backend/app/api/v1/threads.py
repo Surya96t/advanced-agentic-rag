@@ -7,9 +7,9 @@ Allows users to list, view, create, and delete conversation threads.
 
 from datetime import datetime, timezone
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from app.api.deps import UserID
@@ -30,12 +30,9 @@ class ThreadMetadata(BaseModel):
     """Metadata for a chat thread."""
 
     thread_id: str = Field(..., description="Unique thread identifier")
-    title: str = Field(...,
-                       description="Thread title (first message or custom)")
-    preview: str | None = Field(
-        None, description="Preview of last message (first 100 chars)")
-    message_count: int = Field(..., ge=0,
-                               description="Number of messages in thread")
+    title: str = Field(..., description="Thread title (first message or custom)")
+    preview: str | None = Field(None, description="Preview of last message (first 100 chars)")
+    message_count: int = Field(..., ge=0, description="Number of messages in thread")
     created_at: datetime = Field(..., description="Thread creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
     user_id: str = Field(..., description="Owner user ID")
@@ -45,15 +42,15 @@ class ThreadDetail(BaseModel):
     """Detailed thread information with full message history."""
 
     metadata: ThreadMetadata
-    messages: list[dict[str, Any]] = Field(
-        ..., description="Full conversation history")
+    messages: list[dict[str, Any]] = Field(..., description="Full conversation history")
 
 
 class CreateThreadRequest(BaseModel):
     """Request to create a new thread."""
 
     title: str | None = Field(
-        None, description="Optional custom title (generated from first message if not provided)")
+        None, description="Optional custom title (generated from first message if not provided)"
+    )
 
 
 class CreateThreadResponse(BaseModel):
@@ -130,51 +127,51 @@ async def get_thread_metadata_from_checkpoint(
         # This ensures we get the latest custom_title that was just updated
         # Use a dedicated connection to avoid concurrency/pipeline issues
         from psycopg import AsyncConnection
+
         from app.core.config import settings
-        
+
         async with await AsyncConnection.connect(settings.supabase_connection_string) as conn:
             async with conn.cursor() as cur:
                 # Fetch metadata from latest checkpoint AND persistent title from any checkpoint
                 await cur.execute(
                     """
-                    SELECT 
+                    SELECT
                         (SELECT metadata FROM checkpoints WHERE thread_id = %s ORDER BY checkpoint_id DESC LIMIT 1) as latest_metadata,
                         (SELECT metadata->>'custom_title' FROM checkpoints WHERE thread_id = %s AND metadata->>'custom_title' IS NOT NULL ORDER BY checkpoint_id DESC LIMIT 1) as persistent_title
                     """,
-                    (thread_id, thread_id)
+                    (thread_id, thread_id),
                 )
                 result = await cur.fetchone()
-                
+
                 persistent_title = None
                 if result:
                     # Unpack result
                     metadata_raw, persistent_title = result
-                    
+
                     if metadata_raw is None:
                         checkpoint_metadata = {}
                     elif isinstance(metadata_raw, str):
                         # Parse JSON string to dict
                         import json
+
                         try:
                             logger.warning(f"Bad metadata json for thread {thread_id}")
                         except json.JSONDecodeError:
-                            logger.error(
-                                f"Failed to parse metadata JSON for thread {thread_id}")
+                            logger.error(f"Failed to parse metadata JSON for thread {thread_id}")
                             checkpoint_metadata = {}
                     elif isinstance(metadata_raw, dict):
                         checkpoint_metadata = metadata_raw
                     else:
                         logger.warning(
-                            f"Unexpected metadata type for thread {thread_id}: {type(metadata_raw)}")
+                            f"Unexpected metadata type for thread {thread_id}: {type(metadata_raw)}"
+                        )
                         checkpoint_metadata = {}
                 else:
                     checkpoint_metadata = {}
 
         # Extract message info
         first_message = next(
-            (msg for msg in messages if hasattr(
-                msg, "type") and msg.type == "human"),
-            None
+            (msg for msg in messages if hasattr(msg, "type") and msg.type == "human"), None
         )
         last_message = messages[-1] if messages else None
 
@@ -187,9 +184,11 @@ async def get_thread_metadata_from_checkpoint(
             title = custom_title
             logger.debug(f"Using custom title: {title}")
         elif first_message:
-            title = first_message.content[:50] + \
-                "..." if len(
-                    first_message.content) > 50 else first_message.content
+            title = (
+                first_message.content[:50] + "..."
+                if len(first_message.content) > 50
+                else first_message.content
+            )
             logger.debug(f"Generated title from first message: {title}")
         else:
             title = "New Chat"
@@ -213,10 +212,8 @@ async def get_thread_metadata_from_checkpoint(
             title=title,
             preview=preview,
             message_count=len(messages),
-            created_at=datetime.fromisoformat(
-                created_at.replace("Z", "+00:00")),
-            updated_at=datetime.fromisoformat(
-                updated_at.replace("Z", "+00:00")),
+            created_at=datetime.fromisoformat(created_at.replace("Z", "+00:00")),
+            updated_at=datetime.fromisoformat(updated_at.replace("Z", "+00:00")),
             user_id=user_id,
         )
 
@@ -227,9 +224,9 @@ async def get_thread_metadata_from_checkpoint(
                 "thread_id": thread_id,
                 "user_id": user_id,
                 "error": str(e),
-                "error_type": type(e).__name__
+                "error_type": type(e).__name__,
             },
-            exc_info=True
+            exc_info=True,
         )
         # Re-raise to force fail-closed behavior
         # Callers will handle this by denying access
@@ -259,17 +256,18 @@ async def list_user_threads_from_db(
         # This prevents "NoneType object has no attribute '_fetch_gen'" errors
         # caused by sharing the checkpointer's single connection across concurrent requests
         from psycopg import AsyncConnection
+
         from app.core.config import settings
-        
+
         # Determine connection string (fallback to checkpointer's if available, else settings)
         conn_string = settings.supabase_connection_string
 
-        # Query for all unique thread_ids with their latest checkpoints, 
+        # Query for all unique thread_ids with their latest checkpoints,
         # but also fetch the custom_title from ANY checkpoint in the thread
         # (since new checkpoints created by LangGraph might miss the metadata update)
         query = """
         WITH user_checkpoints AS (
-            SELECT 
+            SELECT
                 thread_id,
                 checkpoint,
                 metadata,
@@ -278,7 +276,7 @@ async def list_user_threads_from_db(
             WHERE checkpoint_ns = ''
               AND checkpoint->'channel_values'->>'user_id' = %s
               AND (
-                checkpoint->'channel_values'->>'query' IS NOT NULL 
+                checkpoint->'channel_values'->>'query' IS NOT NULL
                 OR checkpoint->'channel_values'->>'generated_response' IS NOT NULL
               )
         ),
@@ -334,13 +332,13 @@ async def list_user_threads_from_db(
         threads = []
         for row in rows:
             try:
-                thread_id = row['thread_id']
-                
+                thread_id = row["thread_id"]
+
                 # Parse checkpoint directly without re-querying
                 # This is much faster and avoids connection issues
-                checkpoint = row['checkpoint']
-                metadata_raw = row['metadata']
-                
+                checkpoint = row["checkpoint"]
+                metadata_raw = row["metadata"]
+
                 # 1. Parse Metadata
                 checkpoint_metadata = {}
                 if metadata_raw:
@@ -349,37 +347,41 @@ async def list_user_threads_from_db(
                     elif isinstance(metadata_raw, str):
                         try:
                             import json
+
                             checkpoint_metadata = json.loads(metadata_raw)
                         except json.JSONDecodeError:
                             logger.warn(f"Bad metadata json for thread {thread_id}")
-                
+
                 # 2. Parse State/Messages
                 state = checkpoint.get("channel_values", {})
                 messages = state.get("messages", [])
-                
+
                 # 3. Extract Details (Title, Preview, Counts)
                 first_message = next(
-                    (msg for msg in messages if hasattr(msg, "type") and msg.type == "human"), 
-                    None
+                    (msg for msg in messages if hasattr(msg, "type") and msg.type == "human"), None
                 )
                 last_message = messages[-1] if messages else None
-                
+
                 # Title logic
                 # Prefer persistent title from ANY checkpoint first (query result)
                 # Then fallback to metadata from the LATEST checkpoint
                 custom_title = row.get("persistent_title")
                 if not custom_title:
                     custom_title = checkpoint_metadata.get("custom_title")
-                
+
                 if custom_title:
                     title = custom_title
                 elif first_message:
                     # Handle LangChain message object or dict
-                    content = getattr(first_message, "content", "") if hasattr(first_message, "content") else str(first_message)
+                    content = (
+                        getattr(first_message, "content", "")
+                        if hasattr(first_message, "content")
+                        else str(first_message)
+                    )
                     title = content[:50] + "..." if len(content) > 50 else content
                 else:
                     title = "New Chat"
-                
+
                 # Preview logic
                 preview = None
                 if last_message:
@@ -392,15 +394,17 @@ async def list_user_threads_from_db(
                 created_at = checkpoint_metadata.get("created_at", _now_iso)
                 updated_at = checkpoint_metadata.get("updated_at", _now_iso)
 
-                threads.append(ThreadMetadata(
-                    thread_id=thread_id,
-                    title=title,
-                    preview=preview,
-                    message_count=len(messages),
-                    created_at=datetime.fromisoformat(created_at.replace("Z", "+00:00")),
-                    updated_at=datetime.fromisoformat(updated_at.replace("Z", "+00:00")),
-                    user_id=user_id,
-                ))
+                threads.append(
+                    ThreadMetadata(
+                        thread_id=thread_id,
+                        title=title,
+                        preview=preview,
+                        message_count=len(messages),
+                        created_at=datetime.fromisoformat(created_at.replace("Z", "+00:00")),
+                        updated_at=datetime.fromisoformat(updated_at.replace("Z", "+00:00")),
+                        user_id=user_id,
+                    )
+                )
             except Exception as e:
                 logger.error(f"Error processing thread row {row.get('thread_id')}: {e}")
                 continue
@@ -409,8 +413,7 @@ async def list_user_threads_from_db(
         return threads
 
     except Exception as e:
-        logger.error(
-            f"Error listing threads from database: {e}", exc_info=True)
+        logger.error(f"Error listing threads from database: {e}", exc_info=True)
         raise
 
 
@@ -456,8 +459,7 @@ async def list_threads(
     except Exception as e:
         logger.error(f"Failed to list threads: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve threads"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to retrieve threads"
         )
 
 
@@ -495,14 +497,11 @@ async def get_thread(
         checkpointer = request.app.state.checkpointer
 
         # Get metadata first (includes ownership check)
-        metadata = await get_thread_metadata_from_checkpoint(
-            thread_id, checkpointer, user_id
-        )
+        metadata = await get_thread_metadata_from_checkpoint(thread_id, checkpointer, user_id)
 
         if not metadata:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Thread not found or access denied"
+                status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found or access denied"
             )
 
         # Get full checkpoint to extract messages
@@ -511,8 +510,7 @@ async def get_thread(
 
         if not checkpoint:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Thread checkpoint not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail="Thread checkpoint not found"
             )
 
         # Extract messages
@@ -538,38 +536,41 @@ async def get_thread(
                 else:
                     # Preserve unknown types for debugging
                     role = msg_type
-                    logger.warning(
-                        f"Unknown message type '{msg_type}' in thread {thread_id}")
+                    logger.warning(f"Unknown message type '{msg_type}' in thread {thread_id}")
 
                 # Extract citations from additional_kwargs OR response_metadata
                 citations = []
                 additional_kwargs = getattr(msg, "additional_kwargs", {})
                 response_metadata = getattr(msg, "response_metadata", {})
-                
+
                 # Check both locations for citations
                 raw_citations = []
                 if additional_kwargs and "citations" in additional_kwargs:
                     raw_citations = additional_kwargs["citations"]
                 elif response_metadata and "citations" in response_metadata:
                     raw_citations = response_metadata["citations"]
-                
+
                 if raw_citations:
                     # Map stored citation structure to API citation structure
                     for c in raw_citations:
-                        citations.append({
-                            "chunk_id": c.get("chunk_id", ""),
-                            "document_title": c.get("document_title", "Unknown"),
-                            "content": c.get("content", ""),
-                            # Map generator's 'score' (RRF) to similarity_score
-                            "similarity_score": c.get("score", 0.0),
-                            "original_score": c.get("original_score"),
-                            "document_id": c.get("document_id", "unknown"),
-                            "chunk_index": c.get("index"),
-                        })
+                        citations.append(
+                            {
+                                "chunk_id": c.get("chunk_id", ""),
+                                "document_title": c.get("document_title", "Unknown"),
+                                "content": c.get("content", ""),
+                                # Map generator's 'score' (RRF) to similarity_score
+                                "similarity_score": c.get("score", 0.0),
+                                "original_score": c.get("original_score"),
+                                "document_id": c.get("document_id", "unknown"),
+                                "chunk_index": c.get("index"),
+                            }
+                        )
 
                 # Extract citation_map (marker → source metadata) for inline citations
                 citation_map = None
-                raw_citation_map = additional_kwargs.get("citation_map") if additional_kwargs else None
+                raw_citation_map = (
+                    additional_kwargs.get("citation_map") if additional_kwargs else None
+                )
                 if raw_citation_map:
                     citation_map = {
                         str(k): {
@@ -583,13 +584,15 @@ async def get_thread(
                         for k, v in raw_citation_map.items()
                     }
 
-                messages.append({
-                    "role": role,
-                    "content": msg.content,
-                    "timestamp": getattr(msg, "timestamp", None),
-                    "citations": citations,
-                    "citation_map": citation_map,
-                })
+                messages.append(
+                    {
+                        "role": role,
+                        "content": msg.content,
+                        "timestamp": getattr(msg, "timestamp", None),
+                        "citations": citations,
+                        "citation_map": citation_map,
+                    }
+                )
 
         return ThreadDetail(
             metadata=metadata,
@@ -602,7 +605,7 @@ async def get_thread(
         logger.error(f"Failed to get thread details: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve thread details"
+            detail="Failed to retrieve thread details",
         )
 
 
@@ -651,7 +654,7 @@ async def create_thread(
         checkpointer = request.app.state.checkpointer
 
         # Create initial empty state for the thread
-        from app.agents.graph import create_initial_state, get_graph
+        from app.agents.graph import get_graph
 
         # Don't create a HumanMessage for empty thread initialization
         # Just set up the state structure with user_id
@@ -703,9 +706,11 @@ async def create_thread(
         # This ensures get_thread_metadata_from_checkpoint can retrieve it
         if thread_request.title:
             from psycopg import AsyncConnection
+
             from app.core.config import settings
+
             conn_string = settings.supabase_connection_string
-            
+
             async with await AsyncConnection.connect(
                 conn_string,
                 autocommit=True,
@@ -723,14 +728,12 @@ async def create_thread(
                         )
                         WHERE thread_id = %s
                         """,
-                        (title, thread_id)
+                        (title, thread_id),
                     )
                     await conn.commit()
-            logger.debug(
-                f"Saved custom title '{title}' to checkpoint metadata")
+            logger.debug(f"Saved custom title '{title}' to checkpoint metadata")
 
-        logger.info(
-            f"Created and persisted thread {thread_id} with title '{title}'")
+        logger.info(f"Created and persisted thread {thread_id} with title '{title}'")
 
         return CreateThreadResponse(
             thread_id=thread_id,
@@ -740,8 +743,7 @@ async def create_thread(
     except Exception as e:
         logger.error(f"Failed to create thread: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create thread"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to create thread"
         )
 
 
@@ -781,9 +783,7 @@ async def delete_thread(
 
         # Verify ownership first
         try:
-            metadata = await get_thread_metadata_from_checkpoint(
-                thread_id, checkpointer, user_id
-            )
+            metadata = await get_thread_metadata_from_checkpoint(thread_id, checkpointer, user_id)
         except Exception as e:
             # Fail closed: deny access if we can't verify ownership
             logger.error(
@@ -792,28 +792,23 @@ async def delete_thread(
                     "user_id": user_id,
                     "thread_id": thread_id,
                     "error": str(e),
-                    "error_type": type(e).__name__
+                    "error_type": type(e).__name__,
                 },
-                exc_info=True
+                exc_info=True,
             )
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Unable to verify thread access"
+                status_code=status.HTTP_403_FORBIDDEN, detail="Unable to verify thread access"
             )
 
         if not metadata:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Thread not found or access denied"
+                status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found or access denied"
             )
 
         # Delete all checkpoints for this thread
         conn = checkpointer.conn
         async with conn.cursor() as cur:
-            await cur.execute(
-                "DELETE FROM checkpoints WHERE thread_id = %s",
-                (thread_id,)
-            )
+            await cur.execute("DELETE FROM checkpoints WHERE thread_id = %s", (thread_id,))
             await conn.commit()
 
         logger.info(f"Successfully deleted thread {thread_id}")
@@ -828,8 +823,7 @@ async def delete_thread(
     except Exception as e:
         logger.error(f"Failed to delete thread: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to delete thread"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete thread"
         )
 
 
@@ -871,9 +865,7 @@ async def update_thread(
 
         # Verify ownership first
         try:
-            metadata = await get_thread_metadata_from_checkpoint(
-                thread_id, checkpointer, user_id
-            )
+            metadata = await get_thread_metadata_from_checkpoint(thread_id, checkpointer, user_id)
         except Exception as e:
             # Fail closed: deny access if we can't verify ownership
             logger.error(
@@ -882,26 +874,26 @@ async def update_thread(
                     "user_id": user_id,
                     "thread_id": thread_id,
                     "error": str(e),
-                    "error_type": type(e).__name__
+                    "error_type": type(e).__name__,
                 },
-                exc_info=True
+                exc_info=True,
             )
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Unable to verify thread access"
+                status_code=status.HTTP_403_FORBIDDEN, detail="Unable to verify thread access"
             )
 
         if not metadata:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Thread not found or access denied"
+                status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found or access denied"
             )
 
         # Update metadata in ALL checkpoints for this thread
         # This ensures the title persists across all checkpoint retrievals
         # Use a dedicated connection to avoid concurrency/pipeline issues
         from psycopg import AsyncConnection
+
         from app.core.config import settings
+
         conn_string = settings.supabase_connection_string
 
         async with await AsyncConnection.connect(
@@ -923,7 +915,7 @@ async def update_thread(
                     )
                     WHERE thread_id = %s
                     """,
-                    (update_request.title, thread_id)
+                    (update_request.title, thread_id),
                 )
                 await conn.commit()
 
@@ -938,6 +930,5 @@ async def update_thread(
     except Exception as e:
         logger.error(f"Failed to update thread: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update thread"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update thread"
         )

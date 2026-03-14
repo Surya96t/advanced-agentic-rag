@@ -16,14 +16,15 @@ router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
 class UserSyncRequest(BaseModel):
     """Request to sync user from Clerk to Supabase."""
-    user_id: str = Field(...,
-                         description="Clerk user ID (e.g., user_2bXYZ123)")
+
+    user_id: str = Field(..., description="Clerk user ID (e.g., user_2bXYZ123)")
     email: EmailStr = Field(..., description="User email address")
     full_name: str = Field(..., description="User full name")
 
 
 class UserSyncResponse(BaseModel):
     """Response after syncing user."""
+
     user_id: str
     email: str
     full_name: str
@@ -60,33 +61,28 @@ async def sync_user(request: UserSyncRequest, current_user_id: UserID) -> UserSy
             detail="Cannot sync a user record other than your own.",
         )
 
-    logger.info(
-        "Syncing user to database",
-        extra={"user_id": request.user_id}
-    )
+    logger.info("Syncing user to database", extra={"user_id": request.user_id})
 
     try:
         supabase = get_db()
 
         # Check if user already exists
-        existing_user = supabase.table("users").select(
-            "id").eq("id", request.user_id).execute()
+        existing_user = supabase.table("users").select("id").eq("id", request.user_id).execute()
         created = len(existing_user.data or []) == 0
 
         # Upsert user (insert if new, update if exists)
         # Note: 'id' is the column name in the users table (not 'user_id')
-        result = supabase.table("users").upsert({
-            "id": request.user_id,
-            "email": request.email,
-            "full_name": request.full_name,
-        }, on_conflict="id").execute()
+        supabase.table("users").upsert(
+            {
+                "id": request.user_id,
+                "email": request.email,
+                "full_name": request.full_name,
+            },
+            on_conflict="id",
+        ).execute()
 
         logger.info(
-            "User synced successfully",
-            extra={
-                "user_id": request.user_id,
-                "created": created
-            }
+            "User synced successfully", extra={"user_id": request.user_id, "created": created}
         )
 
         return UserSyncResponse(
@@ -100,9 +96,9 @@ async def sync_user(request: UserSyncRequest, current_user_id: UserID) -> UserSy
         logger.error(
             "Failed to sync user",
             extra={"user_id": request.user_id, "error": str(e)},
-            exc_info=True
+            exc_info=True,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to sync user: {str(e)}"
+            detail=f"Failed to sync user: {str(e)}",
         )

@@ -45,7 +45,9 @@ class ValidationError(AppError):
 class AuthenticationError(AppError):
     """Raised when authentication fails."""
 
-    def __init__(self, message: str = "Authentication failed", details: dict[str, Any] | None = None):
+    def __init__(
+        self, message: str = "Authentication failed", details: dict[str, Any] | None = None
+    ):
         super().__init__(message=message, status_code=401, details=details)
 
 
@@ -53,7 +55,9 @@ class AuthorizationError(AppError):
     """Raised when user lacks permission for an action."""
 
     def __init__(
-        self, message: str = "You don't have permission to access this resource", details: dict[str, Any] | None = None
+        self,
+        message: str = "You don't have permission to access this resource",
+        details: dict[str, Any] | None = None,
     ):
         super().__init__(message=message, status_code=403, details=details)
 
@@ -68,7 +72,9 @@ class NotFoundError(AppError):
 class ConflictError(AppError):
     """Raised when there's a conflict with existing data."""
 
-    def __init__(self, message: str = "Resource already exists", details: dict[str, Any] | None = None):
+    def __init__(
+        self, message: str = "Resource already exists", details: dict[str, Any] | None = None
+    ):
         super().__init__(message=message, status_code=409, details=details)
 
 
@@ -76,7 +82,9 @@ class RateLimitError(AppError):
     """Raised when rate limit is exceeded."""
 
     def __init__(
-        self, message: str = "Rate limit exceeded. Please try again later.", details: dict[str, Any] | None = None
+        self,
+        message: str = "Rate limit exceeded. Please try again later.",
+        details: dict[str, Any] | None = None,
     ):
         super().__init__(message=message, status_code=429, details=details)
 
@@ -84,47 +92,61 @@ class RateLimitError(AppError):
 class DatabaseError(AppError):
     """Raised when a database operation fails."""
 
-    def __init__(self, message: str = "Database operation failed", details: dict[str, Any] | None = None):
+    def __init__(
+        self, message: str = "Database operation failed", details: dict[str, Any] | None = None
+    ):
         super().__init__(message=message, status_code=500, details=details)
 
 
 class ExternalServiceError(AppError):
     """Raised when an external service (OpenAI, Supabase, etc.) fails."""
 
-    def __init__(self, message: str = "External service error", details: dict[str, Any] | None = None):
+    def __init__(
+        self, message: str = "External service error", details: dict[str, Any] | None = None
+    ):
         super().__init__(message=message, status_code=502, details=details)
 
 
 class EmbeddingError(AppError):
     """Raised when embedding generation fails."""
 
-    def __init__(self, message: str = "Failed to generate embeddings", details: dict[str, Any] | None = None):
+    def __init__(
+        self, message: str = "Failed to generate embeddings", details: dict[str, Any] | None = None
+    ):
         super().__init__(message=message, status_code=500, details=details)
 
 
 class ChunkingError(AppError):
     """Raised when document chunking fails."""
 
-    def __init__(self, message: str = "Failed to chunk document", details: dict[str, Any] | None = None):
+    def __init__(
+        self, message: str = "Failed to chunk document", details: dict[str, Any] | None = None
+    ):
         super().__init__(message=message, status_code=500, details=details)
 
 
 class DocumentProcessingError(AppError):
     """Raised when document processing fails."""
 
-    def __init__(self, message: str = "Failed to process document", details: dict[str, Any] | None = None):
+    def __init__(
+        self, message: str = "Failed to process document", details: dict[str, Any] | None = None
+    ):
         super().__init__(message=message, status_code=500, details=details)
 
 
 class RetrievalError(AppError):
     """Raised when document retrieval fails."""
 
-    def __init__(self, message: str = "Failed to retrieve documents", details: dict[str, Any] | None = None):
+    def __init__(
+        self, message: str = "Failed to retrieve documents", details: dict[str, Any] | None = None
+    ):
         super().__init__(message=message, status_code=500, details=details)
 
 
 class LLMError(AppError):
     """Raised when LLM operation fails."""
 
-    def __init__(self, message: str = "LLM operation failed", details: dict[str, Any] | None = None):
+    def __init__(
+        self, message: str = "LLM operation failed", details: dict[str, Any] | None = None
+    ):
         super().__init__(message=message, status_code=500, details=details)

@@ -208,8 +208,7 @@ class FlashRankReranker(Reranker):
                         chunk_id=meta["chunk_id"],
                         document_id=meta["document_id"],
                         # Include document title!
-                        document_title=meta.get(
-                            "document_title", "Unknown Document"),
+                        document_title=meta.get("document_title", "Unknown Document"),
                         content=passage["text"],
                         metadata=meta.get("metadata", {}),
                         score=passage["score"],  # FlashRank score (0-1)

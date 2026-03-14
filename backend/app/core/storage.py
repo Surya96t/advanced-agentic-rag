@@ -212,7 +212,9 @@ class AzureBlobStorageClient:
     def __init__(self, container: str) -> None:  # noqa: D107
         self._container = container
 
-    async def upload(self, data: bytes, path: str, content_type: str = "application/octet-stream") -> str:
+    async def upload(
+        self, data: bytes, path: str, content_type: str = "application/octet-stream"
+    ) -> str:
         raise NotImplementedError("Azure Blob Storage backend is not yet implemented.")
 
     async def get_signed_url(self, path: str, expires_in: int = 3600) -> str:
@@ -280,13 +282,11 @@ def get_storage_client() -> StorageClient:
         _storage_client = SupabaseStorageClient(bucket=bucket)
     elif backend == "azure":
         raise ValueError(
-            "Azure Blob Storage backend is not yet implemented. "
-            "Set STORAGE_BACKEND to 'supabase'."
+            "Azure Blob Storage backend is not yet implemented. Set STORAGE_BACKEND to 'supabase'."
         )
     else:
         raise ValueError(
-            f"Unsupported storage backend: {backend!r}. "
-            "Set STORAGE_BACKEND to 'supabase'."
+            f"Unsupported storage backend: {backend!r}. Set STORAGE_BACKEND to 'supabase'."
         )
 
     logger.info("Storage client initialised", backend=backend, bucket=bucket)

@@ -201,8 +201,6 @@ export class SSEClient {
           this.config.maxDelay
         )
         
-        console.log(`SSE connection failed, retrying in ${delay}ms... (Attempt ${this.retryCount})`)
-        
         if (this.config.onReconnect) {
           this.config.onReconnect(this.retryCount)
         }
