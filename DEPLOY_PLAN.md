@@ -139,7 +139,7 @@ These can be automated as lint/test rules in the CI pipeline or addressed after 
 #### `86ag60tak` — Document Celery worker scaling configuration
 - Low value until Celery is actually wired. Add scaling notes to README once `86aftvjpz` is done.
 
-#### `86aftvjpz` + `86ag60taj` (worker) — Celery background processing + Dockerfile.worker
-- Wire the Celery task (`background.py`) into the ingest endpoint (currently runs synchronously).
-- Once wired, add `backend/Dockerfile.worker` and update `docker-compose.yml` with the worker service.
-- These two are bundled — no point containerizing a worker that isn't functional.
+#### `86aftvjpz` + `86ag60taj` (worker) — ✅ Celery background processing + Dockerfile.worker
+- Wire-up was already in place (`ingest_document_task.delay()` in `ingest.py`).
+- Added `backend/Dockerfile.worker`: same multi-stage build as `Dockerfile`, CMD runs `celery worker --concurrency=2`.
+- Updated `backend/docker-compose.yml`: added `api` and `worker` services, both depending on `redis` health check. Worker uses `Dockerfile.worker`; API uses `Dockerfile`.
