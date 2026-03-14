@@ -29,6 +29,12 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
+# Run as a non-root user for security
+RUN groupadd --system appuser && useradd --system --gid appuser appuser \
+    && chown -R appuser:appuser /app
+
+USER appuser
+
 EXPOSE 8000
 
 # ─── FastAPI App ──────────────────────────────────────────────────────────────

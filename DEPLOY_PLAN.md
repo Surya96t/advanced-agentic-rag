@@ -111,6 +111,18 @@ These can be automated as lint/test rules in the CI pipeline or addressed after 
 ### `86ag60qed` — Fix README inaccuracies
 - Wrong install command, Next.js version, clone URL.
 
+---
+
+### Fix `.gitignore` `.env*` pattern to allow `.env.example` files
+- **File:** `frontend/.gitignore`
+- **Problem:** The pattern `.env*` matches `.env.example`, so the template file can't be committed without `git add -f`. Any future contributor doing `git add .` will silently miss it.
+- **Fix:** Add a negation exception after the `.env*` line:
+  ```
+  .env*
+  !.env.example
+  ```
+  Check `backend/.gitignore` for the same issue and apply the same fix if needed.
+
 ### `86ag60tak` — Document Celery worker scaling configuration
 - Add scaling notes to the deployment docs or README.
 

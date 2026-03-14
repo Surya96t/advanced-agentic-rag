@@ -41,7 +41,7 @@ class Settings(BaseSettings):
         description="Allowed CORS origins"
     )
     cors_allow_credentials: bool = True
-    cors_allow_methods: list[str] = ["GET", "POST", "DELETE", "OPTIONS"]
+    cors_allow_methods: list[str] = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
     cors_allow_headers: list[str] = ["Content-Type", "Authorization", "X-Revalidate-Secret"]
 
     # Supabase Configuration
