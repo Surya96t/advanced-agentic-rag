@@ -12,6 +12,11 @@ export function CustomCursor() {
   const ringRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const supportsCustomCursor =
+      window.matchMedia('(min-width: 768px)').matches &&
+      window.matchMedia('(pointer: fine)').matches;
+    if (!supportsCustomCursor) return;
+
     const dot = dotRef.current;
     const ring = ringRef.current;
     if (!dot || !ring) return;

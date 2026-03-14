@@ -2,6 +2,11 @@
 
 import { Icon } from '@iconify/react';
 
+/**
+ * Renders the landing page footer with the site logo, tagline, and GitHub link.
+ *
+ * @returns {JSX.Element} The footer element.
+ */
 export function FooterSection() {
   return (
     <footer className="border-t border-white/5 bg-[#050505] py-8 px-6">

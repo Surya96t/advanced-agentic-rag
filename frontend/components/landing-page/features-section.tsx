@@ -35,6 +35,16 @@ const FEATURES = [
   },
 ] as const;
 
+/**
+ * Renders the "Core Capabilities" section of the landing page.
+ *
+ * Displays three tall hover-card tiles showcasing the system's key user-facing
+ * features: AI Chat with Citations, Multi-part Resolution, and Real-Time
+ * Metrics. Each card reveals a description and a radial accent glow on hover.
+ * Scroll-reveal animations are applied via {@link useScrollReveal}.
+ *
+ * @returns {JSX.Element} The features section element.
+ */
 export function FeaturesSection() {
   useScrollReveal();
 
@@ -99,7 +109,7 @@ export function FeaturesSection() {
                   {feat.label}
                 </div>
                 <h3 className="text-2xl font-semibold tracking-tight text-white mb-2">{feat.title}</h3>
-                <p className="text-white/50 text-sm opacity-0 group-hover:opacity-100 transition-opacity duration-500 delay-100 leading-relaxed font-light">
+                <p className="text-white/50 text-sm opacity-100 md:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-500 delay-100 leading-relaxed font-light">
                   {feat.description}
                 </p>
               </div>

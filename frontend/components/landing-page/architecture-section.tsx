@@ -3,6 +3,17 @@
 import { Icon } from '@iconify/react';
 import { useScrollReveal } from './use-scroll-reveal';
 
+/**
+ * Renders the "Agentic Chain-of-Thought" section of the landing page.
+ *
+ * Displays a two-column layout: explanatory copy on the left (LangGraph
+ * orchestration, smart routing, and query expansion feature cards) and a
+ * faux-3D terminal on the right that reveals a live trace log and a TTFT
+ * metric panel on hover. Scroll-reveal animations are applied via
+ * {@link useScrollReveal}.
+ *
+ * @returns {JSX.Element} The architecture section element.
+ */
 export function ArchitectureSection() {
   useScrollReveal();
 

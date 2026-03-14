@@ -59,7 +59,7 @@ export function PipelineSection() {
           {STEPS.map((step, i) => (
             <div
               key={step.number}
-              className="p-8 rounded-2xl border border-white/5 bg-[#0a0a0a] hover:bg-white/2 transition-colors relative group overflow-hidden cursor-pointer reveal"
+              className="p-8 rounded-2xl border border-white/5 bg-[#0a0a0a] hover:bg-white/5 transition-colors relative group overflow-hidden cursor-pointer reveal"
               style={{ transitionDelay: `${i * 100}ms` }}
             >
               {/* Top glow line on hover */}
