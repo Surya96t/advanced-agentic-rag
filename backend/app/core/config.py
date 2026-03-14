@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     environment: Literal["development",
                          "staging", "production"] = "development"
-    debug: bool = Field(default=True, description="Enable debug mode")
+    debug: bool = Field(default=False, description="Enable debug mode (always False in production)")
 
     # Server Settings
     host: str = Field(default="0.0.0.0", description="Server host")
@@ -41,8 +41,8 @@ class Settings(BaseSettings):
         description="Allowed CORS origins"
     )
     cors_allow_credentials: bool = True
-    cors_allow_methods: list[str] = ["*"]
-    cors_allow_headers: list[str] = ["*"]
+    cors_allow_methods: list[str] = ["GET", "POST", "DELETE", "OPTIONS"]
+    cors_allow_headers: list[str] = ["Content-Type", "Authorization", "X-Revalidate-Secret"]
 
     # Supabase Configuration
     supabase_url: str = Field(..., description="Supabase project URL")

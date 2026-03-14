@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment files — never bake secrets into the image
+.env
+.env.*
+
+# Tests & dev tooling
+tests/
+scripts/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+
+# IDE
+.vscode/
+.idea/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Docs
+*.md
+docs/
+
+# Git
+.git/
+.github/
+
+# OS
+.DS_Store
