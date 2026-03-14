@@ -19,9 +19,7 @@ Why do we need a parser?
 4. Extensibility: Easy to add new file formats (DOCX, HTML, etc.)
 """
 
-import os
 from pathlib import Path
-from typing import BinaryIO
 
 from pypdf import PdfReader
 

@@ -5,6 +5,7 @@ This module manages all environment variables and application settings.
 It provides type-safe configuration with automatic validation.
 """
 
+import logging
 import os
 from functools import lru_cache
 from typing import Literal
@@ -12,6 +13,8 @@ from urllib.parse import quote_plus, urlparse
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -462,7 +465,7 @@ def configure_langsmith(settings: Settings) -> None:
             os.environ["LANGCHAIN_API_KEY"] = settings.langsmith_api_key
         else:
             # This should not happen due to validator, but handle defensively
-            print("WARNING: LangSmith tracing enabled but API key is missing")
+            _logger.warning("LangSmith tracing enabled but API key is missing")
 
         os.environ["LANGCHAIN_PROJECT"] = settings.langsmith_project
     else:
@@ -470,7 +473,7 @@ def configure_langsmith(settings: Settings) -> None:
         os.environ["LANGCHAIN_TRACING_V2"] = "false"
         # Check if it was auto-disabled (user requested but validator disabled it)
         if original_tracing.lower() == "true" and not settings.langsmith_api_key:
-            print("INFO: LangSmith tracing disabled (API key not provided)")
+            _logger.info("LangSmith tracing disabled (API key not provided)")
 
 
 @lru_cache

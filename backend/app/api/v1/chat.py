@@ -4,11 +4,6 @@ Chat/query endpoint with SSE streaming.
 This module provides the chat endpoint that integrates with the agentic RAG system
 from Phase 4, supporting both streaming (SSE) and non-streaming responses.
 
-Phase 6 Production Enhancements:
-- Rate limiting on streaming endpoint
-- Token validation and XSS protection
-- Client disconnect detection
-- Stream observability metrics
 """
 
 import asyncio
@@ -16,17 +11,17 @@ import hashlib
 import json
 import time
 from typing import AsyncIterator
-from uuid import UUID, uuid4
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
 from app.agents.graph import run_agent, stream_agent
-from app.api.deps import UserID, RateLimitInfo
+from app.api.deps import RateLimitInfo, UserID
 from app.core import cache as response_cache
 from app.core.config import settings
 from app.database.pool import DatabasePool
-from app.schemas.chat import ChatRequest, ChatResponse
+from app.schemas.chat import ChatRequest
 from app.schemas.events import SSEEventType
 from app.utils.logger import get_logger
 from app.utils.metrics import StreamMetrics
@@ -129,7 +124,6 @@ async def sse_generator(
     validator = TokenValidator()
 
     # Track successful completion for thread_created event
-    stream_successful = False
     # Will hold the asyncio Task for LLM title generation (new threads only)
     title_task: asyncio.Task[str] | None = None
 
@@ -226,7 +220,6 @@ async def sse_generator(
             await asyncio.sleep(0)
 
         # Mark stream as successful if we completed without errors
-        stream_successful = True
 
         # ------------------------------------------------------------------
         # Emit thread_title SSE event and persist the LLM-generated title
@@ -358,9 +351,6 @@ async def chat(
     - Blocks until agent completes
     - Content-Type: application/json
 
-    Phase 5: Uses hardcoded user_id from dependency
-    Phase 6: Will use JWT-authenticated user_id
-
     Args:
         request: ChatRequest with message and options
         user_id: Current user ID (injected via dependency)
@@ -469,7 +459,6 @@ async def chat(
             )
         else:
             # Import here to avoid circular dependency
-            from langgraph.checkpoint.base import CheckpointTuple
             from app.agents.graph import get_graph
 
             try:

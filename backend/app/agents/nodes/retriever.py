@@ -6,6 +6,7 @@ and applies re-ranking for optimal chunk selection.
 """
 
 import time
+
 from langgraph.types import RunnableConfig
 
 from app.agents.state import AgentState
@@ -146,7 +147,7 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
     )
 
     # Fallback similarity threshold when reranker is unavailable
-    MIN_SIMILARITY_FALLBACK = 0.1
+    MIN_SIMILARITY_FALLBACK = 0.1  # noqa: N806
 
     # Step 1: Search each query
     search_start = time.time()

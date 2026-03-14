@@ -80,7 +80,7 @@ def format_context(chunks: list[SearchResult]) -> str:
         doc_title = getattr(chunk, "document_title", None)
         if not doc_title:
             doc_title = chunk.metadata.get("document_title", chunk.metadata.get("filename", "Unknown Document"))
-        
+
         content = chunk.content.strip()
         score = chunk.score
 

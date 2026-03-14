@@ -30,7 +30,6 @@ and c                            results.append(
 """
 
 import asyncio
-from typing import Any
 from uuid import UUID
 
 from supabase import Client

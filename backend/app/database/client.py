@@ -92,13 +92,13 @@ class SupabaseClient:
         """
         try:
             client = cls.get_client()
-            
+
             # Basic check: client exists and has the expected structure
             # This verifies configuration is correct and client initialized
             if client is not None and hasattr(client, 'table'):
                 logger.debug("Database client health check passed")
                 return True
-            
+
             logger.warning("Database client missing expected attributes")
             return False
 

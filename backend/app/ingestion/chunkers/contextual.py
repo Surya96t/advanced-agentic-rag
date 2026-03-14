@@ -12,8 +12,8 @@ Reference: https://www.anthropic.com/news/contextual-retrieval
 import asyncio
 from typing import Any
 
-from openai import AsyncOpenAI
 from langsmith.wrappers import wrap_openai
+from openai import AsyncOpenAI
 
 from app.core.config import settings
 from app.ingestion.chunkers.base import BaseChunker, Chunk, ChunkStrategy

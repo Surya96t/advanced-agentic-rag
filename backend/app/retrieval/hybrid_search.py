@@ -5,9 +5,8 @@ This module implements hybrid search by combining vector and text search
 results using Reciprocal Rank Fusion (RRF) for optimal retrieval performance.
 """
 
-from uuid import UUID
-
 import asyncio
+from uuid import UUID
 
 from supabase import Client
 
@@ -79,12 +78,12 @@ class HybridSearcher:
 
     Score Interpretation (After Alpha-Weighting):
     The API returns alpha-weighted RRF scores: alpha * RRF_vector + (1-alpha) * RRF_text
-    
+
     With k=60 and default alpha=0.5 (balanced):
     - Maximum possible score (rank 1 in both lists): 1/61 ≈ 0.0164
     - Typical good matches: 0.005 to 0.015
     - Scores are NOT cosine similarity (0.0-1.0). Low absolute values are normal.
-    
+
     Note: Alpha adjusts vector vs text weighting but maximum stays ~0.0164 regardless of alpha
     because the formula is a weighted average of the two RRF components.
 

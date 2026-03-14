@@ -84,49 +84,62 @@ These tasks block a safe first deploy. The app won't be secure, configurable, or
 
 These can be automated as lint/test rules in the CI pipeline or addressed after the first deploy.
 
-### `86ag60qbp` — Add Redis health check to `/health` endpoint
-- Add a Redis ping to the existing `/health` endpoint so infrastructure monitoring can detect Redis outages.
-
-### `86ag60qb1` — Add error monitoring (Sentry or equivalent)
-- Integrate Sentry SDK in both FastAPI and Next.js. Wire DSN via environment variable.
-
-### `86ag60qap` — Replace `print()` statements with `logger` calls in backend
-- Add a `ruff` or `pylint` rule to CI that flags `print()` usage in `backend/app/`.
-
-### `86ag60qe7` — Remove or gate `console.log` in frontend production code
-- Add an ESLint rule (`no-console`) to `eslint.config.mjs` so CI fails on unguarded console statements.
-
-### `86ag60qe9` — Migrate Pydantic V1-style `class Config` to V2 `model_config`
-- Non-breaking refactor. Run as a `ruff` check in CI.
-
-### `86ag60qe8` — Remove or implement empty `health.py` in `api/v1/`
-- Either delete the file or move the `/health` endpoint there from `main.py`.
-
-### `86ag60qeb` — Fix or remove permanently-skipped RLS enforcement test
-- Re-enable the test with a proper mock, or delete it if it duplicates other coverage.
-
-### `86ag60qea` — Remove stale Phase 5/6 TODO comments claiming auth is not implemented
-- Simple grep-and-delete pass. Can be a CI lint rule.
-
-### `86ag60qed` — Fix README inaccuracies
-- Wrong install command, Next.js version, clone URL.
-
 ---
 
-### Fix `.gitignore` `.env*` pattern to allow `.env.example` files
-- **File:** `frontend/.gitignore`
-- **Problem:** The pattern `.env*` matches `.env.example`, so the template file can't be committed without `git add -f`. Any future contributor doing `git add .` will silently miss it.
-- **Fix:** Add a negation exception after the `.env*` line:
+### ⚡ Quick Wins
+
+#### `86ag60qea` — Remove stale TODO comments
+- Stale Phase 5/6 TODO comments in the backend claiming auth is not implemented. Simple grep-and-delete, no logic change.
+
+#### `86ag60qe8` — Remove or implement empty `health.py` in `api/v1/`
+- The file exists but is empty. Either delete it or move the `/health` endpoint into it from `main.py`.
+
+#### Fix `.gitignore` `.env*` pattern to allow `.env.example` files
+- **File:** `frontend/.gitignore` (and check `backend/.gitignore`)
+- **Problem:** The `.env*` pattern matches `.env.example`, requiring `git add -f` to commit it. Future contributors doing `git add .` will silently miss it.
+- **Fix:** Add a negation exception:
   ```
   .env*
   !.env.example
   ```
-  Check `backend/.gitignore` for the same issue and apply the same fix if needed.
 
-### `86ag60tak` — Document Celery worker scaling configuration
-- Add scaling notes to the deployment docs or README.
+#### `86ag60qed` — Fix README inaccuracies
+- Wrong install command (`pip install -r requirements.txt` → `uv sync`), wrong Next.js version (says 15, is 16.1.4), placeholder clone URL.
 
-### `86aftvjpz` + `86ag60taj` (worker) — Celery background processing + Dockerfile.worker
+---
+
+### 🔧 Lint / CI Rule Additions
+
+#### `86ag60qap` — Replace `print()` statements with `logger` calls in backend
+- Add a `ruff` rule to CI that flags `print()` usage in `backend/app/`.
+
+#### `86ag60qe7` — Remove or gate `console.log` in frontend production code
+- Add an ESLint `no-console` rule to `eslint.config.mjs` so CI fails on unguarded console statements.
+
+#### `86ag60qe9` — Migrate Pydantic V1-style `class Config` to V2 `model_config`
+- Non-breaking refactor across all schema files. Run as a `ruff` check in CI.
+
+---
+
+### 🚀 Feature Additions
+
+#### `86ag60qbp` — Add Redis health check to `/health` endpoint
+- Add a Redis `ping` to the existing `/health` endpoint so infrastructure monitoring can detect Redis outages. Needs care so a Redis outage doesn't falsely fail health checks for non-Redis traffic.
+
+#### `86ag60qb1` — Add error monitoring (Sentry)
+- Integrate Sentry SDK in both FastAPI and Next.js. Wire DSN via environment variable in both `.env.example` files.
+
+#### `86ag60qeb` — Fix or remove permanently-skipped RLS enforcement test
+- Investigate why the test was skipped before deciding: re-enable with a proper mock, or delete if it duplicates other coverage.
+
+---
+
+### 🏗️ Larger / Deferred
+
+#### `86ag60tak` — Document Celery worker scaling configuration
+- Low value until Celery is actually wired. Add scaling notes to README once `86aftvjpz` is done.
+
+#### `86aftvjpz` + `86ag60taj` (worker) — Celery background processing + Dockerfile.worker
 - Wire the Celery task (`background.py`) into the ingest endpoint (currently runs synchronously).
 - Once wired, add `backend/Dockerfile.worker` and update `docker-compose.yml` with the worker service.
-- These two are bundled: no point containerizing a worker that isn't functional.
+- These two are bundled — no point containerizing a worker that isn't functional.

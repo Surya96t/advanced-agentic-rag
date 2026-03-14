@@ -6,15 +6,15 @@ This module provides operations for submitting and retrieving user feedback.
 
 from typing import Annotated, List
 
-from fastapi import APIRouter, Depends, status, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
+from supabase import Client
 
 from app.api.deps import get_current_user
 from app.database.client import get_db
 from app.database.repositories.feedback import FeedbackRepository
-from app.schemas.feedback import FeedbackCreate, FeedbackResponse
 from app.schemas.base import ErrorResponse
+from app.schemas.feedback import FeedbackCreate, FeedbackResponse
 from app.utils.logger import get_logger
-from supabase import Client
 
 router = APIRouter(prefix="/api/v1/feedback", tags=["feedback"])
 logger = get_logger(__name__)
@@ -37,7 +37,7 @@ def submit_feedback(
 ) -> FeedbackResponse:
     """
     Submit user feedback.
-    
+
     Args:
         feedback: Feedback data content
         current_user: The authenticated user ID
@@ -48,7 +48,7 @@ def submit_feedback(
     """
     user_id = current_user
     logger.info("Submitting feedback", extra={"user_id": user_id, "type": feedback.feedback_type})
-    
+
     try:
         repo = FeedbackRepository(db)
         return repo.create(feedback, user_id)
@@ -73,7 +73,7 @@ def get_user_feedback(
 ) -> List[FeedbackResponse]:
     """
     Get all feedback submitted by the current user.
-    
+
     Args:
         current_user: The authenticated user ID
         db: Database client
@@ -83,7 +83,7 @@ def get_user_feedback(
     """
     user_id = current_user
     logger.info("Fetching user feedback", extra={"user_id": user_id})
-    
+
     try:
         repo = FeedbackRepository(db)
         return repo.get_by_user(user_id)

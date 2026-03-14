@@ -21,12 +21,12 @@ Why use repository pattern?
 
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from supabase import Client
 
 from app.database.models import Document, DocumentStatus
-from app.utils.errors import DatabaseError, NotFoundError, ConflictError
+from app.utils.errors import DatabaseError, NotFoundError
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)

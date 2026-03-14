@@ -42,7 +42,7 @@ from typing import Any, Callable
 from uuid import UUID
 
 from app.database.client import SupabaseClient
-from app.database.models import Document, DocumentChunk, DocumentStatus
+from app.database.models import Document, DocumentStatus
 from app.database.repositories.chunks import ChunkRepository
 from app.database.repositories.documents import DocumentRepository
 from app.ingestion.chunkers.base import BaseChunker, Chunk, ChunkType

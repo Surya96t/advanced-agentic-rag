@@ -3,21 +3,24 @@ Document management API endpoints.
 
 This module provides CRUD operations for managing documents in the system.
 
-Phase 5: Uses hardcoded user_id for testing without authentication
-Phase 6: Will add JWT authentication and enforce RLS policies
 """
 
 import asyncio
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-from app.api.deps import UserID, RateLimitInfo
-from app.core.storage import StorageClient, StorageDeleteError, StorageNotFoundError, StorageSignedUrlError, get_storage_client
+from app.api.deps import RateLimitInfo, UserID
+from app.core.storage import (
+    StorageClient,
+    StorageDeleteError,
+    StorageNotFoundError,
+    StorageSignedUrlError,
+    get_storage_client,
+)
 from app.database.client import get_db
 from app.database.repositories.documents import DocumentRepository
-from app.database.models import Document
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -38,8 +41,7 @@ class DocumentListItem(BaseModel):
         default=None, description="Number of chunks (if available)")
     created_at: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DocumentListResponse(BaseModel):
@@ -82,9 +84,6 @@ def list_documents(
 ) -> DocumentListResponse:
     """
     List all documents for the current user.
-
-    Phase 5: Uses hardcoded user_id from dependency
-    Phase 6: Will use JWT-authenticated user_id
 
     Args:
         user_id: Current user ID (injected via dependency)
@@ -165,12 +164,9 @@ async def delete_document(
 
     This endpoint:
     1. Verifies the document exists
-    2. Checks user ownership (RLS simulation)
+    2. Checks user ownership
     3. Deletes all associated chunks
     4. Deletes the document
-
-    Phase 5: Simulates RLS by checking user_id match
-    Phase 6: Will enforce RLS at database layer with JWT
 
     Args:
         document_id: UUID of document to delete
@@ -206,7 +202,7 @@ async def delete_document(
                 detail=f"Document {document_id} not found"
             )
 
-        # Check ownership (RLS simulation for Phase 5)
+        # Check ownership
         if document.user_id != user_id:
             logger.warning(
                 "Unauthorized document deletion attempt",

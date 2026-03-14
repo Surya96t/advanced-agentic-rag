@@ -10,47 +10,44 @@ This module assembles the complete agentic RAG workflow graph with:
 """
 
 import asyncio
+import time
+from typing import AsyncIterator
+from uuid import UUID, uuid4
 
-from app.utils.logger import get_logger
-from app.schemas.events import (
-    SSEEventType,
-    AgentStartEvent,
-    AgentCompleteEvent,
-    AgentErrorEvent,
-    ProgressEvent,
-    TokenEvent,
-    TokenResetEvent,
-    ThinkingEvent,
-    CitationEvent,
-    ValidationEvent,
-    EndEvent,
-    ContextStatusEvent,
-    ConversationSummaryEvent,
-    QueryClassificationEvent,
-    CitationMapEvent,
-)
-from app.schemas.chat import ChatResponse
-from app.core.config import settings
+from langgraph.graph import END, START, StateGraph
+
 from app.agents.nodes import (
-    router_node,
+    generator_node,
     query_expander_node,
     query_rewriter_node,
     retriever_node,
-    generator_node,
+    router_node,
     validator_node,
 )
+from app.agents.nodes.classifier import classify_query
+
 # Import new conversational nodes
 from app.agents.nodes.context_loader import load_conversation_context
-from app.agents.nodes.classifier import classify_query
 from app.agents.nodes.simple_answer import generate_simple_answer
-from app.agents.nodes.router import route_after_classification
 from app.agents.state import AgentState, create_initial_state
-import time
-
-from langchain_core.messages import HumanMessage
-from langgraph.graph import StateGraph, START, END
-from uuid import UUID, uuid4
-from typing import AsyncIterator
+from app.core.config import settings
+from app.schemas.chat import ChatResponse
+from app.schemas.events import (
+    AgentCompleteEvent,
+    AgentErrorEvent,
+    AgentStartEvent,
+    CitationEvent,
+    CitationMapEvent,
+    ContextStatusEvent,
+    ConversationSummaryEvent,
+    EndEvent,
+    QueryClassificationEvent,
+    SSEEventType,
+    ThinkingEvent,
+    TokenEvent,
+    ValidationEvent,
+)
+from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -164,7 +161,7 @@ async def get_checkpointer():
         conn_string = settings.supabase_connection_string
 
         logger.debug(
-            f"Using Supabase Session Pooler for checkpointing (supports prepared statements)")
+            "Using Supabase Session Pooler for checkpointing (supports prepared statements)")
 
         # from_conn_string returns an async context manager
         checkpointer = AsyncPostgresSaver.from_conn_string(

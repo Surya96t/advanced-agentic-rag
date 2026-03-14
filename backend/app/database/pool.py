@@ -55,7 +55,7 @@ class DatabasePool:
 
         async with cls._pool.connection() as conn:
             yield conn
-            
+
 # Global instance accessor
 async def get_db_pool() -> AsyncConnectionPool:
     if DatabasePool._pool is None:

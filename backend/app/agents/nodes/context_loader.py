@@ -7,14 +7,14 @@ and trims/summarizes messages if they exceed the configured limit.
 
 from typing import Any
 
-from langchain_core.messages import BaseMessage, SystemMessage
+from langchain_core.messages import SystemMessage
 
 from app.agents.state import AgentState
 from app.core.config import settings
 from app.utils.conversation_summarizer import ConversationSummarizer
+from app.utils.logger import get_logger
 from app.utils.message_trimmer import MessageTrimmer
 from app.utils.token_counter import TokenCounter
-from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

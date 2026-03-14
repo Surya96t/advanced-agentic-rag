@@ -12,7 +12,6 @@ Invalidation: call invalidate_user(user_id) after a successful document ingest s
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import logging

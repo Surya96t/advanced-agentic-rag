@@ -157,7 +157,6 @@ async def validator_node(state: AgentState) -> Command[Literal["query_expander",
     # validator evaluates against the real intent, not a vague "tell me more".
     query = state.get("retrieval_query") or state.get("original_query", state.get("query", ""))
     retry_count = state.get("retry_count", 0)
-    max_retries = MAX_RETRIES
 
     # Build a short context preview from the top-3 chunks
     context_preview = "\n---\n".join(

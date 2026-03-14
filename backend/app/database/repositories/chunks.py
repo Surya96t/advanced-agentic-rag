@@ -19,14 +19,14 @@ Why is this the most complex repository?
 4. Performance Critical: This is called millions of times in production
 """
 
-from datetime import UTC, datetime
 import json
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
 from supabase import Client
 
-from app.database.models import DocumentChunk, ChunkType
+from app.database.models import ChunkType, DocumentChunk
 from app.utils.errors import DatabaseError, NotFoundError
 from app.utils.logger import get_logger
 

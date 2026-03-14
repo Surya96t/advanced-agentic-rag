@@ -10,12 +10,6 @@ Workflow:
 4. Call IngestionPipeline to process the document
 5. Return document record with status
 
-TODO Phase 6: Add Clerk JWT authentication
-- Add @require_auth decorator
-- Extract user_id from JWT token instead of query parameter
-- Add rate limiting per user
-- Add user quota validation
-
 Learning Note:
 Why separate upload from processing?
 1. Quick response: Return immediately with status=PROCESSING
@@ -24,15 +18,13 @@ Why separate upload from processing?
 4. Scalability: Can queue uploads if processing is slow
 
 For now, we process synchronously to keep it simple.
-Phase 4 will add background job processing with Celery/Redis.
 """
 
 import base64
 import mimetypes
-from typing import Annotated
-from uuid import UUID
 import re
 from pathlib import Path
+from typing import Annotated
 
 from celery.result import AsyncResult
 from fastapi import (
@@ -46,17 +38,16 @@ from fastapi import (
     status,
 )
 
-from app.api.deps import UserID, RateLimitInfo
-
+from app.api.deps import RateLimitInfo, UserID
 from app.core.cache import _get_redis
-from app.core.storage import StorageClient, StorageDeleteError, StorageUploadError, get_storage_client
+from app.core.storage import (
+    StorageClient,
+    StorageDeleteError,
+    StorageUploadError,
+    get_storage_client,
+)
 from app.ingestion.background import celery_app, ingest_document_task
-
-# TTL must mirror celery_app result_expires so both expire together
-_TASK_DISPATCH_TTL = 3600  # seconds
-_TASK_DISPATCH_KEY_PREFIX = "task:dispatched:"
 from app.schemas.document import (
-    DocumentResponse,
     MAX_FILE_SIZE_BYTES,
     get_file_extension_error_message,
     get_file_size_error_message,
@@ -65,6 +56,10 @@ from app.schemas.document import (
 )
 from app.utils.errors import ValidationError
 from app.utils.logger import get_logger
+
+# TTL must mirror celery_app result_expires so both expire together
+_TASK_DISPATCH_TTL = 3600  # seconds
+_TASK_DISPATCH_KEY_PREFIX = "task:dispatched:"
 
 logger = get_logger(__name__)
 

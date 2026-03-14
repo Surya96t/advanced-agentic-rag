@@ -13,7 +13,7 @@ A production-grade Retrieval-Augmented Generation system with multi-stage chunki
 
 ## 🛠️ Tech Stack
 
-- **Frontend:** Next.js 15, TypeScript, Tailwind CSS, Clerk Auth
+- **Frontend:** Next.js 16, TypeScript, Tailwind CSS, Clerk Auth
 - **Backend:** FastAPI, LangGraph, LangChain
 - **Database:** Supabase (PostgreSQL + pgvector)
 - **AI/ML:** OpenAI (embeddings + LLM), FlashRank, Cohere
@@ -32,7 +32,7 @@ A production-grade Retrieval-Augmented Generation system with multi-stage chunki
 ### Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/advanced-agentic-rag.git
+git clone https://github.com/Surya96t/advanced-agentic-rag.git
 cd advanced-agentic-rag
 ```
 
@@ -44,31 +44,23 @@ cd advanced-agentic-rag
    cd backend
    ```
 
-2. **Create and activate virtual environment:**
+2. **Install dependencies (creates `.venv` automatically):**
 
    ```bash
-   python -m venv .venv
+   uv sync
    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    ```
 
-3. **Install dependencies:**
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Set up environment variables:**
+3. **Set up environment variables:**
 
    ```bash
    cp .env.example .env
    # Edit .env with your Supabase, OpenAI, and other credentials
    ```
 
-5. **Run database migrations:**
+4. **Database migrations:**
 
-   ```bash
-   # Follow instructions in backend/migrations/ACTUAL_SCHEMA.md
-   ```
+   Migrations are tracked in `supabase/migrations/` and have already been applied to the hosted Supabase instance. For a fresh environment, apply them in order using the Supabase CLI or dashboard.
 
 6. **Start the development server:**
    ```bash

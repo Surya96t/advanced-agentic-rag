@@ -5,9 +5,8 @@ This module provides keyword-based search capabilities using PostgreSQL's
 native full-text search (tsvector/tsquery) and the GIN index.
 """
 
-from uuid import UUID
-
 import asyncio
+from uuid import UUID
 
 from supabase import Client
 

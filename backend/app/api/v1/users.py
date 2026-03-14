@@ -75,7 +75,7 @@ async def sync_user(request: UserSyncRequest, current_user_id: UserID) -> UserSy
 
         # Upsert user (insert if new, update if exists)
         # Note: 'id' is the column name in the users table (not 'user_id')
-        result = supabase.table("users").upsert({
+        supabase.table("users").upsert({
             "id": request.user_id,
             "email": request.email,
             "full_name": request.full_name,

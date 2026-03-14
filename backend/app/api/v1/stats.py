@@ -1,17 +1,15 @@
-from typing import Annotated
 
-from fastapi import APIRouter, Depends
+import asyncio
+
+from cachetools import TTLCache
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from app.api.deps import UserID
+from app.core.langsmith_service import LangSmithMetrics, langsmith_service
 from app.database.client import SupabaseClient
 from app.database.pool import DatabasePool
 from app.utils.logger import get_logger
-from app.core.config import settings
-from app.core.langsmith_service import langsmith_service, LangSmithMetrics
-import asyncio
-from cachetools import TTLCache
-import time
 
 router = APIRouter(prefix="/api/v1/stats", tags=["stats"])
 logger = get_logger(__name__)
@@ -30,7 +28,7 @@ class DashboardStats(BaseModel):
     documents_count: int
     chunks_count: int
     conversations_count: int
-    
+
     # Observability stats (LangSmith)
     queries_count: int = Field(..., description="Total number of queries run")
     total_tokens: int = Field(0, description="Total tokens consumed")
@@ -66,7 +64,7 @@ async def count_user_conversations(user_id: str) -> int:
             WHERE checkpoint_ns = ''
               AND metadata->>'user_id' = %s
               AND (
-                checkpoint->'channel_values'->>'query' IS NOT NULL 
+                checkpoint->'channel_values'->>'query' IS NOT NULL
                 OR checkpoint->'channel_values'->>'generated_response' IS NOT NULL
               )
               AND checkpoint->'channel_values'->>'user_id' = %s
@@ -85,7 +83,7 @@ async def get_db_stats(user_id: str) -> tuple[int, int, int]:
     # Check cache first (DB stats change on explicit actions, can be slightly stale)
     if user_id in db_stats_cache:
         return db_stats_cache[user_id]
-        
+
     try:
         # Run DB queries in parallel
         # Documents and chunks use PostgREST (HTTP), Conversations use SQL (TCP)
@@ -95,17 +93,17 @@ async def get_db_stats(user_id: str) -> tuple[int, int, int]:
             count_user_conversations(user_id),
             return_exceptions=True
         )
-        
+
         # Unpack safely
         docs = results[0] if isinstance(results[0], int) else 0
         chunks = results[1] if isinstance(results[1], int) else 0
         convs = results[2] if isinstance(results[2], int) else 0
-        
+
         # Store in cache
         stats_tuple = (docs, chunks, convs)
         db_stats_cache[user_id] = stats_tuple
         return stats_tuple
-        
+
     except Exception as e:
         logger.error(f"Failed to fetch DB stats: {e}")
         return (0, 0, 0)
@@ -124,17 +122,17 @@ async def get_dashboard_stats(
     try:
         # 1. Fetch DB Stats (Fast, cached 30s)
         # 2. Fetch LangSmith Stats via Service (Slow, cached 5m internal to service)
-        
+
         db_task = asyncio.create_task(get_db_stats(user_id))
         ls_task = asyncio.create_task(langsmith_service.get_user_metrics(user_id))
-        
+
         # Run main tasks in parallel
         # Note: exceptions return as instances in results list
         results = await asyncio.gather(db_task, ls_task, return_exceptions=True)
-        
+
         db_res = results[0]
         ls_res = results[1]
-        
+
         # Unpack DB Stats
         docs, chunks, convs = (0, 0, 0)
         if isinstance(db_res, tuple) and len(db_res) == 3:
@@ -148,7 +146,7 @@ async def get_dashboard_stats(
             ls_metrics = ls_res
         elif isinstance(ls_res, Exception):
             logger.error(f"LS Service Task failed: {ls_res}")
-            
+
         return DashboardStats(
             documents_count=docs,
             chunks_count=chunks,

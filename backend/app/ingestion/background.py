@@ -157,12 +157,12 @@ def ingest_document_task(
     async def _run() -> dict:
         # Late imports — keep module load fast and avoid circular imports at
         # worker startup time.
+        from app.core import cache as response_cache
         from app.database.client import SupabaseClient
         from app.database.repositories.chunks import ChunkRepository
         from app.database.repositories.documents import DocumentRepository
         from app.ingestion.embeddings import get_embedding_client
         from app.ingestion.pipeline import IngestionPipeline
-        from app.core import cache as response_cache
 
         db = SupabaseClient.get_client()
         doc_repo = DocumentRepository(db)

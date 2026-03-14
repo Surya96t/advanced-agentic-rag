@@ -113,8 +113,8 @@ def verify_jwt_token(token: str) -> dict:
         logger.error(f"Expected issuer: {settings.clerk_issuer_url}")
         # Try to decode without verification to see actual issuer (for debugging issuer mismatches)
         try:
-            import json
             import base64
+            import json
             payload_b64 = token.split('.')[1]
             # Add padding if needed
             payload_b64 += '=' * (4 - len(payload_b64) % 4)

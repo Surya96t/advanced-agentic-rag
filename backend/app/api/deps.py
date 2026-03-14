@@ -110,7 +110,7 @@ async def check_user_rate_limit(
                 "Retry-After": "3600",
             }
         )
-    
+
     # Return rate limit info for successful requests
     # If rate limiting is disabled (limit=0), return (0, 0, 0) to signal frontend to skip
     return (limit, remaining, reset_time)

@@ -8,7 +8,6 @@ This module implements two query expansion strategies:
 
 import json
 import time
-from typing import Literal
 
 from langchain_openai import ChatOpenAI
 
@@ -76,7 +75,7 @@ async def decompose_query(query: str) -> list[str]:
 
     Example:
         >>> await decompose_query("How do I configure authentication with the database?")
-        ["Authentication system configuration", 
+        ["Authentication system configuration",
          "Database connection setup",
          "Integrating authentication with database"]
     """

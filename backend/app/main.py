@@ -4,7 +4,6 @@ FastAPI application initialization and configuration.
 This is the main entry point for the Integration Forge backend API.
 """
 
-from app.api import v1
 import time
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator
@@ -14,6 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.api import v1
 from app.core.config import settings
 from app.database.client import SupabaseClient
 from app.database.pool import DatabasePool  # Added import
@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         # Initialize connection pool for raw SQL
         await DatabasePool.open()
-        
+
         # Verify database connection
         is_healthy = SupabaseClient.health_check()
         if not is_healthy:

@@ -23,7 +23,7 @@ from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # Helper function for UTC timestamps
@@ -133,18 +133,16 @@ class Source(TimestampMixin):
         description="Optional context for the AI (e.g., 'Use for database queries')"
     )
 
-    class Config:
-        """Pydantic configuration."""
-        json_schema_extra = {
-            "example": {
-                "id": "550e8400-e29b-41d4-a716-446655440000",
-                "user_id": "user_2bXYZ123",
-                "name": "LangGraph Documentation",
-                "description": "Official LangGraph docs for building agentic workflows",
-                "created_at": "2026-01-19T10:00:00Z",
-                "updated_at": "2026-01-19T10:00:00Z"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "id": "550e8400-e29b-41d4-a716-446655440000",
+            "user_id": "user_2bXYZ123",
+            "name": "LangGraph Documentation",
+            "description": "Official LangGraph docs for building agentic workflows",
+            "created_at": "2026-01-19T10:00:00Z",
+            "updated_at": "2026-01-19T10:00:00Z"
         }
+    })
 
 
 # ============================================================================
@@ -227,29 +225,27 @@ class Document(TimestampMixin):
         description="Flexible JSONB metadata (tags, categories, parser info, etc.)"
     )
 
-    class Config:
-        """Pydantic configuration."""
-        json_schema_extra = {
-            "example": {
-                "id": "660e8400-e29b-41d4-a716-446655440001",
-                "user_id": "user_2bXYZ123",  # Clerk user ID format
-                "title": "LangGraph Quick Start",
-                "file_type": "markdown",
-                "file_size": 8530,
-                "content_hash": "a3b5c7d9e1f2a4b6c8d0e2f4a6b8c0d2e4f6a8b0c2d4e6f8a0b2c4d6e8f0a2b4",
-                "chunk_count": 12,
-                "status": "completed",
-                "source_id": "550e8400-e29b-41d4-a716-446655440000",
-                "blob_path": None,
-                "metadata": {
-                    "source": "langgraph-docs",
-                    "category": "quickstart",
-                    "original_filename": "quickstart.md"
-                },
-                "created_at": "2026-01-19T10:05:00Z",
-                "updated_at": "2026-01-19T10:07:00Z"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "id": "660e8400-e29b-41d4-a716-446655440001",
+            "user_id": "user_2bXYZ123",  # Clerk user ID format
+            "title": "LangGraph Quick Start",
+            "file_type": "markdown",
+            "file_size": 8530,
+            "content_hash": "a3b5c7d9e1f2a4b6c8d0e2f4a6b8c0d2e4f6a8b0c2d4e6f8a0b2c4d6e8f0a2b4",
+            "chunk_count": 12,
+            "status": "completed",
+            "source_id": "550e8400-e29b-41d4-a716-446655440000",
+            "blob_path": None,
+            "metadata": {
+                "source": "langgraph-docs",
+                "category": "quickstart",
+                "original_filename": "quickstart.md"
+            },
+            "created_at": "2026-01-19T10:05:00Z",
+            "updated_at": "2026-01-19T10:07:00Z"
         }
+    })
 
 
 # ============================================================================
@@ -352,28 +348,26 @@ class DocumentChunk(TimestampMixin):
                 f"Embedding must be 1536 dimensions, got {len(v)}")
         return v
 
-    class Config:
-        """Pydantic configuration."""
-        json_schema_extra = {
-            "example": {
-                "id": "770e8400-e29b-41d4-a716-446655440002",
-                "document_id": "660e8400-e29b-41d4-a716-446655440001",
-                "user_id": "user_2bXYZ123",
-                "chunk_index": 0,
-                "content": "LangGraph is a framework for building stateful, multi-agent applications...",
-                "metadata": {
-                    "header": "Introduction",
-                    "chunk_strategy": "recursive",
-                    "semantic_density": 0.82,
-                    "context_prefix": "[Doc: LangGraph Quick Start | Section: Introduction]"
-                },
-                "embedding": [0.123, -0.456, 0.789, "... (1536 dimensions)"],
-                "parent_chunk_id": None,
-                "chunk_type": "parent",
-                "created_at": "2026-01-19T10:07:00Z",
-                "updated_at": "2026-01-19T10:07:00Z"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "id": "770e8400-e29b-41d4-a716-446655440002",
+            "document_id": "660e8400-e29b-41d4-a716-446655440001",
+            "user_id": "user_2bXYZ123",
+            "chunk_index": 0,
+            "content": "LangGraph is a framework for building stateful, multi-agent applications...",
+            "metadata": {
+                "header": "Introduction",
+                "chunk_strategy": "recursive",
+                "semantic_density": 0.82,
+                "context_prefix": "[Doc: LangGraph Quick Start | Section: Introduction]"
+            },
+            "embedding": [0.123, -0.456, 0.789, "... (1536 dimensions)"],
+            "parent_chunk_id": None,
+            "chunk_type": "parent",
+            "created_at": "2026-01-19T10:07:00Z",
+            "updated_at": "2026-01-19T10:07:00Z"
         }
+    })
 
 
 # ============================================================================
@@ -428,17 +422,15 @@ class Feedback(TimestampMixin):
         description="Rating from 1 to 5"
     )
 
-    class Config:
-        """Pydantic configuration."""
-        json_schema_extra = {
-            "example": {
-                "id": "770e8400-e29b-41d4-a716-446655440003",
-                "user_id": "user_2bXYZ123",
-                "feedback_type": "feature_request",
-                "message": "It would be great to have dark mode support.",
-                "rating": 5,
-                "created_at": "2026-02-17T12:00:00Z",
-                "updated_at": "2026-02-17T12:00:00Z"
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "id": "770e8400-e29b-41d4-a716-446655440003",
+            "user_id": "user_2bXYZ123",
+            "feedback_type": "feature_request",
+            "message": "It would be great to have dark mode support.",
+            "rating": 5,
+            "created_at": "2026-02-17T12:00:00Z",
+            "updated_at": "2026-02-17T12:00:00Z"
         }
+    })
 

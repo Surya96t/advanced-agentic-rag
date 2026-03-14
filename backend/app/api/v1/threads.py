@@ -7,9 +7,9 @@ Allows users to list, view, create, and delete conversation threads.
 
 from datetime import datetime, timezone
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from app.api.deps import UserID
@@ -130,26 +130,27 @@ async def get_thread_metadata_from_checkpoint(
         # This ensures we get the latest custom_title that was just updated
         # Use a dedicated connection to avoid concurrency/pipeline issues
         from psycopg import AsyncConnection
+
         from app.core.config import settings
-        
+
         async with await AsyncConnection.connect(settings.supabase_connection_string) as conn:
             async with conn.cursor() as cur:
                 # Fetch metadata from latest checkpoint AND persistent title from any checkpoint
                 await cur.execute(
                     """
-                    SELECT 
+                    SELECT
                         (SELECT metadata FROM checkpoints WHERE thread_id = %s ORDER BY checkpoint_id DESC LIMIT 1) as latest_metadata,
                         (SELECT metadata->>'custom_title' FROM checkpoints WHERE thread_id = %s AND metadata->>'custom_title' IS NOT NULL ORDER BY checkpoint_id DESC LIMIT 1) as persistent_title
                     """,
                     (thread_id, thread_id)
                 )
                 result = await cur.fetchone()
-                
+
                 persistent_title = None
                 if result:
                     # Unpack result
                     metadata_raw, persistent_title = result
-                    
+
                     if metadata_raw is None:
                         checkpoint_metadata = {}
                     elif isinstance(metadata_raw, str):
@@ -259,17 +260,18 @@ async def list_user_threads_from_db(
         # This prevents "NoneType object has no attribute '_fetch_gen'" errors
         # caused by sharing the checkpointer's single connection across concurrent requests
         from psycopg import AsyncConnection
+
         from app.core.config import settings
-        
+
         # Determine connection string (fallback to checkpointer's if available, else settings)
         conn_string = settings.supabase_connection_string
 
-        # Query for all unique thread_ids with their latest checkpoints, 
+        # Query for all unique thread_ids with their latest checkpoints,
         # but also fetch the custom_title from ANY checkpoint in the thread
         # (since new checkpoints created by LangGraph might miss the metadata update)
         query = """
         WITH user_checkpoints AS (
-            SELECT 
+            SELECT
                 thread_id,
                 checkpoint,
                 metadata,
@@ -278,7 +280,7 @@ async def list_user_threads_from_db(
             WHERE checkpoint_ns = ''
               AND checkpoint->'channel_values'->>'user_id' = %s
               AND (
-                checkpoint->'channel_values'->>'query' IS NOT NULL 
+                checkpoint->'channel_values'->>'query' IS NOT NULL
                 OR checkpoint->'channel_values'->>'generated_response' IS NOT NULL
               )
         ),
@@ -335,12 +337,12 @@ async def list_user_threads_from_db(
         for row in rows:
             try:
                 thread_id = row['thread_id']
-                
+
                 # Parse checkpoint directly without re-querying
                 # This is much faster and avoids connection issues
                 checkpoint = row['checkpoint']
                 metadata_raw = row['metadata']
-                
+
                 # 1. Parse Metadata
                 checkpoint_metadata = {}
                 if metadata_raw:
@@ -352,25 +354,25 @@ async def list_user_threads_from_db(
                             checkpoint_metadata = json.loads(metadata_raw)
                         except json.JSONDecodeError:
                             logger.warn(f"Bad metadata json for thread {thread_id}")
-                
+
                 # 2. Parse State/Messages
                 state = checkpoint.get("channel_values", {})
                 messages = state.get("messages", [])
-                
+
                 # 3. Extract Details (Title, Preview, Counts)
                 first_message = next(
-                    (msg for msg in messages if hasattr(msg, "type") and msg.type == "human"), 
+                    (msg for msg in messages if hasattr(msg, "type") and msg.type == "human"),
                     None
                 )
                 last_message = messages[-1] if messages else None
-                
+
                 # Title logic
                 # Prefer persistent title from ANY checkpoint first (query result)
                 # Then fallback to metadata from the LATEST checkpoint
                 custom_title = row.get("persistent_title")
                 if not custom_title:
                     custom_title = checkpoint_metadata.get("custom_title")
-                
+
                 if custom_title:
                     title = custom_title
                 elif first_message:
@@ -379,7 +381,7 @@ async def list_user_threads_from_db(
                     title = content[:50] + "..." if len(content) > 50 else content
                 else:
                     title = "New Chat"
-                
+
                 # Preview logic
                 preview = None
                 if last_message:
@@ -545,14 +547,14 @@ async def get_thread(
                 citations = []
                 additional_kwargs = getattr(msg, "additional_kwargs", {})
                 response_metadata = getattr(msg, "response_metadata", {})
-                
+
                 # Check both locations for citations
                 raw_citations = []
                 if additional_kwargs and "citations" in additional_kwargs:
                     raw_citations = additional_kwargs["citations"]
                 elif response_metadata and "citations" in response_metadata:
                     raw_citations = response_metadata["citations"]
-                
+
                 if raw_citations:
                     # Map stored citation structure to API citation structure
                     for c in raw_citations:
@@ -651,7 +653,7 @@ async def create_thread(
         checkpointer = request.app.state.checkpointer
 
         # Create initial empty state for the thread
-        from app.agents.graph import create_initial_state, get_graph
+        from app.agents.graph import get_graph
 
         # Don't create a HumanMessage for empty thread initialization
         # Just set up the state structure with user_id
@@ -703,9 +705,10 @@ async def create_thread(
         # This ensures get_thread_metadata_from_checkpoint can retrieve it
         if thread_request.title:
             from psycopg import AsyncConnection
+
             from app.core.config import settings
             conn_string = settings.supabase_connection_string
-            
+
             async with await AsyncConnection.connect(
                 conn_string,
                 autocommit=True,
@@ -901,6 +904,7 @@ async def update_thread(
         # This ensures the title persists across all checkpoint retrievals
         # Use a dedicated connection to avoid concurrency/pipeline issues
         from psycopg import AsyncConnection
+
         from app.core.config import settings
         conn_string = settings.supabase_connection_string
 

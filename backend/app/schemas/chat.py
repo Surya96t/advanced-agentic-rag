@@ -5,7 +5,7 @@ This module defines request and response models for the agentic RAG chat endpoin
 including support for streaming, feedback, and conversation threading.
 """
 
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from pydantic import ConfigDict, Field
 

@@ -20,7 +20,7 @@ class IngestRequest(BaseModel):
     use the multipart/form-data endpoint with UploadFile.
 
     Fields:
-        user_id: User ID (will be extracted from JWT in Phase 6)
+        user_id: User ID
         content: Raw document content
         title: Document title
         source_id: Parent source ID
@@ -28,7 +28,7 @@ class IngestRequest(BaseModel):
     """
     user_id: str = Field(
         ...,
-        description="User ID (Clerk format: user_xxx). Will be extracted from JWT in Phase 6."
+        description="User ID (Clerk format: user_xxx)"
     )
     content: str = Field(
         ...,

@@ -19,15 +19,12 @@ Why separate schemas from database models?
 """
 
 from datetime import datetime
-from enum import Enum
-from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Re-export DocumentStatus for API use
 from app.database.models import DocumentStatus
-
 
 # ============================================================================
 # CONSTANTS - File upload limits
