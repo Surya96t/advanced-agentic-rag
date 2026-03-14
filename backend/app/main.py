@@ -12,8 +12,10 @@ from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from redis.exceptions import RedisError
 
 from app.api import v1
+from app.core.cache import _get_redis
 from app.core.config import settings
 from app.database.client import SupabaseClient
 from app.database.pool import DatabasePool  # Added import
@@ -337,13 +339,22 @@ async def health_check() -> HealthResponse:
     # Check database health
     db_healthy = SupabaseClient.health_check()
 
-    # Determine overall status
+    # Check Redis health (fail-open: outage means degraded, not down)
+    redis_status = "unavailable"
+    try:
+        await _get_redis().ping()
+        redis_status = "healthy"
+    except (RedisError, Exception):
+        pass
+
+    # Determine overall status — Redis outage does not flip overall health
     is_healthy = db_healthy
     status_value = "healthy" if is_healthy else "unhealthy"
 
     # Build service details
     services = {
         "database": "healthy" if db_healthy else "unhealthy",
+        "redis": redis_status,
         "api": "healthy",
     }
 

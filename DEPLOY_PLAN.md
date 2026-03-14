@@ -123,18 +123,18 @@ These can be automated as lint/test rules in the CI pipeline or addressed after 
 
 ### 🚀 Feature Additions
 
-#### `86ag60qbp` — Add Redis health check to `/health` endpoint
-- Add a Redis `ping` to the existing `/health` endpoint so infrastructure monitoring can detect Redis outages. Needs care so a Redis outage doesn't falsely fail health checks for non-Redis traffic.
+#### `86ag60qbp` — ✅ Add Redis health check to `/health` endpoint
+- Added async `ping()` to `health_check()` in `main.py`. Redis reports as `"unavailable"` (not `"unhealthy"`) on outage — consistent with fail-open design.
 
-#### `86ag60qb1` — Add error monitoring (Sentry)
-- Integrate Sentry SDK in both FastAPI and Next.js. Wire DSN via environment variable in both `.env.example` files.
-
-#### `86ag60qeb` — Fix or remove permanently-skipped RLS enforcement test
-- Investigate why the test was skipped before deciding: re-enable with a proper mock, or delete if it duplicates other coverage.
+#### `86ag60qeb` — ✅ Fix or remove permanently-skipped RLS enforcement test
+- Deleted `test_rls_enforcement_different_user` from `test_atomic_deletion.py`. Test was untestable at the repository layer (service role key bypasses RLS by design). API-level RLS is covered by `TestRLSEnforcement` in `test_authentication.py`.
 
 ---
 
 ### 🏗️ Larger / Deferred
+
+#### `86ag60qb1` — Add error monitoring (Sentry)
+- Integrate Sentry SDK in both FastAPI and Next.js. Wire DSN via environment variable in both `.env.example` files. Deferred: requires account setup and DSN config.
 
 #### `86ag60tak` — Document Celery worker scaling configuration
 - Low value until Celery is actually wired. Add scaling notes to README once `86aftvjpz` is done.
