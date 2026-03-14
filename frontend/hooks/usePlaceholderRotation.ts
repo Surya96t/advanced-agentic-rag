@@ -39,6 +39,7 @@ export function usePlaceholderRotation({
   // Clamp currentIndex when placeholders array changes to prevent out-of-bounds
   // This is a valid use of setState in effect to sync derived state when props change
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrentIndex((prev) => Math.min(prev, Math.max(0, placeholders.length - 1)))
   }, [placeholders])
 

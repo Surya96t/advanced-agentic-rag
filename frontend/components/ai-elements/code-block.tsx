@@ -303,6 +303,7 @@ const CodeBlockBody = memo(
     prevProps.showLineNumbers === nextProps.showLineNumbers &&
     prevProps.className === nextProps.className
 );
+CodeBlockBody.displayName = 'CodeBlockBody';
 
 export const CodeBlockContainer = ({
   className,
@@ -390,6 +391,7 @@ export const CodeBlockContent = ({
 
   useEffect(() => {
     // Reset to raw tokens when code changes (shows current code, not stale tokens)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTokenized(highlightCode(code, language) ?? rawTokens);
 
     // Subscribe to async highlighting result

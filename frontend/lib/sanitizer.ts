@@ -3,7 +3,7 @@ export function sanitizeToken(token: string): string {
   return token;
 }
 
-export function isCitationSafe(citation: any): boolean {
+export function isCitationSafe(citation: unknown): boolean {
   return (
     citation &&
     typeof citation === 'object' &&
