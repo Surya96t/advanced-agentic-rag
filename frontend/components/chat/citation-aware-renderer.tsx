@@ -219,8 +219,8 @@ export function CitationAwareRenderer({ content, citationMap }: CitationAwareRen
               )
             }
 
-            const rawLang = match?.[1] ?? 'text'
-            const language: BundledLanguage = (rawLang in bundledLanguages) ? rawLang as BundledLanguage : 'text'
+            const rawLang = match?.[1] ?? 'bash'
+            const language: BundledLanguage = (rawLang in bundledLanguages) ? rawLang as BundledLanguage : 'bash'
             const codeString = String(children ?? '').replace(/\n$/, '')
 
             return (

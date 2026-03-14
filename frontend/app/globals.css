@@ -52,6 +52,17 @@
 .animate-travel-2 { animation: travel-2 3s infinite linear; }
 .animate-travel-3 { animation: travel-3 3s infinite linear; }
 
+/* Landing page scroll-reveal utility */
+.reveal {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.reveal.revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
