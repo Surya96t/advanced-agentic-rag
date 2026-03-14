@@ -55,8 +55,7 @@ def submit_feedback(
     except Exception as e:
         logger.error("Failed to submit feedback", extra={"error": str(e)})
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to submit feedback"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to submit feedback"
         )
 
 
@@ -90,7 +89,5 @@ def get_user_feedback(
     except Exception as e:
         logger.error("Failed to fetch feedback", extra={"error": str(e)})
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to fetch feedback"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch feedback"
         )
-

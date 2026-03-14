@@ -47,8 +47,7 @@ async def load_conversation_context(state: AgentState) -> dict[str, Any]:
     # Count current tokens
     current_tokens = counter.count_messages_tokens(messages)
 
-    logger.info(
-        f"  ↳ Current token count: {current_tokens}/{settings.max_conversation_tokens}")
+    logger.info(f"  ↳ Current token count: {current_tokens}/{settings.max_conversation_tokens}")
 
     # If under limit, return as-is
     if current_tokens <= settings.max_conversation_tokens:
@@ -73,9 +72,7 @@ async def load_conversation_context(state: AgentState) -> dict[str, Any]:
 
     # If trimming is enough, use it
     if trimmed_tokens <= settings.max_conversation_tokens:
-        logger.info(
-            f"  ↳ Trimmed to {len(trimmed)} messages ({trimmed_tokens} tokens)"
-        )
+        logger.info(f"  ↳ Trimmed to {len(trimmed)} messages ({trimmed_tokens} tokens)")
         return {
             "messages": trimmed,
             "context_window_tokens": trimmed_tokens,
@@ -90,16 +87,14 @@ async def load_conversation_context(state: AgentState) -> dict[str, Any]:
     other_msgs = [m for m in messages if not isinstance(m, SystemMessage)]
 
     # Keep last N messages
-    recent = other_msgs[-settings.recent_message_count:]
+    recent = other_msgs[-settings.recent_message_count :]
     older = other_msgs[: -settings.recent_message_count]
 
     # Summarize older messages
     if older:
         logger.info(f"  ↳ Summarizing {len(older)} older messages")
         summary = await summarizer.summarize_messages(older)
-        summary_msg = SystemMessage(
-            content=f"Previous conversation summary:\n{summary}"
-        )
+        summary_msg = SystemMessage(content=f"Previous conversation summary:\n{summary}")
 
         reconstructed = system_msgs + [summary_msg] + recent
         reconstructed_tokens = counter.count_messages_tokens(reconstructed)

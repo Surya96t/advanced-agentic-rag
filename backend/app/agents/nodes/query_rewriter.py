@@ -67,7 +67,7 @@ def _format_recent_turns(messages: list, max_turns: int = 4) -> str:
     prior = messages[:-1] if messages else []
 
     # Take only the most recent max_turns messages from the prior history.
-    prior = prior[-max_turns * 2:]  # *2 because each turn is 2 messages (human + AI)
+    prior = prior[-max_turns * 2 :]  # *2 because each turn is 2 messages (human + AI)
 
     lines = []
     for msg in prior:
@@ -117,9 +117,7 @@ async def query_rewriter_node(state: AgentState) -> dict:
     # Guard: if there is no prior context there is nothing to resolve.
     # ≤ 1 means only the current HumanMessage exists (first turn).
     if len(messages) <= 1:
-        logger.info(
-            "  ↳ No prior context — skipping rewrite, passing original query through"
-        )
+        logger.info("  ↳ No prior context — skipping rewrite, passing original query through")
         return {"retrieval_query": original_query}
 
     # Build conversation history string for the prompt.
@@ -137,9 +135,7 @@ async def query_rewriter_node(state: AgentState) -> dict:
 
         # Sanity check: if the LLM returned something empty or very short, fall back.
         if not rewritten or len(rewritten) < 5:
-            logger.warning(
-                "  ↳ Rewriter returned empty/short response — falling back to original"
-            )
+            logger.warning("  ↳ Rewriter returned empty/short response — falling back to original")
             return {"retrieval_query": original_query}
 
         elapsed = time.time() - start_time

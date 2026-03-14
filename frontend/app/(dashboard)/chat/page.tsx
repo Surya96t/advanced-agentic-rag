@@ -25,9 +25,7 @@ export default function NewChatPage() {
   // CRITICAL: Ensure we're in new chat mode when this page mounts
   // This prevents stale thread IDs from appearing on /chat
   useEffect(() => {
-    console.log('[NewChatPage] Mounted - ensuring new chat state')
     if (currentThreadId !== null) {
-      console.log('[NewChatPage] Found stale threadId, clearing:', currentThreadId)
       setCurrentThreadId(null)
       clearMessages()
     }

@@ -47,8 +47,7 @@ async def get_current_user_id(user_id: Annotated[str, Depends(get_current_user)]
 
 
 async def check_user_rate_limit(
-    request: Request,
-    user_id: Annotated[str, Depends(get_current_user_id)]
+    request: Request, user_id: Annotated[str, Depends(get_current_user_id)]
 ) -> tuple[int, int, int]:
     """
     Check if current user has exceeded rate limit using Redis sliding window.
@@ -87,13 +86,15 @@ async def check_user_rate_limit(
     path_parts = request.url.path.strip("/").split("/")
     endpoint = path_parts[2] if len(path_parts) > 2 else "default"
 
-    allowed, limit, remaining = limiter.check_rate_limit(
-        user_id, endpoint=endpoint)
+    allowed, limit, remaining = limiter.check_rate_limit(user_id, endpoint=endpoint)
 
     # Debug: Log the rate limit check result
     logger.debug(
         "Rate limit check: user_id=%s, allowed=%s, limit=%d, remaining=%d",
-        user_id, allowed, limit, remaining
+        user_id,
+        allowed,
+        limit,
+        remaining,
     )
 
     # Calculate reset time (window end)
@@ -108,7 +109,7 @@ async def check_user_rate_limit(
                 "X-RateLimit-Remaining": "0",
                 "X-RateLimit-Reset": str(reset_time),
                 "Retry-After": "3600",
-            }
+            },
         )
 
     # Return rate limit info for successful requests

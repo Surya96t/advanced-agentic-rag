@@ -20,6 +20,7 @@ logger = get_logger(__name__)
 
 class LangSmithMetrics(BaseModel):
     """Aggregated metrics from LangSmith runs."""
+
     total_queries: int = 0
     total_tokens: int = 0
     total_cost: float = 0.0
@@ -47,8 +48,7 @@ class LangSmithService:
         """Lazy initialization of the AsyncClient."""
         if not self._client and self.api_key:
             self._client = AsyncClient(
-                api_key=self.api_key,
-                api_url="https://api.smith.langchain.com"
+                api_key=self.api_key, api_url="https://api.smith.langchain.com"
             )
         return self._client
 
@@ -89,7 +89,7 @@ class LangSmithService:
                 is_root=True,
                 filter=filter_str,
                 limit=limit,
-                select=["id", "status", "start_time", "end_time", "total_tokens", "total_cost"]
+                select=["id", "status", "start_time", "end_time", "total_tokens", "total_cost"],
             ):
                 runs.append(run)
 
@@ -121,7 +121,7 @@ class LangSmithService:
                         latency = (run.end_time - run.start_time).total_seconds()
                         total_latency += latency
                     except Exception:
-                        pass # specific latency calculation error
+                        pass  # specific latency calculation error
 
                 # Errors
                 if run.status != "success":
@@ -147,6 +147,7 @@ class LangSmithService:
             logger.error(f"Failed to fetch/aggregate LangSmith metrics: {e}", exc_info=True)
             # Return empty metrics on failure to avoid crashing the dashboard
             return LangSmithMetrics()
+
 
 # Global instance
 langsmith_service = LangSmithService()

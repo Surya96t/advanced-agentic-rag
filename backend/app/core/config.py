@@ -28,20 +28,18 @@ class Settings(BaseSettings):
     # Application Settings
     app_name: str = "RAG Assistant"
     app_version: str = "0.1.0"
-    environment: Literal["development",
-                         "staging", "production"] = "development"
+    environment: Literal["development", "staging", "production"] = "development"
     debug: bool = Field(default=False, description="Enable debug mode (always False in production)")
 
     # Server Settings
     host: str = Field(default="0.0.0.0", description="Server host")
     port: int = Field(default=8000, description="Server port")
-    reload: bool = Field(
-        default=True, description="Auto-reload on code changes")
+    reload: bool = Field(default=True, description="Auto-reload on code changes")
 
     # CORS Settings
     cors_origins: list[str] = Field(
         default=["http://localhost:3000", "http://localhost:3001"],
-        description="Allowed CORS origins"
+        description="Allowed CORS origins",
     )
     cors_allow_credentials: bool = True
     cors_allow_methods: list[str] = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
@@ -53,145 +51,128 @@ class Settings(BaseSettings):
         ...,
         description="Supabase service role key (for backend operations)",
         repr=False,
-        alias="SUPABASE_SERVICE_ROLE_KEY"  # Use service role key for admin operations
+        alias="SUPABASE_SERVICE_ROLE_KEY",  # Use service role key for admin operations
     )
     supabase_db_password: str = Field(
         ...,
         description="Supabase database password (for direct PostgreSQL connection)",
         repr=False,
-        alias="SUPABASE_DB_PASSWORD"
+        alias="SUPABASE_DB_PASSWORD",
     )
     supabase_pooler_region: str = Field(
         default="aws-1-us-east-1",
-        description="Supabase pooler region (e.g., aws-1-us-east-1, aws-0-us-west-1)"
+        description="Supabase pooler region (e.g., aws-1-us-east-1, aws-0-us-west-1)",
     )
 
     # Database Settings
-    db_pool_size: int = Field(
-        default=10, description="Database connection pool size")
-    db_max_overflow: int = Field(
-        default=20, description="Max overflow connections")
-    db_timeout: int = Field(
-        default=30, description="Database timeout in seconds")
+    db_pool_size: int = Field(default=10, description="Database connection pool size")
+    db_max_overflow: int = Field(default=20, description="Max overflow connections")
+    db_timeout: int = Field(default=30, description="Database timeout in seconds")
 
     # OpenAI Configuration
     openai_api_key: str = Field(..., description="OpenAI API key", repr=False)
-    openai_model: str = Field(
-        default="gpt-4o-mini", description="OpenAI model for chat")
+    openai_model: str = Field(default="gpt-4o-mini", description="OpenAI model for chat")
     openai_embedding_model: str = Field(
         default="text-embedding-3-small",
-        description="OpenAI model for embeddings (1536 dimensions)"
+        description="OpenAI model for embeddings (1536 dimensions)",
     )
     openai_embedding_dimensions: int = Field(
-        default=1536,
-        description="Embedding vector dimensions (text-embedding-3-small)"
+        default=1536, description="Embedding vector dimensions (text-embedding-3-small)"
     )
-    openai_max_tokens: int = Field(
-        default=4096, description="Max tokens for responses")
-    openai_temperature: float = Field(
-        default=0.7, description="Temperature for responses")
+    openai_max_tokens: int = Field(default=4096, description="Max tokens for responses")
+    openai_temperature: float = Field(default=0.7, description="Temperature for responses")
 
     # LangSmith Configuration (Optional - for observability)
     langsmith_api_key: str | None = Field(
-        default=None,
-        description="LangSmith API key",
-        repr=False,
-        alias="LANGCHAIN_API_KEY"
+        default=None, description="LangSmith API key", repr=False, alias="LANGCHAIN_API_KEY"
     )
     langsmith_project: str = Field(
         default="integration-forge-rag",
         description="LangSmith project name",
-        alias="LANGCHAIN_PROJECT"
+        alias="LANGCHAIN_PROJECT",
     )
     langsmith_tracing: bool = Field(
-        default=True,
-        description="Enable LangSmith tracing",
-        alias="LANGCHAIN_TRACING_V2"
+        default=True, description="Enable LangSmith tracing", alias="LANGCHAIN_TRACING_V2"
     )
 
     # Cohere Configuration (for re-ranking)
-    cohere_api_key: str | None = Field(
-        default=None, description="Cohere API key", repr=False)
-    cohere_model: str = Field(
-        default="rerank-english-v3.0", description="Cohere rerank model")
+    cohere_api_key: str | None = Field(default=None, description="Cohere API key", repr=False)
+    cohere_model: str = Field(default="rerank-english-v3.0", description="Cohere rerank model")
 
     # Clerk Authentication Configuration
     clerk_secret_key: str = Field(
-        ..., description="Clerk secret key for JWT validation", repr=False)
-    clerk_publishable_key: str = Field(
-        ..., description="Clerk publishable key")
+        ..., description="Clerk secret key for JWT validation", repr=False
+    )
+    clerk_publishable_key: str = Field(..., description="Clerk publishable key")
     clerk_issuer_url: str = Field(
-        ..., description="Clerk issuer URL (e.g., https://your-app.clerk.accounts.dev)")
+        ..., description="Clerk issuer URL (e.g., https://your-app.clerk.accounts.dev)"
+    )
     clerk_jwks_cache_ttl: int = Field(
-        default=3600, description="JWKS cache TTL in seconds (default: 1 hour)")
+        default=3600, description="JWKS cache TTL in seconds (default: 1 hour)"
+    )
     auth_enabled: bool = Field(
-        default=True, description="Enable JWT authentication (disable for testing)")
+        default=True, description="Enable JWT authentication (disable for testing)"
+    )
 
     # Redis Configuration
-    redis_host: str = Field(
-        default="localhost", description="Redis server hostname")
-    redis_port: int = Field(
-        default=6379, ge=1, le=65535, description="Redis server port")
-    redis_db: int = Field(
-        default=0, ge=0, le=15, description="Redis database number (0-15)")
+    redis_host: str = Field(default="localhost", description="Redis server hostname")
+    redis_port: int = Field(default=6379, ge=1, le=65535, description="Redis server port")
+    redis_db: int = Field(default=0, ge=0, le=15, description="Redis database number (0-15)")
     redis_password: str | None = Field(
-        default=None, description="Redis password (optional)", repr=False)
-    redis_ssl: bool = Field(
-        default=False, description="Use SSL/TLS for Redis connection")
+        default=None, description="Redis password (optional)", repr=False
+    )
+    redis_ssl: bool = Field(default=False, description="Use SSL/TLS for Redis connection")
     redis_connection_pool_size: int = Field(
-        default=10, ge=1, le=100, description="Redis connection pool size")
+        default=10, ge=1, le=100, description="Redis connection pool size"
+    )
 
     # Response Cache Configuration
     cache_enabled: bool = Field(
-        default=True, description="Enable Redis response caching for non-streaming chat")
+        default=True, description="Enable Redis response caching for non-streaming chat"
+    )
     cache_ttl_seconds: int = Field(
-        default=86400, ge=60, description="Cache TTL in seconds (default: 24 hours)")
+        default=86400, ge=60, description="Cache TTL in seconds (default: 24 hours)"
+    )
 
     # Rate Limiting Configuration
     rate_limit_enabled: bool = Field(
-        default=True, description="Enable rate limiting (disable for load testing)")
+        default=True, description="Enable rate limiting (disable for load testing)"
+    )
     rate_limit_default_requests: int = Field(
-        default=50, ge=1, description="Default requests per hour")
+        default=50, ge=1, description="Default requests per hour"
+    )
     rate_limit_default_window: int = Field(
-        default=3600, ge=60, description="Rate limit window in seconds")
+        default=3600, ge=60, description="Rate limit window in seconds"
+    )
     rate_limit_burst_multiplier: float = Field(
-        default=1.5, ge=1.0, le=3.0, description="Burst allowance multiplier")
+        default=1.5, ge=1.0, le=3.0, description="Burst allowance multiplier"
+    )
 
     # Per-Endpoint Rate Limits (requests per hour)
     rate_limit_ingest: int = Field(
-        default=10, ge=1, description="Ingestion endpoint rate limit (expensive: OpenAI embeddings)")
-    rate_limit_chat: int = Field(
-        default=50, ge=1, description="Chat endpoint rate limit")
-    rate_limit_documents: int = Field(
-        default=200, ge=1, description="Document listing rate limit")
+        default=10, ge=1, description="Ingestion endpoint rate limit (expensive: OpenAI embeddings)"
+    )
+    rate_limit_chat: int = Field(default=50, ge=1, description="Chat endpoint rate limit")
+    rate_limit_documents: int = Field(default=200, ge=1, description="Document listing rate limit")
 
     # RAG Configuration - Chunking
-    chunk_size: int = Field(
-        default=1000, description="Default chunk size for text splitting")
-    chunk_overlap: int = Field(
-        default=200, description="Chunk overlap for context continuity")
+    chunk_size: int = Field(default=1000, description="Default chunk size for text splitting")
+    chunk_overlap: int = Field(default=200, description="Chunk overlap for context continuity")
 
     # RAG Configuration - Vector Search
     vector_search_top_k: int = Field(
-        default=20,
-        description="Number of results from vector search (semantic)"
+        default=20, description="Number of results from vector search (semantic)"
     )
     vector_search_min_similarity: float = Field(
-        default=0.7,
-        ge=0.0,
-        le=1.0,
-        description="Minimum cosine similarity threshold (0.0-1.0)"
+        default=0.7, ge=0.0, le=1.0, description="Minimum cosine similarity threshold (0.0-1.0)"
     )
 
     # RAG Configuration - Text Search
     text_search_top_k: int = Field(
-        default=20,
-        description="Number of results from text search (keyword)"
+        default=20, description="Number of results from text search (keyword)"
     )
     text_search_min_rank: float = Field(
-        default=0.01,
-        ge=0.0,
-        description="Minimum ts_rank score threshold for FTS"
+        default=0.01, ge=0.0, description="Minimum ts_rank score threshold for FTS"
     )
 
     # RAG Configuration - Hybrid Search
@@ -199,62 +180,50 @@ class Settings(BaseSettings):
         default=0.7,
         ge=0.0,
         le=1.0,
-        description="Weight for vector vs text (0.0=text only, 1.0=vector only, 0.7=favour semantic)"
+        description="Weight for vector vs text (0.0=text only, 1.0=vector only, 0.7=favour semantic)",
     )
     hybrid_rrf_k: int = Field(
-        default=60,
-        description="Reciprocal Rank Fusion constant (controls score decay)"
+        default=60, description="Reciprocal Rank Fusion constant (controls score decay)"
     )
 
     # RAG Configuration - Re-ranking
-    rerank_enabled: bool = Field(
-        default=True,
-        description="Enable re-ranking of search results"
-    )
+    rerank_enabled: bool = Field(default=True, description="Enable re-ranking of search results")
     rerank_model: str = Field(
         default="ms-marco-MiniLM-L-6-v2",
-        description="FlashRank model name (TinyBERT, MiniLM-L-6, MiniLM-L-12)"
+        description="FlashRank model name (TinyBERT, MiniLM-L-6, MiniLM-L-12)",
     )
-    rerank_top_k: int = Field(
-        default=5,
-        description="Number of results to return after re-ranking"
-    )
+    rerank_top_k: int = Field(default=5, description="Number of results to return after re-ranking")
 
     # RAG Configuration - Validation
     validation_pass_threshold: float = Field(
         default=0.5,
         ge=0.0,
         le=1.0,
-        description="Minimum quality score for a response to pass validation (0.0-1.0)"
+        description="Minimum quality score for a response to pass validation (0.0-1.0)",
     )
     validation_retry_threshold: float = Field(
         default=0.4,
         ge=0.0,
         le=1.0,
-        description="Quality score below which a response is immediately retried (0.0-1.0)"
+        description="Quality score below which a response is immediately retried (0.0-1.0)",
     )
     validation_max_retries: int = Field(
-        default=2,
-        ge=0,
-        description="Maximum number of validation-triggered retries"
+        default=2, ge=0, description="Maximum number of validation-triggered retries"
     )
 
     # Legacy field for backwards compatibility
-    top_k: int = Field(
-        default=10,
-        description="(Deprecated) Use rerank_top_k instead"
-    )
+    top_k: int = Field(default=10, description="(Deprecated) Use rerank_top_k instead")
 
     # Legacy rate limiting field for backwards compatibility
     rate_limit_per_minute: int = Field(
         default=60,
-        description="(Deprecated) Use rate_limit_default_requests and rate_limit_default_window instead"
+        description="(Deprecated) Use rate_limit_default_requests and rate_limit_default_window instead",
     )
 
     # LangGraph Checkpointing Configuration
     enable_checkpointing: bool = Field(
         default=True,
-        description="Enable LangGraph PostgreSQL checkpointing for conversation and agent state persistence"
+        description="Enable LangGraph PostgreSQL checkpointing for conversation and agent state persistence",
     )
 
     # Conversational Memory Configuration
@@ -262,13 +231,13 @@ class Settings(BaseSettings):
         default=8000,
         ge=1000,
         le=100000,
-        description="Max tokens for conversation history (reserve space for system prompt + retrieval context)"
+        description="Max tokens for conversation history (reserve space for system prompt + retrieval context)",
     )
     recent_message_count: int = Field(
         default=10,
         ge=2,
         le=50,
-        description="Number of recent messages to always keep (sliding window)"
+        description="Number of recent messages to always keep (sliding window)",
     )
 
     # Storage Configuration
@@ -285,14 +254,10 @@ class Settings(BaseSettings):
 
     # Logging
     log_level: str = Field(default="INFO", description="Logging level")
-    log_format: str = Field(
-        default="json", description="Log format: json or console")
+    log_format: str = Field(default="json", description="Log format: json or console")
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore"
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
     )
 
     @field_validator("cors_origins", mode="before")
@@ -322,13 +287,9 @@ class Settings(BaseSettings):
         """
         if self.environment == "production":
             if self.debug:
-                raise ValueError(
-                    "DEBUG mode must be disabled in production (set DEBUG=false)"
-                )
+                raise ValueError("DEBUG mode must be disabled in production (set DEBUG=false)")
             if self.reload:
-                raise ValueError(
-                    "Auto-reload must be disabled in production (set RELOAD=false)"
-                )
+                raise ValueError("Auto-reload must be disabled in production (set RELOAD=false)")
             if self.host == "0.0.0.0":
                 raise ValueError(
                     "Host must not be 0.0.0.0 in production (use 127.0.0.1 or specific IP)"
@@ -410,14 +371,14 @@ class Settings(BaseSettings):
         # Parse Supabase URL to extract project reference
         # Format: https://[project-ref].supabase.co
         parsed = urlparse(self.supabase_url)
-        hostname = parsed.netloc or parsed.path.rstrip('/')
+        hostname = parsed.netloc or parsed.path.rstrip("/")
 
         # Extract project reference by removing .supabase.co suffix
-        if hostname.endswith('.supabase.co'):
-            project_ref = hostname[:-len('.supabase.co')]
+        if hostname.endswith(".supabase.co"):
+            project_ref = hostname[: -len(".supabase.co")]
         else:
             # Fallback: use hostname as-is (for custom domains or local dev)
-            project_ref = hostname.rstrip('/').lower()
+            project_ref = hostname.rstrip("/").lower()
 
         # Build PostgreSQL connection string using Transaction Pooler
         # Transaction pooler is ideal for serverless/short-lived connections

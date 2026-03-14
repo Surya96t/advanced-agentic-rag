@@ -38,30 +38,20 @@ class SearchResult(BaseSchema):
     - Reranked score: cross-encoder score (0.0 to 1.0, higher is better)
     - Original score: Preserved from vector/text search for user display
     """
+
     chunk_id: UUID = Field(..., description="Chunk UUID")
     document_id: UUID = Field(..., description="Parent document UUID")
     document_title: str = Field(..., description="Parent document title")
     content: str = Field(..., description="Chunk text content")
-    metadata: dict = Field(
-        default_factory=dict,
-        description="JSONB metadata from chunk"
-    )
-    score: float = Field(
-        ...,
-        description="Relevance score (interpretation varies by source)"
-    )
+    metadata: dict = Field(default_factory=dict, description="JSONB metadata from chunk")
+    score: float = Field(..., description="Relevance score (interpretation varies by source)")
     original_score: float | None = Field(
         default=None,
-        description="Original cosine similarity or text rank before RRF fusion (for display to users)"
+        description="Original cosine similarity or text rank before RRF fusion (for display to users)",
     )
-    rank: int = Field(
-        ...,
-        ge=1,
-        description="Position in result list (1-indexed)"
-    )
+    rank: int = Field(..., ge=1, description="Position in result list (1-indexed)")
     source: Literal["vector", "text", "hybrid", "reranked"] = Field(
-        ...,
-        description="Search method that produced this result"
+        ..., description="Search method that produced this result"
     )
 
 
@@ -84,27 +74,22 @@ class SearchConfig(BaseSchema):
     - ts_rank_cd: Better than ts_rank (considers term proximity)
     - hybrid_alpha: 0.5 = balanced, 1.0 = vector only, 0.0 = text only
     """
-    top_k: int = Field(
-        default=10,
-        ge=1,
-        le=100,
-        description="Number of chunks to retrieve"
-    )
+
+    top_k: int = Field(default=10, ge=1, le=100, description="Number of chunks to retrieve")
     min_similarity: float = Field(
         default=0.0,
         ge=0.0,
         le=1.0,
-        description="Minimum cosine similarity threshold (vector search)"
+        description="Minimum cosine similarity threshold (vector search)",
     )
     text_rank_function: Literal["ts_rank", "ts_rank_cd"] = Field(
-        default="ts_rank_cd",
-        description="PostgreSQL text ranking function"
+        default="ts_rank_cd", description="PostgreSQL text ranking function"
     )
     hybrid_alpha: float = Field(
         default=0.5,
         ge=0.0,
         le=1.0,
-        description="Weight for vector search in hybrid mode (0=text, 1=vector)"
+        description="Weight for vector search in hybrid mode (0=text, 1=vector)",
     )
 
 
@@ -126,17 +111,11 @@ class RerankConfig(BaseSchema):
     - FlashRank: Fast local model (~50ms for 20 chunks)
     - Cohere: Higher quality but requires API call (~100-200ms)
     """
-    enabled: bool = Field(
-        default=True,
-        description="Enable re-ranking"
-    )
+
+    enabled: bool = Field(default=True, description="Enable re-ranking")
     top_k: int = Field(
-        default=5,
-        ge=1,
-        le=50,
-        description="Number of results to keep after re-ranking"
+        default=5, ge=1, le=50, description="Number of results to keep after re-ranking"
     )
     model: Literal["flashrank", "cohere"] = Field(
-        default="flashrank",
-        description="Re-ranking model to use"
+        default="flashrank", description="Re-ranking model to use"
     )

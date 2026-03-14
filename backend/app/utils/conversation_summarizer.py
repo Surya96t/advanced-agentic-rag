@@ -123,9 +123,7 @@ Summary:"""
             return await self.summarize_messages(messages)
 
         # Split into chunks
-        chunks = [
-            messages[i: i + chunk_size] for i in range(0, len(messages), chunk_size)
-        ]
+        chunks = [messages[i : i + chunk_size] for i in range(0, len(messages), chunk_size)]
 
         # Summarize each chunk
         chunk_summaries = []
@@ -136,7 +134,7 @@ Summary:"""
         # Summarize the summaries
         final_prompt = f"""Combine these conversation summaries into one concise summary:
 
-{chr(10).join(f"{i+1}. {s}" for i, s in enumerate(chunk_summaries))}
+{chr(10).join(f"{i + 1}. {s}" for i, s in enumerate(chunk_summaries))}
 
 Final summary:"""
         response = await self.llm.ainvoke([HumanMessage(content=final_prompt)])

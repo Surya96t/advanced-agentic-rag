@@ -118,6 +118,7 @@ class TextSearcher:
             # Call stored procedure for text search
             # Uses the search_chunks_by_text() function from migration 004
             import time
+
             start_db = time.time()
             logger.debug("Executing text search query")
 
@@ -128,7 +129,7 @@ class TextSearcher:
                     "match_count": config.top_k,
                     "filter_user_id": user_id,
                     "ranking_function": config.text_rank_function,
-                }
+                },
             )
             result = await asyncio.to_thread(rpc_call.execute)
             db_time = time.time() - start_db
@@ -152,8 +153,7 @@ class TextSearcher:
                     SearchResult(
                         chunk_id=UUID(row["id"]),
                         document_id=UUID(row["document_id"]),
-                        document_title=row.get(
-                            "document_title", "Unknown Document"),
+                        document_title=row.get("document_title", "Unknown Document"),
                         content=row["content"],
                         metadata=row.get("metadata", {}),
                         score=text_rank,
@@ -253,10 +253,7 @@ class TextSearcher:
 
             # Apply document_id filter
             if document_ids:
-                results = [
-                    r for r in results
-                    if r.document_id in document_ids
-                ]
+                results = [r for r in results if r.document_id in document_ids]
 
             # Apply metadata filters
             if metadata_filters:

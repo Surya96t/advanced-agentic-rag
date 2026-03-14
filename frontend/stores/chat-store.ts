@@ -492,7 +492,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
    * Note: Navigation to /chat should be handled by the caller
    */
   createNewChat: () => {
-    console.log('[Store] Creating new chat (lazy creation)')
     set({
       currentThreadId: null, // null = new chat (thread created on first message)
       messages: [],
@@ -525,13 +524,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         (currentState.isLoading && isSameThread) ||
         (currentState.messages.length > 0 && isSameThread)
       ) {
-        console.log('[loadThread] Skipping load - stream active or already on this thread', {
-          streaming: currentState.streamingMessageId !== null,
-          messageCount: currentState.messages.length,
-          currentThreadId: currentState.currentThreadId,
-          requestedThreadId: threadId,
-          isSameThread
-        })
         // Just update the threadId to match the URL, keep existing messages
         // Only do this if we're staying on the same thread
         if (isSameThread) {
@@ -639,8 +631,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   
   updateThreadTitle: async (threadId: string, title: string) => {
     try {
-      console.log('[Store] Updating thread title:', { threadId, title })
-      
       const response = await fetch(`/api/threads/${threadId}`, {
         method: 'PATCH',
         headers: {
@@ -659,8 +649,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         })
         throw new Error(`Failed to update thread: ${response.status} ${errorText}`)
       }
-      
-      console.log('[Store] Thread title updated successfully')
     } catch (error) {
       console.error('Failed to update thread title:', error)
       set({ error: 'Failed to update conversation title' })

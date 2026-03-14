@@ -55,10 +55,10 @@ logger = get_logger(__name__)
 
 DEFAULT_SEPARATORS = [
     "\n\n",  # Double newline (paragraphs)
-    "\n",    # Single newline (lines)
-    ". ",    # Period + space (sentences)
-    " ",     # Space (words)
-    "",      # Character (last resort)
+    "\n",  # Single newline (lines)
+    ". ",  # Period + space (sentences)
+    " ",  # Space (words)
+    "",  # Character (last resort)
 ]
 
 
@@ -288,8 +288,7 @@ class RecursiveChunker(BaseChunker):
 
         # Defensive: should not happen with DEFAULT_SEPARATORS, but guard anyway
         raise ValueError(
-            f"No separator matched chunk (length: {len(chunk)}). "
-            f"Separators list: {self.separators}"
+            f"No separator matched chunk (length: {len(chunk)}). Separators list: {self.separators}"
         )
 
     def add_separator_metadata(self, chunks: list[Chunk]) -> list[Chunk]:
@@ -358,16 +357,16 @@ class MarkdownRecursiveChunker(RecursiveChunker):
     ) -> None:
         """Initialize Markdown-optimized recursive chunker."""
         markdown_separators = [
-            "\n## ",    # H2 headers
-            "\n### ",   # H3 headers
+            "\n## ",  # H2 headers
+            "\n### ",  # H3 headers
             "\n#### ",  # H4 headers
             "\n---\n",  # Horizontal rules
-            "```\n",    # Code block boundaries
-            "\n\n",     # Paragraphs
-            "\n",       # Lines
-            ". ",       # Sentences
-            " ",        # Words
-            "",         # Characters
+            "```\n",  # Code block boundaries
+            "\n\n",  # Paragraphs
+            "\n",  # Lines
+            ". ",  # Sentences
+            " ",  # Words
+            "",  # Characters
         ]
 
         super().__init__(
@@ -408,11 +407,11 @@ class CodeRecursiveChunker(RecursiveChunker):
     ) -> None:
         """Initialize code-optimized recursive chunker."""
         code_separators = [
-            "\n\n\n",   # Multiple blank lines (function/class boundaries)
-            "\n\n",     # Double newline
-            "\n",       # Single newline
-            " ",        # Space
-            "",         # Character
+            "\n\n\n",  # Multiple blank lines (function/class boundaries)
+            "\n\n",  # Double newline
+            "\n",  # Single newline
+            " ",  # Space
+            "",  # Character
         ]
 
         super().__init__(

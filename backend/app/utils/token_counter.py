@@ -27,6 +27,7 @@ class TokenCounter:
         except KeyError:
             # Model not recognized, use cl100k_base (GPT-4 default encoding)
             import logging
+
             logger = logging.getLogger(__name__)
             logger.warning(
                 f"Model '{model}' not recognized by tiktoken. "
@@ -69,8 +70,7 @@ class TokenCounter:
                 if isinstance(item, dict):
                     # Extract known textual fields from multimodal content blocks
                     # Common fields: "text" (text blocks), "caption" (images), "alt" (images), "content"
-                    textual_fields = ["text", "content",
-                                      "caption", "alt", "description"]
+                    textual_fields = ["text", "content", "caption", "alt", "description"]
                     extracted_text = None
 
                     for field in textual_fields:

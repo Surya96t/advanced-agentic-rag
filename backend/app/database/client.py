@@ -95,7 +95,7 @@ class SupabaseClient:
 
             # Basic check: client exists and has the expected structure
             # This verifies configuration is correct and client initialized
-            if client is not None and hasattr(client, 'table'):
+            if client is not None and hasattr(client, "table"):
                 logger.debug("Database client health check passed")
                 return True
 

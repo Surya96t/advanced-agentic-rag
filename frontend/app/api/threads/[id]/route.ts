@@ -96,20 +96,12 @@ export async function PATCH(
       )
     }
 
-    console.log('[BFF PATCH] Updating thread:', { threadId, body })
-
     const response = await apiFetch(`/api/v1/threads/${threadId}`, {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
-    })
-
-    console.log('[BFF PATCH] Backend response:', {
-      status: response.status,
-      statusText: response.statusText,
-      ok: response.ok
     })
 
     if (!response.ok) {
@@ -122,7 +114,6 @@ export async function PATCH(
     }
 
     const data = await response.json()
-    console.log('[BFF PATCH] Success:', data)
     return NextResponse.json(data)
   } catch (error) {
     console.error('[BFF PATCH] Failed to update thread:', error)

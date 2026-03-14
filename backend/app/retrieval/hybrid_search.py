@@ -281,14 +281,8 @@ class HybridSearcher:
         )
 
         # Build rank maps: chunk_id -> rank
-        vector_ranks: dict[UUID, int] = {
-            result.chunk_id: result.rank
-            for result in vector_results
-        }
-        text_ranks: dict[UUID, int] = {
-            result.chunk_id: result.rank
-            for result in text_results
-        }
+        vector_ranks: dict[UUID, int] = {result.chunk_id: result.rank for result in vector_results}
+        text_ranks: dict[UUID, int] = {result.chunk_id: result.rank for result in text_results}
 
         # Build chunk map for metadata (use vector first, fallback to text)
         chunk_map: dict[UUID, SearchResult] = {}
@@ -413,9 +407,7 @@ class HybridSearcher:
             logger.warning("Parent-swap info query failed; returning originals", error=str(exc))
             return results
 
-        chunk_info: dict[str, dict] = {
-            row["id"]: row for row in (info_result.data or [])
-        }
+        chunk_info: dict[str, dict] = {row["id"]: row for row in (info_result.data or [])}
 
         # Step 2: find which results are children with a parent
         parent_ids_needed: set[str] = {
@@ -444,8 +436,7 @@ class HybridSearcher:
             return results
 
         parent_content: dict[str, str] = {
-            row["id"]: row["content"]
-            for row in (parent_result.data or [])
+            row["id"]: row["content"] for row in (parent_result.data or [])
         }
 
         # Step 4: rebuild result list with swapped content

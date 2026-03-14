@@ -15,6 +15,7 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+
 class DatabasePool:
     _pool: AsyncConnectionPool | None = None
 
@@ -26,10 +27,10 @@ class DatabasePool:
             try:
                 cls._pool = AsyncConnectionPool(
                     conninfo=settings.supabase_connection_string,
-                    open=False, # We'll open explicitly
+                    open=False,  # We'll open explicitly
                     min_size=1,
                     max_size=10,
-                    timeout=30.0
+                    timeout=30.0,
                 )
                 await cls._pool.open()
                 logger.info("Database connection pool initialized")
@@ -51,10 +52,11 @@ class DatabasePool:
         """Get a connection from the pool."""
         if cls._pool is None:
             # Fallback initialization for dev/scripts (not ideal for prod)
-             await cls.open()
+            await cls.open()
 
         async with cls._pool.connection() as conn:
             yield conn
+
 
 # Global instance accessor
 async def get_db_pool() -> AsyncConnectionPool:

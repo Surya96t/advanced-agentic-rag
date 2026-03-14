@@ -188,8 +188,7 @@ class EmbeddingClient:
 
         # Remove empty strings and track original indices
         # Learning Note: OpenAI API rejects empty strings, so we filter them
-        valid_texts = [(i, text)
-                       for i, text in enumerate(texts) if text.strip()]
+        valid_texts = [(i, text) for i, text in enumerate(texts) if text.strip()]
         if not valid_texts:
             raise ValueError("All texts are empty after stripping whitespace")
 
@@ -203,7 +202,7 @@ class EmbeddingClient:
         # Split into batches
         all_embeddings: list[list[float] | None] = [None] * len(texts)
         batches = [
-            valid_texts[i: i + self.batch_size]
+            valid_texts[i : i + self.batch_size]
             for i in range(0, len(valid_texts), self.batch_size)
         ]
 
@@ -377,8 +376,7 @@ class EmbeddingClient:
 
                 # Don't retry auth or input errors
                 # Check status code via structured attributes (not string matching)
-                status_code = getattr(e, "status_code", None) or getattr(
-                    e, "status", None)
+                status_code = getattr(e, "status_code", None) or getattr(e, "status", None)
 
                 if status_code in (400, 401):
                     logger.error(
@@ -455,8 +453,7 @@ class EmbeddingClient:
         """
         if len(vector) != self.dimensions:
             raise ValueError(
-                f"Vector dimension mismatch: expected {self.dimensions}, "
-                f"got {len(vector)}"
+                f"Vector dimension mismatch: expected {self.dimensions}, got {len(vector)}"
             )
 
     def get_usage_stats(self) -> dict[str, Any]:

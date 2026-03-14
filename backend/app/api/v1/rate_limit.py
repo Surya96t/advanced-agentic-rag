@@ -85,4 +85,3 @@ def get_rate_limit_status(user_id: UserID) -> RateLimitStatusResponse:
         documents=_peek("documents"),
         enabled=True,
     )
-

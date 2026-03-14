@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 llm = ChatOpenAI(
     model=settings.openai_model,
     temperature=0.7,  # Higher temperature for creative expansion
-    api_key=settings.openai_api_key
+    api_key=settings.openai_api_key,
 )
 
 
@@ -132,8 +132,7 @@ async def generate_hyde(query: str) -> str:
         "When experiencing user synchronization issues, common causes include..."
         (200-word technical explanation)
     """
-    logger.info(
-        f"Generating hypothetical document for ambiguous query: {query[:100]}...")
+    logger.info(f"Generating hypothetical document for ambiguous query: {query[:100]}...")
 
     try:
         # Call LLM for HyDE generation
@@ -142,8 +141,7 @@ async def generate_hyde(query: str) -> str:
 
         hypothetical_doc = response.content.strip()
 
-        logger.info(
-            f"Generated hypothetical document ({len(hypothetical_doc)} chars)")
+        logger.info(f"Generated hypothetical document ({len(hypothetical_doc)} chars)")
         logger.debug(f"HyDE content: {hypothetical_doc[:200]}...")
 
         return hypothetical_doc
@@ -191,14 +189,14 @@ async def query_expander_node(state: AgentState) -> dict:
 
     logger.info(
         f"⏱️  QUERY_EXPANDER NODE: Starting {complexity} query expansion"
-        f"{f' (retry {retry_count})' if retry_count else ''}")
+        f"{f' (retry {retry_count})' if retry_count else ''}"
+    )
 
     # On retry (validator rejected the previous answer), always decompose even
     # for "simple" queries — the single-query search already failed, so trying
     # sub-queries gives the retriever a chance to find different chunks.
     if retry_count > 0 and complexity == "simple":
-        logger.info(
-            "Retry detected for simple query — upgrading to sub-query decomposition")
+        logger.info("Retry detected for simple query — upgrading to sub-query decomposition")
         complexity = "complex"
 
     # Select strategy based on complexity
@@ -224,18 +222,17 @@ async def query_expander_node(state: AgentState) -> dict:
         # Simple queries don't need expansion, pass through
         # Note: Router should send simple queries directly to retriever,
         # but if they somehow reach here, just use original query
-        logger.info(
-            "Simple query detected, using original query without expansion")
+        logger.info("Simple query detected, using original query without expansion")
         expanded = [query]
 
     else:
         # Unexpected complexity value
-        logger.warning(
-            f"Unknown complexity '{complexity}' in expander, using original query")
+        logger.warning(f"Unknown complexity '{complexity}' in expander, using original query")
         expanded = [query]
 
     elapsed_time = time.time() - start_time
     logger.info(
-        f"⏱️  QUERY_EXPANDER NODE: Completed in {elapsed_time:.3f}s | Generated {len(expanded)} queries")
+        f"⏱️  QUERY_EXPANDER NODE: Completed in {elapsed_time:.3f}s | Generated {len(expanded)} queries"
+    )
 
     return {"expanded_queries": expanded}

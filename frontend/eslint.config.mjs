@@ -15,8 +15,8 @@ const eslintConfig = defineConfig([
   ]),
   {
     rules: {
-      // Disallow console.log in production code; console.warn/error are allowed.
-      "no-console": ["warn", { allow: ["warn", "error"] }],
+      // Disallow console.log in production code; console.warn/error are permitted.
+      "no-console": ["error", { allow: ["warn", "error"] }],
     },
   },
 ]);

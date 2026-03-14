@@ -75,11 +75,13 @@ def _is_transient(exc: BaseException) -> bool:
     # Network / timeout errors from httpx (used by openai SDK) and stdlib
     try:
         import httpx
+
         if isinstance(exc, (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError)):
             return True
     except ImportError:
         pass
     import socket
+
     if isinstance(exc, (TimeoutError, ConnectionError, socket.timeout, OSError)):
         return True
     return False

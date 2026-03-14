@@ -26,29 +26,18 @@ class IngestRequest(BaseModel):
         source_id: Parent source ID
         metadata: Optional metadata tags
     """
-    user_id: str = Field(
-        ...,
-        description="User ID (Clerk format: user_xxx)"
-    )
+
+    user_id: str = Field(..., description="User ID (Clerk format: user_xxx)")
     content: str = Field(
         ...,
         min_length=1,
         max_length=10_000_000,  # 10MB as text
-        description="Raw document content"
+        description="Raw document content",
     )
-    title: str = Field(
-        ...,
-        min_length=1,
-        max_length=500,
-        description="Document title"
-    )
-    source_id: UUID = Field(
-        ...,
-        description="Parent source ID"
-    )
+    title: str = Field(..., min_length=1, max_length=500, description="Document title")
+    source_id: UUID = Field(..., description="Parent source ID")
     metadata: dict[str, str] | None = Field(
-        default=None,
-        description="Optional metadata (tags, categories, etc.)"
+        default=None, description="Optional metadata (tags, categories, etc.)"
     )
 
     model_config = ConfigDict(
@@ -58,10 +47,7 @@ class IngestRequest(BaseModel):
                 "content": "# LangGraph Tutorial\n\nLangGraph is a library for building...",
                 "title": "LangGraph Quick Start",
                 "source_id": "550e8400-e29b-41d4-a716-446655440000",
-                "metadata": {
-                    "tags": "langgraph,tutorial",
-                    "category": "getting-started"
-                }
+                "metadata": {"tags": "langgraph,tutorial", "category": "getting-started"},
             }
         }
     )
@@ -80,23 +66,14 @@ class SearchRequest(BaseModel):
         source_ids: Optional filter by specific sources
         config: Search configuration (top_k, min_similarity, etc.)
     """
-    query: str = Field(
-        ...,
-        min_length=1,
-        max_length=1000,
-        description="Search query text"
-    )
-    user_id: str = Field(
-        ...,
-        description="User ID for Row-Level Security filtering"
-    )
+
+    query: str = Field(..., min_length=1, max_length=1000, description="Search query text")
+    user_id: str = Field(..., description="User ID for Row-Level Security filtering")
     source_ids: list[UUID] = Field(
-        default_factory=list,
-        description="Filter search to specific sources (empty = search all)"
+        default_factory=list, description="Filter search to specific sources (empty = search all)"
     )
     config: SearchConfig = Field(
-        default_factory=SearchConfig,
-        description="Search configuration parameters"
+        default_factory=SearchConfig, description="Search configuration parameters"
     )
 
     model_config = ConfigDict(
@@ -109,8 +86,8 @@ class SearchRequest(BaseModel):
                     "top_k": 10,
                     "min_similarity": 0.7,
                     "text_rank_function": "ts_rank_cd",
-                    "hybrid_alpha": 0.5
-                }
+                    "hybrid_alpha": 0.5,
+                },
             }
         }
     )

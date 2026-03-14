@@ -45,6 +45,7 @@ class ChunkType(str, Enum):
     - CHILD: Small searchable chunks (256 tokens), embedded
     - Search finds children (precise), return parents (contextual)
     """
+
     PARENT = "parent"
     CHILD = "child"
 
@@ -55,6 +56,7 @@ class ChunkStrategy(str, Enum):
 
     Tracks which chunker created each chunk for debugging and analytics.
     """
+
     RECURSIVE = "recursive"
     SEMANTIC = "semantic"
     PARENT_CHILD = "parent_child"
@@ -100,6 +102,7 @@ class Chunk:
     - Filtering: Search only code chunks, or only from specific sections
     - Analytics: Measure which sections get queried most
     """
+
     content: str
     chunk_index: int
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -119,8 +122,7 @@ class Chunk:
 
     def __repr__(self) -> str:
         """String representation for debugging."""
-        preview = self.content[:50] + \
-            "..." if len(self.content) > 50 else self.content
+        preview = self.content[:50] + "..." if len(self.content) > 50 else self.content
         return (
             f"Chunk(index={self.chunk_index}, "
             f"type={self.chunk_type.value}, "
@@ -378,9 +380,7 @@ class BaseChunker(ABC):
         indices = [chunk.chunk_index for chunk in chunks]
         expected_indices = list(range(len(chunks)))
         if indices != expected_indices:
-            raise ValueError(
-                f"Chunk indices are not sequential: {indices} != {expected_indices}"
-            )
+            raise ValueError(f"Chunk indices are not sequential: {indices} != {expected_indices}")
 
         logger.debug(
             "Chunks validated",

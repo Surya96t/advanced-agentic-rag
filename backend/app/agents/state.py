@@ -93,6 +93,7 @@ class AgentState(TypedDict, total=False):
         - Annotated types like Annotated[list, add_messages] use reducer functions
         - Reducers control how state updates are merged (append, replace, etc.)
     """
+
     # Conversation history (required field, uses LangChain's message reducer)
     messages: Annotated[list[AnyMessage], add_messages]
 
@@ -101,14 +102,15 @@ class AgentState(TypedDict, total=False):
 
     # Query processing (original_query is required)
     original_query: str
-    retrieval_query: str  # Cleaned/rewritten query used for retrieval (format instructions stripped)
+    retrieval_query: (
+        str  # Cleaned/rewritten query used for retrieval (format instructions stripped)
+    )
     query: str  # Current working query (may be expanded/rewritten)
     expanded_queries: list[str]
     query_complexity: Literal["simple", "complex", "ambiguous"]
 
     # Conversational features (NEW)
-    query_type: Literal["simple",
-                        "conversational_followup", "complex_standalone"]
+    query_type: Literal["simple", "conversational_followup", "complex_standalone"]
     needs_retrieval: bool
     conversation_summary: str
     context_window_tokens: int

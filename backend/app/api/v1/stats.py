@@ -1,4 +1,3 @@
-
 import asyncio
 
 from cachetools import TTLCache
@@ -24,6 +23,7 @@ class DashboardStats(BaseModel):
     """
     Validation schema for dashboard statistics response.
     """
+
     # Database stats
     documents_count: int
     chunks_count: int
@@ -36,25 +36,36 @@ class DashboardStats(BaseModel):
     avg_latency_seconds: float = Field(0.0, description="Average response latency in seconds")
     error_rate: float = Field(0.0, description="Percentage of failed runs (0.0-1.0)")
 
+
 # --- Helper Functions for Parallel Execution ---
+
 
 async def count_user_documents(user_id: str) -> int:
     try:
         supabase = SupabaseClient.get_client()
-        res = supabase.table("documents").select("id", count="exact").eq("user_id", user_id).execute()
+        res = (
+            supabase.table("documents").select("id", count="exact").eq("user_id", user_id).execute()
+        )
         return res.count if res.count is not None else 0
     except Exception as e:
         logger.error(f"Failed to count documents: {e}")
         return 0
 
+
 async def count_user_chunks(user_id: str) -> int:
     try:
         supabase = SupabaseClient.get_client()
-        res = supabase.table("document_chunks").select("id", count="exact").eq("user_id", user_id).execute()
+        res = (
+            supabase.table("document_chunks")
+            .select("id", count="exact")
+            .eq("user_id", user_id)
+            .execute()
+        )
         return res.count if res.count is not None else 0
     except Exception as e:
         logger.error(f"Failed to count chunks: {e}")
         return 0
+
 
 async def count_user_conversations(user_id: str) -> int:
     try:
@@ -78,6 +89,7 @@ async def count_user_conversations(user_id: str) -> int:
         logger.error(f"Failed to count conversations: {e}")
         return 0
 
+
 async def get_db_stats(user_id: str) -> tuple[int, int, int]:
     """Helper to get DB stats with simple caching."""
     # Check cache first (DB stats change on explicit actions, can be slightly stale)
@@ -91,7 +103,7 @@ async def get_db_stats(user_id: str) -> tuple[int, int, int]:
             count_user_documents(user_id),
             count_user_chunks(user_id),
             count_user_conversations(user_id),
-            return_exceptions=True
+            return_exceptions=True,
         )
 
         # Unpack safely
@@ -110,9 +122,7 @@ async def get_db_stats(user_id: str) -> tuple[int, int, int]:
 
 
 @router.get("/", response_model=DashboardStats)
-async def get_dashboard_stats(
-    user_id: UserID
-) -> DashboardStats:
+async def get_dashboard_stats(user_id: UserID) -> DashboardStats:
     """
     Get dashboard statistics for the authenticated user.
 
@@ -141,7 +151,7 @@ async def get_dashboard_stats(
             logger.error(f"DB Stats Task failed: {db_res}")
 
         # Unpack LS Stats
-        ls_metrics = LangSmithMetrics() # Default empty
+        ls_metrics = LangSmithMetrics()  # Default empty
         if isinstance(ls_res, LangSmithMetrics):
             ls_metrics = ls_res
         elif isinstance(ls_res, Exception):
@@ -156,7 +166,7 @@ async def get_dashboard_stats(
             total_tokens=ls_metrics.total_tokens,
             total_cost=ls_metrics.total_cost,
             avg_latency_seconds=ls_metrics.avg_latency_seconds,
-            error_rate=ls_metrics.error_rate
+            error_rate=ls_metrics.error_rate,
         )
 
     except Exception as e:

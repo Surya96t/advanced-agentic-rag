@@ -64,7 +64,7 @@ def get_message_hash(message: str) -> str:
     - GDPR/privacy compliant (no personal data stored)
     """
     # Create SHA-256 hash of the full message
-    hash_obj = hashlib.sha256(message.encode('utf-8'))
+    hash_obj = hashlib.sha256(message.encode("utf-8"))
     full_hash = hash_obj.hexdigest()
 
     # In development, use shorter hash for readability
@@ -135,6 +135,7 @@ async def sse_generator(
         # never adds latency to token delivery.
         if is_new_thread:
             from app.utils.title_generator import generate_title
+
             title_task = asyncio.create_task(generate_title(query))
 
         # Send thread_created event for new threads IMMEDIATELY (before streaming)
@@ -142,12 +143,11 @@ async def sse_generator(
         if is_new_thread:
             thread_created_event = {
                 "event": "thread_created",
-                "data": json.dumps({"thread_id": str(thread_id)})
+                "data": json.dumps({"thread_id": str(thread_id)}),
             }
             yield f"event: {thread_created_event['event']}\ndata: {thread_created_event['data']}\n\n"
             logger.info(
-                "Thread created event sent",
-                extra={"user_id": user_id, "thread_id": str(thread_id)}
+                "Thread created event sent", extra={"user_id": user_id, "thread_id": str(thread_id)}
             )
 
         async for event in stream_agent(query, thread_id, user_id, checkpointer=checkpointer):
@@ -155,7 +155,7 @@ async def sse_generator(
             if await request.is_disconnected():
                 logger.info(
                     "Client disconnected, stopping stream",
-                    extra={"user_id": user_id, "thread_id": str(thread_id)}
+                    extra={"user_id": user_id, "thread_id": str(thread_id)},
                 )
                 metrics.record_disconnect()
                 break
@@ -170,7 +170,7 @@ async def sse_generator(
             except json.JSONDecodeError:
                 logger.warning(
                     "Failed to parse event data",
-                    extra={"user_id": user_id, "event_type": event_type}
+                    extra={"user_id": user_id, "event_type": event_type},
                 )
                 continue
 
@@ -180,8 +180,7 @@ async def sse_generator(
                 is_valid, error_msg = validator.validate_token(token, user_id)
                 if not is_valid:
                     logger.warning(
-                        "Invalid token blocked",
-                        extra={"user_id": user_id, "error": error_msg}
+                        "Invalid token blocked", extra={"user_id": user_id, "error": error_msg}
                     )
                     metrics.record_error(f"Invalid token: {error_msg}")
                     continue
@@ -196,8 +195,7 @@ async def sse_generator(
                 )
                 if not is_valid:
                     logger.warning(
-                        "Invalid citation blocked",
-                        extra={"user_id": user_id, "error": error_msg}
+                        "Invalid citation blocked", extra={"user_id": user_id, "error": error_msg}
                     )
                     metrics.record_error(f"Invalid citation: {error_msg}")
                     continue
@@ -226,6 +224,7 @@ async def sse_generator(
         # ------------------------------------------------------------------
         if title_task is not None:
             from app.schemas.events import ThreadTitleEvent
+
             try:
                 title = await asyncio.wait_for(title_task, timeout=10.0)
                 title_task = None  # Mark as consumed
@@ -276,35 +275,27 @@ async def sse_generator(
                 )
 
     except asyncio.CancelledError:
-        logger.info(
-            "Stream cancelled",
-            extra={"user_id": user_id, "thread_id": str(thread_id)}
-        )
+        logger.info("Stream cancelled", extra={"user_id": user_id, "thread_id": str(thread_id)})
         metrics.record_cancel()
         raise
 
     except Exception as e:
         logger.error(
-            "Error in SSE stream",
-            extra={"error": str(e), "user_id": user_id},
-            exc_info=True
+            "Error in SSE stream", extra={"error": str(e), "user_id": user_id}, exc_info=True
         )
         metrics.record_error(str(e))
 
         # Send error event
         error_event = {
             "event": SSEEventType.AGENT_ERROR.value,
-            "data": json.dumps({
-                "error": str(e),
-                "message": "Stream encountered an error"
-            })
+            "data": json.dumps({"error": str(e), "message": "Stream encountered an error"}),
         }
         yield f"event: {error_event['event']}\ndata: {error_event['data']}\n\n"
 
         # Send end event
         end_event = {
             "event": SSEEventType.END.value,
-            "data": json.dumps({"done": True, "error": True})
+            "data": json.dumps({"done": True, "error": True}),
         }
         yield f"event: {end_event['event']}\ndata: {end_event['data']}\n\n"
 
@@ -315,10 +306,7 @@ async def sse_generator(
         # thread_created event now sent at stream start (not here)
         # Finalize and log metrics
         metrics.finalize()
-        logger.debug(
-            "Stream metrics",
-            extra={"metrics": metrics.to_dict()}
-        )
+        logger.debug("Stream metrics", extra={"metrics": metrics.to_dict()})
 
 
 # ============================================================================
@@ -370,7 +358,7 @@ async def chat(
             "message_hash": get_message_hash(chat_request.message),
             "stream": chat_request.stream,
             "thread_id": str(chat_request.thread_id) if chat_request.thread_id else "new",
-        }
+        },
     )
 
     # Thread ID resolution:
@@ -381,7 +369,7 @@ async def chat(
         is_new_thread = True
         logger.info(
             "Creating new thread (legacy: backend-generated ID)",
-            extra={"user_id": user_id, "thread_id": thread_id}
+            extra={"user_id": user_id, "thread_id": thread_id},
         )
     else:
         thread_id = str(chat_request.thread_id)  # Convert UUID to string
@@ -390,7 +378,7 @@ async def chat(
         if is_new_thread:
             logger.info(
                 "Creating new thread (client-generated ID)",
-                extra={"user_id": user_id, "thread_id": thread_id}
+                extra={"user_id": user_id, "thread_id": thread_id},
             )
             # Security: verify the claimed-new thread ID truly has no existing state.
             # Without this check a malicious client could supply an existing thread's
@@ -408,16 +396,16 @@ async def chat(
                 )
             try:
                 from app.agents.graph import get_graph
+
                 graph_instance = get_graph(verify_checkpointer)
                 existing_state = await graph_instance.aget_state(
-                    config={"configurable": {
-                        "thread_id": thread_id, "checkpoint_ns": ""}},
+                    config={"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}},
                     subgraphs=False,
                 )
                 if existing_state.values:
                     logger.warning(
                         "Client claimed is_new_thread=True for an existing thread ID",
-                        extra={"user_id": user_id, "thread_id": thread_id}
+                        extra={"user_id": user_id, "thread_id": thread_id},
                     )
                     raise HTTPException(
                         status_code=status.HTTP_409_CONFLICT,
@@ -437,8 +425,7 @@ async def chat(
                 )
         else:
             logger.debug(
-                "Using existing thread",
-                extra={"user_id": user_id, "thread_id": thread_id}
+                "Using existing thread", extra={"user_id": user_id, "thread_id": thread_id}
             )
 
     # Ownership verification for existing threads
@@ -451,7 +438,7 @@ async def chat(
             # Fail closed: deny the request rather than skipping authorization.
             logger.error(
                 "Checkpointer unavailable; denying access to existing thread",
-                extra={"user_id": user_id, "thread_id": thread_id}
+                extra={"user_id": user_id, "thread_id": thread_id},
             )
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -467,20 +454,17 @@ async def chat(
 
                 # Get the current state to verify ownership
                 existing_state = await graph_instance.aget_state(
-                    config={"configurable": {
-                        "thread_id": thread_id, "checkpoint_ns": ""}},
-                    subgraphs=False
+                    config={"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}},
+                    subgraphs=False,
                 )
 
                 # Check if thread exists
                 if not existing_state.values:
                     logger.warning(
-                        "Thread not found",
-                        extra={"user_id": user_id, "thread_id": thread_id}
+                        "Thread not found", extra={"user_id": user_id, "thread_id": thread_id}
                     )
                     raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail="Thread not found"
+                        status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found"
                     )
 
                 # Verify ownership
@@ -491,12 +475,12 @@ async def chat(
                         extra={
                             "user_id": user_id,
                             "thread_id": thread_id,
-                            "owner_id": state_user_id
-                        }
+                            "owner_id": state_user_id,
+                        },
                     )
                     raise HTTPException(
                         status_code=status.HTTP_404_NOT_FOUND,
-                        detail="Thread not found"  # Don't reveal existence to unauthorized user
+                        detail="Thread not found",  # Don't reveal existence to unauthorized user
                     )
 
             except HTTPException:
@@ -508,15 +492,14 @@ async def chat(
                         "user_id": user_id,
                         "thread_id": thread_id,
                         "error": str(e),
-                        "error_type": type(e).__name__
+                        "error_type": type(e).__name__,
                     },
-                    exc_info=True
+                    exc_info=True,
                 )
                 # Fail closed: deny access if we can't verify ownership
                 # This is more secure than allowing unverified access
                 raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Unable to verify thread access"
+                    status_code=status.HTTP_403_FORBIDDEN, detail="Unable to verify thread access"
                 )
 
     # Note: No need to manually initialize thread state for new threads
@@ -532,8 +515,7 @@ async def chat(
         if chat_request.stream:
             # === STREAMING MODE (SSE) ===
             logger.debug(
-                "Starting SSE stream",
-                extra={"user_id": user_id, "thread_id": str(thread_id)}
+                "Starting SSE stream", extra={"user_id": user_id, "thread_id": str(thread_id)}
             )
 
             return StreamingResponse(
@@ -553,14 +535,14 @@ async def chat(
                     "X-RateLimit-Limit": str(limit),
                     "X-RateLimit-Remaining": str(remaining),
                     "X-RateLimit-Reset": str(reset_time),
-                }
+                },
             )
 
         else:
             # === NON-STREAMING MODE (JSON) ===
             logger.debug(
                 "Running non-streaming chat",
-                extra={"user_id": user_id, "thread_id": str(thread_id)}
+                extra={"user_id": user_id, "thread_id": str(thread_id)},
             )
 
             # Cache check — only for single-turn queries (new threads).
@@ -581,6 +563,7 @@ async def chat(
                 # prior request cannot leak a different thread's identity.
                 sanitized = {**cached, "thread_id": str(thread_id)}
                 from fastapi.responses import JSONResponse
+
                 return JSONResponse(
                     content=sanitized,
                     headers={
@@ -588,7 +571,7 @@ async def chat(
                         "X-RateLimit-Remaining": str(remaining),
                         "X-RateLimit-Reset": str(reset_time),
                         "X-Cache": "HIT",
-                    }
+                    },
                 )
 
             # Run agent and wait for completion
@@ -598,7 +581,7 @@ async def chat(
                 user_id=user_id,
             )
 
-            result_dict = result.model_dump() if hasattr(result, 'model_dump') else result
+            result_dict = result.model_dump() if hasattr(result, "model_dump") else result
 
             # Store in cache (only for new single-turn threads, fails open)
             if is_new_thread:
@@ -613,40 +596,35 @@ async def chat(
                 extra={
                     "user_id": user_id,
                     "thread_id": str(thread_id),
-                    "response_length": len(result.content) if hasattr(result, 'content') else 0,
-                }
+                    "response_length": len(result.content) if hasattr(result, "content") else 0,
+                },
             )
 
             # Return JSONResponse with rate limit headers
             from fastapi.responses import JSONResponse
+
             return JSONResponse(
                 content=result_dict,
                 headers={
                     "X-RateLimit-Limit": str(limit),
                     "X-RateLimit-Remaining": str(remaining),
                     "X-RateLimit-Reset": str(reset_time),
-                }
+                },
             )
 
     except ValueError as e:
         # Validation errors
         logger.warning(
-            "Chat request validation failed",
-            extra={"user_id": user_id, "error": str(e)}
+            "Chat request validation failed", extra={"user_id": user_id, "error": str(e)}
         )
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
 
     except Exception as e:
         # Unexpected errors
         logger.error(
-            "Chat request failed",
-            extra={"user_id": user_id, "error": str(e)},
-            exc_info=True
+            "Chat request failed", extra={"user_id": user_id, "error": str(e)}, exc_info=True
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Chat request failed: {str(e)}"
+            detail=f"Chat request failed: {str(e)}",
         )

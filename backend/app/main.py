@@ -77,8 +77,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             checkpointer_instance = await checkpointer_cm.__aenter__()
 
             # Call setup() to create tables if they don't exist (idempotent)
-            logger.info(
-                "Running checkpointer setup (creates tables if needed)")
+            logger.info("Running checkpointer setup (creates tables if needed)")
             await checkpointer_instance.setup()
 
             # Store checkpointer in app state for use in routes
@@ -115,7 +114,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         await DatabasePool.close()
     except Exception as e:
-         logger.error(f"Error closing database pool: {e}")
+        logger.error(f"Error closing database pool: {e}")
 
     SupabaseClient.close()
     logger.info("Application shutdown complete")
@@ -258,13 +257,10 @@ async def validation_error_handler(
             ctx_value = error.get("ctx")
             # Verify ctx is dict-like before calling .items()
             if isinstance(ctx_value, dict):
-                serializable_error["ctx"] = {
-                    k: str(v) for k, v in ctx_value.items()
-                }
+                serializable_error["ctx"] = {k: str(v) for k, v in ctx_value.items()}
             else:
                 # If ctx is not a dict, convert it to a safe string representation
-                serializable_error["ctx"] = str(
-                    ctx_value) if ctx_value is not None else None
+                serializable_error["ctx"] = str(ctx_value) if ctx_value is not None else None
         serializable_errors.append(serializable_error)
 
     return JSONResponse(
@@ -299,9 +295,7 @@ async def generic_error_handler(request: Request, exc: Exception) -> JSONRespons
 
     # Don't leak internal errors in production
     error_message = (
-        "An unexpected error occurred"
-        if settings.environment == "production"
-        else str(exc)
+        "An unexpected error occurred" if settings.environment == "production" else str(exc)
     )
 
     return JSONResponse(
@@ -358,8 +352,7 @@ async def health_check() -> HealthResponse:
         "api": "healthy",
     }
 
-    logger.debug("Health check completed",
-                 status=status_value, services=services)
+    logger.debug("Health check completed", status=status_value, services=services)
 
     return HealthResponse(
         status=status_value,

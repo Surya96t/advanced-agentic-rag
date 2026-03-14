@@ -40,9 +40,7 @@ class RedisRateLimiter:
             logger.info("Redis rate limiter initialized")
         return self._redis
 
-    def check_rate_limit(
-        self, user_id: str, endpoint: str = "default"
-    ) -> Tuple[bool, int, int]:
+    def check_rate_limit(self, user_id: str, endpoint: str = "default") -> Tuple[bool, int, int]:
         """
         Check if user has exceeded rate limit for endpoint.
 
@@ -70,9 +68,7 @@ class RedisRateLimiter:
         """
         # If rate limiting is disabled, allow all requests
         if not settings.rate_limit_enabled:
-            logger.debug(
-                f"Rate limiting disabled, allowing request for user {user_id}"
-            )
+            logger.debug(f"Rate limiting disabled, allowing request for user {user_id}")
             return (True, 0, 0)
 
         try:
@@ -86,8 +82,7 @@ class RedisRateLimiter:
 
             # PIPELINE 1: Check current request count (no recording yet)
             check_pipe = redis_client.pipeline()
-            check_pipe.zremrangebyscore(
-                key, 0, window_start)  # Remove old entries
+            check_pipe.zremrangebyscore(key, 0, window_start)  # Remove old entries
             check_pipe.zcard(key)  # Count current entries
             check_pipe.expire(key, window)  # Set expiry for cleanup
 
@@ -128,9 +123,7 @@ class RedisRateLimiter:
         except RedisError as e:
             # Graceful degradation: allow request if Redis fails
             logger.error(f"Redis error during rate limit check: {e}")
-            logger.warning(
-                "Rate limiter failing open - allowing request despite Redis error"
-            )
+            logger.warning("Rate limiter failing open - allowing request despite Redis error")
             return (True, 0, 0)
         except Exception as e:
             # Unexpected errors also fail open
@@ -168,10 +161,10 @@ class RedisRateLimiter:
             window_start = now - window
 
             pipe = redis_client.pipeline()
-            pipe.zremrangebyscore(key, 0, window_start)   # index 0: removed count
-            pipe.zcard(key)                                # index 1: current count
-            pipe.expire(key, window)                       # index 2: True/False
-            pipe.zrange(key, 0, 0, withscores=True)        # index 3: oldest entry
+            pipe.zremrangebyscore(key, 0, window_start)  # index 0: removed count
+            pipe.zcard(key)  # index 1: current count
+            pipe.expire(key, window)  # index 2: True/False
+            pipe.zrange(key, 0, 0, withscores=True)  # index 3: oldest entry
             results = pipe.execute()
 
             current_count = results[1]

@@ -74,15 +74,13 @@ Keep responses concise, professional, and helpful."""
         # Validate message has required attributes
         if not hasattr(msg, "type"):
             logger.warning(
-                "Message missing 'type' attribute, skipping",
-                extra={"message": str(msg)[:100]}
+                "Message missing 'type' attribute, skipping", extra={"message": str(msg)[:100]}
             )
             continue
 
         if not hasattr(msg, "content"):
             logger.warning(
-                "Message missing 'content' attribute, skipping",
-                extra={"message_type": msg.type}
+                "Message missing 'content' attribute, skipping", extra={"message_type": msg.type}
             )
             continue
 
@@ -100,8 +98,7 @@ Keep responses concise, professional, and helpful."""
             # Unknown message type - log warning and skip
             logger.warning(
                 f"Unknown message type '{msg_type}', skipping message",
-                extra={"message_type": msg_type, "content_preview": str(msg.content)[
-                    :50]}
+                extra={"message_type": msg_type, "content_preview": str(msg.content)[:50]},
             )
             continue
 
@@ -116,8 +113,7 @@ Keep responses concise, professional, and helpful."""
         response = await llm.ainvoke(llm_messages)
         full_response = response.content
 
-        logger.info(
-            f"  ↳ Generated simple response ({len(full_response)} chars)")
+        logger.info(f"  ↳ Generated simple response ({len(full_response)} chars)")
 
         return {
             "messages": [AIMessage(content=full_response)],
@@ -128,7 +124,9 @@ Keep responses concise, professional, and helpful."""
         logger.error(f"Simple answer generation failed: {e}", exc_info=True)
 
         # Fallback response
-        fallback = "Hello! I'm here to help you with technical documentation. What would you like to know?"
+        fallback = (
+            "Hello! I'm here to help you with technical documentation. What would you like to know?"
+        )
 
         return {
             "messages": [AIMessage(content=fallback)],

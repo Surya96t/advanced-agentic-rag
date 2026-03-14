@@ -187,4 +187,3 @@ class SemanticChunker(BaseChunker):
     def get_strategy_name(self) -> ChunkStrategy:
         """Return the chunking strategy identifier."""
         return ChunkStrategy.SEMANTIC
-
