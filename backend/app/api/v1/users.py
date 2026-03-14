@@ -5,6 +5,7 @@ User management API endpoints.
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
 
+from app.api.deps import UserID
 from app.database.client import get_db
 from app.utils.logger import get_logger
 
@@ -35,22 +36,30 @@ class UserSyncResponse(BaseModel):
     summary="Sync user from Clerk to Supabase",
     description="Create or update user in Supabase users table",
 )
-def sync_user(request: UserSyncRequest) -> UserSyncResponse:
+async def sync_user(request: UserSyncRequest, current_user_id: UserID) -> UserSyncResponse:
     """
     Sync user from Clerk to Supabase.
 
-    This endpoint creates a user record in Supabase if it doesn't exist,
-    or updates it if it does.
+    Requires a valid Clerk JWT. The user_id in the request body must match
+    the authenticated user's ID to prevent one user from overwriting another's record.
 
     Args:
         request: User sync request with Clerk user data
+        current_user_id: Authenticated user ID from JWT (injected)
 
     Returns:
         UserSyncResponse with user data and created flag
 
     Raises:
+        HTTPException: 403 if request.user_id does not match the JWT
         HTTPException: 500 if database error occurs
     """
+    if request.user_id != current_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot sync a user record other than your own.",
+        )
+
     logger.info(
         "Syncing user to database",
         extra={"user_id": request.user_id}

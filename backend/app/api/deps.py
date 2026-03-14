@@ -8,7 +8,7 @@ including JWT authentication and Redis-based rate limiting.
 import time
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 
 from app.core.auth import get_current_user
 from app.core.rate_limiter import get_rate_limiter
@@ -47,6 +47,7 @@ async def get_current_user_id(user_id: Annotated[str, Depends(get_current_user)]
 
 
 async def check_user_rate_limit(
+    request: Request,
     user_id: Annotated[str, Depends(get_current_user_id)]
 ) -> tuple[int, int, int]:
     """
@@ -82,10 +83,12 @@ async def check_user_rate_limit(
     # Get rate limiter instance
     limiter = get_rate_limiter()
 
-    # Check rate limit (endpoint will be "default" - routes can override this)
-    # TODO: Extract actual endpoint name from request context
+    # Extract endpoint name from the path: /api/v1/<endpoint>/...  → <endpoint>
+    path_parts = request.url.path.strip("/").split("/")
+    endpoint = path_parts[2] if len(path_parts) > 2 else "default"
+
     allowed, limit, remaining = limiter.check_rate_limit(
-        user_id, endpoint="default")
+        user_id, endpoint=endpoint)
 
     # Debug: Log the rate limit check result
     logger.debug(
