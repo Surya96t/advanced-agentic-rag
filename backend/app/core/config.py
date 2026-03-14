@@ -148,7 +148,7 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = Field(
         default=True, description="Enable rate limiting (disable for load testing)")
     rate_limit_default_requests: int = Field(
-        default=100, ge=1, description="Default requests per hour")
+        default=50, ge=1, description="Default requests per hour")
     rate_limit_default_window: int = Field(
         default=3600, ge=60, description="Rate limit window in seconds")
     rate_limit_burst_multiplier: float = Field(
@@ -156,9 +156,9 @@ class Settings(BaseSettings):
 
     # Per-Endpoint Rate Limits (requests per hour)
     rate_limit_ingest: int = Field(
-        default=20, ge=1, description="Ingestion endpoint rate limit")
+        default=10, ge=1, description="Ingestion endpoint rate limit (expensive: OpenAI embeddings)")
     rate_limit_chat: int = Field(
-        default=100, ge=1, description="Chat endpoint rate limit")
+        default=50, ge=1, description="Chat endpoint rate limit")
     rate_limit_documents: int = Field(
         default=200, ge=1, description="Document listing rate limit")
 
