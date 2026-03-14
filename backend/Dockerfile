@@ -1,9 +1,10 @@
 # ─── Stage 1: Builder ────────────────────────────────────────────────────────
 # Installs dependencies into a virtual environment using uv.
-FROM python:3.12-slim AS builder
+# Digests pinned 2026-03-14 — update via: docker buildx imagetools inspect <image> --format '{{json .Manifest}}'
+FROM python:3.12-slim@sha256:ccc7089399c8bb65dd1fb3ed6d55efa538a3f5e7fca3f5988ac3b5b87e593bf0 AS builder
 
 # Install uv (fast Python package manager)
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv@sha256:cbe0a44ba994e327b8fe7ed72beef1aaa7d2c4c795fd406d1dbf328bacb2f1c5 /uv /bin/uv
 
 WORKDIR /app
 
@@ -14,7 +15,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project --no-dev
 
 # ─── Stage 2: Runtime ────────────────────────────────────────────────────────
-FROM python:3.12-slim AS runtime
+FROM python:3.12-slim@sha256:ccc7089399c8bb65dd1fb3ed6d55efa538a3f5e7fca3f5988ac3b5b87e593bf0 AS runtime
 
 WORKDIR /app
 
