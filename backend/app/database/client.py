@@ -59,7 +59,7 @@ class SupabaseClient:
                 )
 
                 cls._instance = create_client(
-                    supabase_url=settings.supabase_url,
+                    supabase_url=settings.supabase_url.rstrip("/") + "/",
                     supabase_key=settings.supabase_service_key,
                 )
 

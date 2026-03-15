@@ -405,11 +405,18 @@ async def ingest_document(
         # Encode bytes as base64 for JSON-safe transport over Redis broker
         file_bytes_b64 = base64.b64encode(file_content).decode("ascii")
 
-        task = ingest_document_task.delay(
-            file_bytes_b64,
-            file.filename,
-            user_id,
-            storage_path,
+        # Run synchronous Celery .delay() in a thread so it doesn't block
+        # the asyncio event loop while establishing the broker connection.
+        import asyncio as _asyncio
+
+        task = await _asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: ingest_document_task.delay(
+                file_bytes_b64,
+                file.filename,
+                user_id,
+                storage_path,
+            ),
         )
 
         logger.info(

@@ -96,9 +96,12 @@ def _is_transient(exc: BaseException) -> bool:
 # a URL query parameter and rejects None or missing values.  Append it when
 # the raw URL doesn't already include it.
 def _make_redis_url(url: str) -> str:
+    # redis-py URL parser accepts lowercase none/optional/required.
+    # Kombu (Celery broker transport) also accepts this form since it
+    # delegates pool creation to redis-py.
     if url.startswith("rediss://") and "ssl_cert_reqs" not in url:
         sep = "&" if "?" in url else "?"
-        return f"{url}{sep}ssl_cert_reqs=CERT_NONE"
+        return f"{url}{sep}ssl_cert_reqs=none"
     return url
 
 
