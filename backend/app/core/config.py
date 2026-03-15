@@ -296,10 +296,6 @@ class Settings(BaseSettings):
                 raise ValueError("DEBUG mode must be disabled in production (set DEBUG=false)")
             if self.reload:
                 raise ValueError("Auto-reload must be disabled in production (set RELOAD=false)")
-            if self.host == "0.0.0.0":
-                raise ValueError(
-                    "Host must not be 0.0.0.0 in production (use 127.0.0.1 or specific IP)"
-                )
         return self
 
     @model_validator(mode="after")
