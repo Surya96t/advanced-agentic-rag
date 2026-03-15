@@ -18,7 +18,6 @@ Design notes:
 
 import asyncio
 import base64
-import ssl
 
 from celery import Celery
 
@@ -98,7 +97,7 @@ celery_app = Celery(
     backend=settings.redis_url,
 )
 
-_ssl_options = {"ssl_cert_reqs": ssl.CERT_NONE} if settings.redis_url.startswith("rediss://") else {}
+_ssl_options = {"ssl_cert_reqs": None} if settings.redis_url.startswith("rediss://") else {}
 
 celery_app.conf.update(
     # Keep results for 1 hour so status polling always finds them
