@@ -31,10 +31,14 @@ class RedisRateLimiter:
     def _get_redis(self) -> Redis:
         """Get or create Redis client with connection pooling."""
         if self._redis is None:
+            ssl_kwargs = (
+                {"ssl_cert_reqs": None} if settings.redis_url.startswith("rediss://") else {}
+            )
             self._pool = ConnectionPool.from_url(
                 settings.redis_url,
                 max_connections=settings.redis_connection_pool_size,
                 decode_responses=True,
+                **ssl_kwargs,
             )
             self._redis = Redis(connection_pool=self._pool)
             logger.info("Redis rate limiter initialized")
