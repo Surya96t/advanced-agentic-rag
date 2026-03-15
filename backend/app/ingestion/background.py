@@ -97,6 +97,8 @@ celery_app = Celery(
     backend=settings.redis_url,
 )
 
+_ssl_options = {"ssl_cert_reqs": "CERT_NONE"} if settings.redis_url.startswith("rediss://") else {}
+
 celery_app.conf.update(
     # Keep results for 1 hour so status polling always finds them
     result_expires=3600,
@@ -111,6 +113,9 @@ celery_app.conf.update(
     # Timezone
     timezone="UTC",
     enable_utc=True,
+    # TLS options for rediss:// (e.g. Upstash) — required by Celery
+    broker_use_ssl=_ssl_options or None,
+    redis_backend_use_ssl=_ssl_options or None,
 )
 
 
