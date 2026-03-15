@@ -128,13 +128,6 @@ class Settings(BaseSettings):
         default=None, description="Redis password (optional)", repr=False
     )
     redis_ssl: bool = Field(default=False, description="Use SSL/TLS for Redis connection")
-    redis_ssl_cert_reqs: str | None = Field(
-        default=None,
-        alias="REDIS_SSL_CERT_REQS",
-        description="SSL certificate verification mode for Redis TLS connections. "
-        "Accepted values: CERT_REQUIRED (default), CERT_OPTIONAL, CERT_NONE. "
-        "Only needed when using a rediss:// URL with a self-signed certificate.",
-    )
     redis_connection_pool_size: int = Field(
         default=10, ge=1, le=100, description="Redis connection pool size"
     )
@@ -339,33 +332,19 @@ class Settings(BaseSettings):
         """
         Build Redis connection URL.
 
-        If REDIS_URL env var is set (e.g. from Upstash), use it directly.
+        If REDIS_URL env var is set (e.g. from Railway internal Redis), use it directly.
         Otherwise, build from individual host/port/password/ssl fields.
-
-        When REDIS_SSL_CERT_REQS is set, appends it as a URL query parameter
-        so redis-py parses it correctly regardless of client type (sync/async/Celery).
-        This is more reliable than passing ssl_cert_reqs as a Python kwarg to
-        ConnectionPool.from_url.
         """
         if self.redis_url_override:
-            base = self.redis_url_override
+            return self.redis_url_override
+
+        protocol = "rediss" if self.redis_ssl else "redis"
+        if self.redis_password:
+            encoded_password = quote_plus(self.redis_password)
+            auth = f":{encoded_password}@"
         else:
-            protocol = "rediss" if self.redis_ssl else "redis"
-            # URL-encode password to handle special characters safely
-            if self.redis_password:
-                encoded_password = quote_plus(self.redis_password)
-                auth = f":{encoded_password}@"
-            else:
-                auth = ""
-            base = f"{protocol}://{auth}{self.redis_host}:{self.redis_port}/{self.redis_db}"
-
-        # Do NOT append ssl_cert_reqs to the URL here.
-        # redis-py 7.x and Celery/kombu require different formats for this
-        # parameter, so each consumer applies it directly:
-        #   - rate_limiter.py / cache.py: pass ssl_cert_reqs=ssl.CERT_NONE kwarg
-        #   - background.py: _make_redis_url() appends ?ssl_cert_reqs=CERT_NONE
-
-        return base
+            auth = ""
+        return f"{protocol}://{auth}{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
     @property
     def supabase_connection_string(self) -> str:
