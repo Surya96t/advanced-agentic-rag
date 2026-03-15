@@ -37,6 +37,7 @@ def _get_redis() -> Redis:
             settings.redis_url,
             max_connections=settings.redis_connection_pool_size,
             decode_responses=True,
+            **settings.redis_ssl_kwargs,
         )
         _redis = Redis(connection_pool=_pool)
         logger.info("Redis cache client initialised")

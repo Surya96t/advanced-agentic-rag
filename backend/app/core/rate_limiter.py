@@ -35,6 +35,7 @@ class RedisRateLimiter:
                 settings.redis_url,
                 max_connections=settings.redis_connection_pool_size,
                 decode_responses=True,
+                **settings.redis_ssl_kwargs,
             )
             self._redis = Redis(connection_pool=self._pool)
             logger.info("Redis rate limiter initialized")
