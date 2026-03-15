@@ -15,9 +15,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from typing import Any
-
 import ssl as _ssl
+from typing import Any
 
 from redis.asyncio import ConnectionPool, Redis
 from redis.exceptions import RedisError

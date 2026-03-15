@@ -1,11 +1,10 @@
 """Redis-based rate limiting with sliding window algorithm."""
 
 import logging
+import ssl as _ssl
 import time
 from typing import Optional, Tuple
 from uuid import uuid4
-
-import ssl as _ssl
 
 from redis import ConnectionPool, Redis
 from redis.exceptions import RedisError
