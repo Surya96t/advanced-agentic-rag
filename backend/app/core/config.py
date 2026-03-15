@@ -128,6 +128,13 @@ class Settings(BaseSettings):
         default=None, description="Redis password (optional)", repr=False
     )
     redis_ssl: bool = Field(default=False, description="Use SSL/TLS for Redis connection")
+    redis_ssl_cert_reqs: str | None = Field(
+        default=None,
+        alias="REDIS_SSL_CERT_REQS",
+        description="SSL certificate verification mode for Redis TLS connections. "
+        "Accepted values: CERT_REQUIRED (default), CERT_OPTIONAL, CERT_NONE. "
+        "Only needed when using a rediss:// URL with a self-signed certificate.",
+    )
     redis_connection_pool_size: int = Field(
         default=10, ge=1, le=100, description="Redis connection pool size"
     )
@@ -326,6 +333,33 @@ class Settings(BaseSettings):
     def is_development(self) -> bool:
         """Check if running in development environment."""
         return self.environment == "development"
+
+    @property
+    def redis_ssl_kwargs(self) -> dict[str, object]:
+        """
+        Return ssl keyword arguments for redis-py ConnectionPool.from_url.
+
+        When REDIS_SSL_CERT_REQS is unset, returns an empty dict so redis-py
+        uses its default (CERT_REQUIRED), which works with valid TLS certificates
+        (e.g. Upstash, which uses Let's Encrypt). Set REDIS_SSL_CERT_REQS=CERT_NONE
+        only when connecting to a Redis instance with a self-signed certificate.
+        """
+        if self.redis_ssl_cert_reqs is None:
+            return {}
+        import ssl
+
+        _reqs_map = {
+            "CERT_NONE": ssl.CERT_NONE,
+            "CERT_OPTIONAL": ssl.CERT_OPTIONAL,
+            "CERT_REQUIRED": ssl.CERT_REQUIRED,
+        }
+        value = _reqs_map.get(self.redis_ssl_cert_reqs.upper())
+        if value is None:
+            raise ValueError(
+                f"Invalid REDIS_SSL_CERT_REQS: {self.redis_ssl_cert_reqs!r}. "
+                "Must be one of: CERT_NONE, CERT_OPTIONAL, CERT_REQUIRED."
+            )
+        return {"ssl_cert_reqs": value}
 
     @property
     def redis_url(self) -> str:

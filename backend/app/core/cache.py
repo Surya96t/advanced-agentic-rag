@@ -33,12 +33,11 @@ def _get_redis() -> Redis:
     """Return a shared async Redis client, creating it on first call."""
     global _pool, _redis
     if _redis is None:
-        ssl_kwargs = {"ssl_cert_reqs": None} if settings.redis_url.startswith("rediss://") else {}
         _pool = ConnectionPool.from_url(
             settings.redis_url,
             max_connections=settings.redis_connection_pool_size,
             decode_responses=True,
-            **ssl_kwargs,
+            **settings.redis_ssl_kwargs,
         )
         _redis = Redis(connection_pool=_pool)
         logger.info("Redis cache client initialised")
