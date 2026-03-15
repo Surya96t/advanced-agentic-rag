@@ -359,15 +359,11 @@ class Settings(BaseSettings):
                 auth = ""
             base = f"{protocol}://{auth}{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
-        # Append ssl_cert_reqs as a URL query param when set — this is the
-        # approach redis-py reliably handles for all client types.
-        # redis-py URL parser only accepts lowercase: none/optional/required.
-        # Normalise here so both redis-py (rate limiter/cache/backend) and
-        # kombu (Celery broker) receive a value they can parse.
-        if self.redis_ssl_cert_reqs and "ssl_cert_reqs" not in base:
-            normalised = self.redis_ssl_cert_reqs.lower().removeprefix("cert_")
-            sep = "&" if "?" in base else "?"
-            base = f"{base}{sep}ssl_cert_reqs={normalised}"
+        # Do NOT append ssl_cert_reqs to the URL here.
+        # redis-py 7.x and Celery/kombu require different formats for this
+        # parameter, so each consumer applies it directly:
+        #   - rate_limiter.py / cache.py: pass ssl_cert_reqs=ssl.CERT_NONE kwarg
+        #   - background.py: _make_redis_url() appends ?ssl_cert_reqs=CERT_NONE
 
         return base
 

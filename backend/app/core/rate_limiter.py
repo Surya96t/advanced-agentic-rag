@@ -5,6 +5,8 @@ import time
 from typing import Optional, Tuple
 from uuid import uuid4
 
+import ssl as _ssl
+
 from redis import ConnectionPool, Redis
 from redis.exceptions import RedisError
 
@@ -31,10 +33,20 @@ class RedisRateLimiter:
     def _get_redis(self) -> Redis:
         """Get or create Redis client with connection pooling."""
         if self._redis is None:
+            url = settings.redis_url
+            ssl_kwargs: dict = {}
+            if url.startswith("rediss://"):
+                # Pass ssl_cert_reqs as a Python kwarg rather than a URL
+                # query parameter — redis-py 7.x accepts the ssl module
+                # constant directly and won't hang on an unrecognised string.
+                ssl_kwargs["ssl_cert_reqs"] = _ssl.CERT_NONE
             self._pool = ConnectionPool.from_url(
-                settings.redis_url,
+                url,
                 max_connections=settings.redis_connection_pool_size,
                 decode_responses=True,
+                socket_timeout=2.0,
+                socket_connect_timeout=2.0,
+                **ssl_kwargs,
             )
             self._redis = Redis(connection_pool=self._pool)
             logger.info("Redis rate limiter initialized")
