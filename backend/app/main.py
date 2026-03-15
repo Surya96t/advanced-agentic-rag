@@ -87,6 +87,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             logger.info("Checkpointing disabled (ENABLE_CHECKPOINTING=false)")
             app.state.checkpointer = None
 
+        # Pre-warm reranker singleton so the first request doesn't pay the cold-load
+        # penalty and to avoid an OOM kill caused by loading the model under heavy traffic.
+        try:
+            from app.agents.nodes.retriever import get_reranker
+
+            logger.info("Pre-warming FlashRank reranker at startup...")
+            get_reranker()
+            logger.info("✅ FlashRank reranker pre-warmed successfully")
+        except Exception as e:
+            logger.warning(f"FlashRank pre-warm failed (non-fatal): {e}")
+
     except Exception as e:
         logger.error(
             "Failed to initialize application",
