@@ -361,9 +361,13 @@ class Settings(BaseSettings):
 
         # Append ssl_cert_reqs as a URL query param when set — this is the
         # approach redis-py reliably handles for all client types.
+        # redis-py URL parser only accepts lowercase: none/optional/required.
+        # Normalise here so both redis-py (rate limiter/cache/backend) and
+        # kombu (Celery broker) receive a value they can parse.
         if self.redis_ssl_cert_reqs and "ssl_cert_reqs" not in base:
+            normalised = self.redis_ssl_cert_reqs.lower().removeprefix("cert_")
             sep = "&" if "?" in base else "?"
-            base = f"{base}{sep}ssl_cert_reqs={self.redis_ssl_cert_reqs}"
+            base = f"{base}{sep}ssl_cert_reqs={normalised}"
 
         return base
 
