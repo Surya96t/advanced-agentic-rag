@@ -92,25 +92,10 @@ def _is_transient(exc: BaseException) -> bool:
 # ---------------------------------------------------------------------------
 
 
-# Celery's Redis backend validates that rediss:// URLs carry ssl_cert_reqs as
-# a URL query parameter and rejects None or missing values.  Append it when
-# the raw URL doesn't already include it.
-def _make_redis_url(url: str) -> str:
-    # Celery uses kombu as its broker transport. Kombu's Redis transport
-    # requires ssl_cert_reqs as a URL query parameter and only accepts the
-    # values CERT_NONE, CERT_OPTIONAL, CERT_REQUIRED (uppercase with prefix).
-    if url.startswith("rediss://") and "ssl_cert_reqs" not in url:
-        sep = "&" if "?" in url else "?"
-        return f"{url}{sep}ssl_cert_reqs=CERT_NONE"
-    return url
-
-
-_redis_url = _make_redis_url(settings.redis_url)
-
 celery_app = Celery(
     "integration_forge",
-    broker=_redis_url,
-    backend=_redis_url,
+    broker=settings.redis_url,
+    backend=settings.redis_url,
 )
 
 celery_app.conf.update(
