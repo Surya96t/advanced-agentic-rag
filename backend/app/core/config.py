@@ -335,50 +335,37 @@ class Settings(BaseSettings):
         return self.environment == "development"
 
     @property
-    def redis_ssl_kwargs(self) -> dict[str, object]:
-        """
-        Return ssl keyword arguments for redis-py ConnectionPool.from_url.
-
-        When REDIS_SSL_CERT_REQS is unset, returns an empty dict so redis-py
-        uses its default (CERT_REQUIRED), which works with valid TLS certificates
-        (e.g. Upstash, which uses Let's Encrypt). Set REDIS_SSL_CERT_REQS=CERT_NONE
-        only when connecting to a Redis instance with a self-signed certificate.
-        """
-        if self.redis_ssl_cert_reqs is None:
-            return {}
-        import ssl
-
-        _reqs_map = {
-            "CERT_NONE": ssl.CERT_NONE,
-            "CERT_OPTIONAL": ssl.CERT_OPTIONAL,
-            "CERT_REQUIRED": ssl.CERT_REQUIRED,
-        }
-        value = _reqs_map.get(self.redis_ssl_cert_reqs.upper())
-        if value is None:
-            raise ValueError(
-                f"Invalid REDIS_SSL_CERT_REQS: {self.redis_ssl_cert_reqs!r}. "
-                "Must be one of: CERT_NONE, CERT_OPTIONAL, CERT_REQUIRED."
-            )
-        return {"ssl_cert_reqs": value}
-
-    @property
     def redis_url(self) -> str:
         """
         Build Redis connection URL.
 
         If REDIS_URL env var is set (e.g. from Upstash), use it directly.
         Otherwise, build from individual host/port/password/ssl fields.
+
+        When REDIS_SSL_CERT_REQS is set, appends it as a URL query parameter
+        so redis-py parses it correctly regardless of client type (sync/async/Celery).
+        This is more reliable than passing ssl_cert_reqs as a Python kwarg to
+        ConnectionPool.from_url.
         """
         if self.redis_url_override:
-            return self.redis_url_override
-        protocol = "rediss" if self.redis_ssl else "redis"
-        # URL-encode password to handle special characters safely
-        if self.redis_password:
-            encoded_password = quote_plus(self.redis_password)
-            auth = f":{encoded_password}@"
+            base = self.redis_url_override
         else:
-            auth = ""
-        return f"{protocol}://{auth}{self.redis_host}:{self.redis_port}/{self.redis_db}"
+            protocol = "rediss" if self.redis_ssl else "redis"
+            # URL-encode password to handle special characters safely
+            if self.redis_password:
+                encoded_password = quote_plus(self.redis_password)
+                auth = f":{encoded_password}@"
+            else:
+                auth = ""
+            base = f"{protocol}://{auth}{self.redis_host}:{self.redis_port}/{self.redis_db}"
+
+        # Append ssl_cert_reqs as a URL query param when set — this is the
+        # approach redis-py reliably handles for all client types.
+        if self.redis_ssl_cert_reqs and "ssl_cert_reqs" not in base:
+            sep = "&" if "?" in base else "?"
+            base = f"{base}{sep}ssl_cert_reqs={self.redis_ssl_cert_reqs}"
+
+        return base
 
     @property
     def supabase_connection_string(self) -> str:
