@@ -8,11 +8,11 @@ It provides type-safe configuration with automatic validation.
 import logging
 import os
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
 from urllib.parse import quote_plus, urlparse
 
 from pydantic import Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 _logger = logging.getLogger(__name__)
 
@@ -37,9 +37,12 @@ class Settings(BaseSettings):
     reload: bool = Field(default=True, description="Auto-reload on code changes")
 
     # CORS Settings
-    cors_origins: list[str] = Field(
+    # NoDecode tells pydantic_settings to skip json.loads() for this field,
+    # passing the raw env var string directly to the parse_cors_origins validator
+    # below which handles both comma-separated strings and pre-parsed lists.
+    cors_origins: Annotated[list[str], NoDecode] = Field(
         default=["http://localhost:3000", "http://localhost:3001"],
-        description="Allowed CORS origins",
+        description="Allowed CORS origins (comma-separated or JSON array)",
     )
     cors_allow_credentials: bool = True
     cors_allow_methods: list[str] = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
@@ -269,9 +272,22 @@ class Settings(BaseSettings):
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, v: str | list[str]) -> list[str]:
-        """Parse CORS origins from comma-separated string or list."""
+        """Parse CORS origins from a JSON array string, comma-separated string, or list.
+
+        NoDecode on the field bypasses pydantic_settings' json.loads() so the raw
+        env var string arrives here.  We try JSON first (for local .env files that
+        use the array format), then fall back to comma-splitting (Railway).
+        """
         if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",")]
+            import json
+
+            stripped = v.strip()
+            if stripped.startswith("["):
+                try:
+                    return json.loads(stripped)
+                except (json.JSONDecodeError, ValueError):
+                    pass
+            return [origin.strip() for origin in stripped.split(",") if origin.strip()]
         return v
 
     @field_validator("environment")
