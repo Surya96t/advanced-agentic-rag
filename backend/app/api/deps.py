@@ -86,7 +86,12 @@ async def check_user_rate_limit(
     path_parts = request.url.path.strip("/").split("/")
     endpoint = path_parts[2] if len(path_parts) > 2 else "default"
 
-    allowed, limit, remaining = limiter.check_rate_limit(user_id, endpoint=endpoint)
+    # Run sync Redis call in a thread to avoid blocking the async event loop.
+    import asyncio
+
+    allowed, limit, remaining = await asyncio.get_event_loop().run_in_executor(
+        None, limiter.check_rate_limit, user_id, endpoint
+    )
 
     # Debug: Log the rate limit check result
     logger.debug(

@@ -43,8 +43,8 @@ class RedisRateLimiter:
                 url,
                 max_connections=settings.redis_connection_pool_size,
                 decode_responses=True,
-                socket_timeout=2.0,
-                socket_connect_timeout=2.0,
+                socket_timeout=10.0,
+                socket_connect_timeout=10.0,
                 **ssl_kwargs,
             )
             self._redis = Redis(connection_pool=self._pool)

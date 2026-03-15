@@ -42,8 +42,8 @@ def _get_redis() -> Redis:
             url,
             max_connections=settings.redis_connection_pool_size,
             decode_responses=True,
-            socket_timeout=2.0,
-            socket_connect_timeout=2.0,
+            socket_timeout=10.0,
+            socket_connect_timeout=10.0,
             **ssl_kwargs,
         )
         _redis = Redis(connection_pool=_pool)
