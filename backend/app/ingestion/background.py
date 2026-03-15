@@ -91,13 +91,24 @@ def _is_transient(exc: BaseException) -> bool:
 # Celery application
 # ---------------------------------------------------------------------------
 
+
+# Celery's Redis backend validates that rediss:// URLs carry ssl_cert_reqs as
+# a URL query parameter and rejects None or missing values.  Append it when
+# the raw URL doesn't already include it.
+def _make_redis_url(url: str) -> str:
+    if url.startswith("rediss://") and "ssl_cert_reqs" not in url:
+        sep = "&" if "?" in url else "?"
+        return f"{url}{sep}ssl_cert_reqs=CERT_NONE"
+    return url
+
+
+_redis_url = _make_redis_url(settings.redis_url)
+
 celery_app = Celery(
     "integration_forge",
-    broker=settings.redis_url,
-    backend=settings.redis_url,
+    broker=_redis_url,
+    backend=_redis_url,
 )
-
-_ssl_options = {"ssl_cert_reqs": None} if settings.redis_url.startswith("rediss://") else {}
 
 celery_app.conf.update(
     # Keep results for 1 hour so status polling always finds them
@@ -113,9 +124,6 @@ celery_app.conf.update(
     # Timezone
     timezone="UTC",
     enable_utc=True,
-    # TLS options for rediss:// (e.g. Upstash) — required by Celery
-    broker_use_ssl=_ssl_options or None,
-    redis_backend_use_ssl=_ssl_options or None,
 )
 
 
