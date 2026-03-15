@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import ssl as _ssl
 from typing import Any
 
 from redis.asyncio import ConnectionPool, Redis
@@ -33,10 +34,17 @@ def _get_redis() -> Redis:
     """Return a shared async Redis client, creating it on first call."""
     global _pool, _redis
     if _redis is None:
+        url = settings.redis_url
+        ssl_kwargs: dict = {}
+        if url.startswith("rediss://"):
+            ssl_kwargs["ssl_cert_reqs"] = _ssl.CERT_NONE
         _pool = ConnectionPool.from_url(
-            settings.redis_url,
+            url,
             max_connections=settings.redis_connection_pool_size,
             decode_responses=True,
+            socket_timeout=2.0,
+            socket_connect_timeout=2.0,
+            **ssl_kwargs,
         )
         _redis = Redis(connection_pool=_pool)
         logger.info("Redis cache client initialised")
