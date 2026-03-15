@@ -115,6 +115,12 @@ class Settings(BaseSettings):
     )
 
     # Redis Configuration
+    redis_url_override: str | None = Field(
+        default=None,
+        alias="REDIS_URL",
+        description="Full Redis URL (e.g. from Upstash). If set, takes precedence over individual host/port/password fields.",
+        repr=False,
+    )
     redis_host: str = Field(default="localhost", description="Redis server hostname")
     redis_port: int = Field(default=6379, ge=1, le=65535, description="Redis server port")
     redis_db: int = Field(default=0, ge=0, le=15, description="Redis database number (0-15)")
@@ -328,20 +334,13 @@ class Settings(BaseSettings):
     @property
     def redis_url(self) -> str:
         """
-        Build Redis connection URL with URL-encoded password.
+        Build Redis connection URL.
 
-        Returns:
-            Redis connection URL in format:
-            redis://[:password@]host:port/db  (no SSL)
-            rediss://[:password@]host:port/db (with SSL)
-
-        Example:
-            >>> settings.redis_host = "localhost"
-            >>> settings.redis_port = 6379
-            >>> settings.redis_db = 0
-            >>> settings.redis_url
-            'redis://localhost:6379/0'
+        If REDIS_URL env var is set (e.g. from Upstash), use it directly.
+        Otherwise, build from individual host/port/password/ssl fields.
         """
+        if self.redis_url_override:
+            return self.redis_url_override
         protocol = "rediss" if self.redis_ssl else "redis"
         # URL-encode password to handle special characters safely
         if self.redis_password:
