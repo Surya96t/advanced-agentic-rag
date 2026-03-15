@@ -49,9 +49,10 @@ def get_reranker() -> FlashRankReranker:
     """Get or create reranker singleton."""
     global _reranker
     if _reranker is None:
-        # Using ms-marco-MiniLM-L-12-v2 for better score calibration (0-1 range)
-        # rank-T5-flan tends to output raw logits or low probabilities (~0.4-0.5 for good matches)
-        _reranker = FlashRankReranker(model_name="ms-marco-MiniLM-L-12-v2")
+        # ms-marco-MiniLM-L-6-v2 is ~22 MB vs ~33 MB for the L-12 variant.
+        # It has comparable ranking quality on retrieval benchmarks while using
+        # significantly less memory, which matters on constrained Railway instances.
+        _reranker = FlashRankReranker(model_name="ms-marco-MiniLM-L-6-v2")
     return _reranker
 
 

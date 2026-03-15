@@ -165,6 +165,7 @@ def create_initial_state(query: str, user_id: str = "anonymous") -> AgentState:
     return AgentState(
         original_query=query,
         query=query,  # Set query for classifier and other nodes
+        retrieval_query="",  # Explicitly reset so the checkpointer doesn't carry-over the previous turn's rewritten query
         user_id=user_id,  # CRITICAL: Set user_id for RLS and ownership
         # Add user's message to history
         messages=[HumanMessage(content=query)],
