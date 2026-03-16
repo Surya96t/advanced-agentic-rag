@@ -49,10 +49,7 @@ def get_reranker() -> FlashRankReranker:
     """Get or create reranker singleton."""
     global _reranker
     if _reranker is None:
-        # ms-marco-MiniLM-L-6-v2 is ~22 MB vs ~33 MB for the L-12 variant.
-        # It has comparable ranking quality on retrieval benchmarks while using
-        # significantly less memory, which matters on constrained Railway instances.
-        _reranker = FlashRankReranker(model_name="ms-marco-MiniLM-L-6-v2")
+        _reranker = FlashRankReranker(model_name=settings.rerank_model)
     return _reranker
 
 

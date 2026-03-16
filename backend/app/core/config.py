@@ -170,7 +170,7 @@ class Settings(BaseSettings):
 
     # RAG Configuration - Vector Search
     vector_search_top_k: int = Field(
-        default=20, description="Number of results from vector search (semantic)"
+        default=10, description="Number of results from vector search (semantic). Reduced from 20 to limit reranker input size on memory-constrained deployments."
     )
     vector_search_min_similarity: float = Field(
         default=0.7, ge=0.0, le=1.0, description="Minimum cosine similarity threshold (0.0-1.0)"
@@ -178,7 +178,7 @@ class Settings(BaseSettings):
 
     # RAG Configuration - Text Search
     text_search_top_k: int = Field(
-        default=20, description="Number of results from text search (keyword)"
+        default=10, description="Number of results from text search (keyword). Reduced from 20 to limit reranker input size on memory-constrained deployments."
     )
     text_search_min_rank: float = Field(
         default=0.01, ge=0.0, description="Minimum ts_rank score threshold for FTS"
@@ -198,8 +198,8 @@ class Settings(BaseSettings):
     # RAG Configuration - Re-ranking
     rerank_enabled: bool = Field(default=True, description="Enable re-ranking of search results")
     rerank_model: str = Field(
-        default="ms-marco-MiniLM-L-6-v2",
-        description="FlashRank model name (TinyBERT, MiniLM-L-6, MiniLM-L-12)",
+        default="ms-marco-TinyBERT-L-2-v2",
+        description="FlashRank model name. Valid options: ms-marco-TinyBERT-L-2-v2 (4MB default), ms-marco-MiniLM-L-12-v2 (33MB best quality), rank-T5-flan, ce-esci-MiniLM-L12-v2",
     )
     rerank_top_k: int = Field(default=5, description="Number of results to return after re-ranking")
 
