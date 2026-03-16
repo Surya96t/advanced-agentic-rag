@@ -170,7 +170,8 @@ class Settings(BaseSettings):
 
     # RAG Configuration - Vector Search
     vector_search_top_k: int = Field(
-        default=10, description="Number of results from vector search (semantic). Reduced from 20 to limit reranker input size on memory-constrained deployments."
+        default=10,
+        description="Number of results from vector search (semantic). Reduced from 20 to limit reranker input size on memory-constrained deployments.",
     )
     vector_search_min_similarity: float = Field(
         default=0.7, ge=0.0, le=1.0, description="Minimum cosine similarity threshold (0.0-1.0)"
@@ -178,7 +179,8 @@ class Settings(BaseSettings):
 
     # RAG Configuration - Text Search
     text_search_top_k: int = Field(
-        default=10, description="Number of results from text search (keyword). Reduced from 20 to limit reranker input size on memory-constrained deployments."
+        default=10,
+        description="Number of results from text search (keyword). Reduced from 20 to limit reranker input size on memory-constrained deployments.",
     )
     text_search_min_rank: float = Field(
         default=0.01, ge=0.0, description="Minimum ts_rank score threshold for FTS"
