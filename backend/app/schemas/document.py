@@ -1,5 +1,5 @@
 """
-Document API schemas for Integration Forge.
+Document API schemas for Advanced Agentic RAG.
 
 These schemas define the request/response models for document upload and management.
 They provide a clean API contract separate from internal database models.

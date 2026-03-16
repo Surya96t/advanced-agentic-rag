@@ -1,5 +1,5 @@
 """
-Chunk repository for Integration Forge.
+Chunk repository for Advanced Agentic RAG.
 
 This module handles all database operations for document chunks with vector search.
 Provides batch operations, parent-child navigation, and semantic search capabilities.

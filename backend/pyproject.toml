@@ -1,5 +1,5 @@
 [project]
-name = "integration-forge-backend"
+name = "advanced-agentic-rag-backend"
 version = "0.1.0"
 description = "Production-grade advanced RAG backend with LangGraph, multi-stage chunking, and hybrid search"
 requires-python = ">=3.12"

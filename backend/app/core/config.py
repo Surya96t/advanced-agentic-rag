@@ -90,7 +90,7 @@ class Settings(BaseSettings):
         default=None, description="LangSmith API key", repr=False, alias="LANGCHAIN_API_KEY"
     )
     langsmith_project: str = Field(
-        default="integration-forge-rag",
+        default="advanced-agentic-rag",
         description="LangSmith project name",
         alias="LANGCHAIN_PROJECT",
     )

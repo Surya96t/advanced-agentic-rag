@@ -1,5 +1,5 @@
 """
-Database models for Integration Forge.
+Database models for Advanced Agentic RAG.
 
 These Pydantic models represent the structure of our Supabase database tables.
 They provide type safety, validation, and documentation for database operations.

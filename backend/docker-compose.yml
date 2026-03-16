@@ -3,7 +3,7 @@ version: '3.8'
 services:
   redis:
     image: redis:7-alpine
-    container_name: integration-forge-redis
+    container_name: advanced-agentic-rag-redis
     ports:
       - "127.0.0.1:6379:6379"  # Bind to localhost only for security
     volumes:
@@ -20,7 +20,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: integration-forge-api
+    container_name: advanced-agentic-rag-api
     env_file: .env
     ports:
       - "127.0.0.1:8000:8000"
@@ -33,7 +33,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.worker
-    container_name: integration-forge-worker
+    container_name: advanced-agentic-rag-worker
     env_file: .env
     depends_on:
       redis:

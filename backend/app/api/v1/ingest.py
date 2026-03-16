@@ -1,5 +1,5 @@
 """
-Document ingestion API endpoint for Integration Forge.
+Document ingestion API endpoint for Advanced Agentic RAG.
 
 This endpoint handles document upload and triggers the ingestion pipeline.
 

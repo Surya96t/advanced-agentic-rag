@@ -1,5 +1,5 @@
 """
-Document repository for Integration Forge.
+Document repository for Advanced Agentic RAG.
 
 This module handles all database operations for documents with RLS enforcement.
 Provides a clean interface for CRUD operations on the documents table.

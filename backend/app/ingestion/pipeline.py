@@ -1,5 +1,5 @@
 """
-Ingestion pipeline for Integration Forge.
+Ingestion pipeline for Advanced Agentic RAG.
 
 This module orchestrates the complete document ingestion workflow:
 Parse → Chunk → Embed → Store in Supabase

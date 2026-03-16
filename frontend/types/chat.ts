@@ -1,5 +1,5 @@
 /**
- * Chat message types for Integration Forge
+ * Chat message types for Advanced Agentic RAG
  */
 
 /**
