@@ -57,18 +57,18 @@ class FlashRankReranker(Reranker):
 
     def __init__(
         self,
-        model_name: str = "ms-marco-MiniLM-L-6-v2",
+        model_name: str = "ms-marco-TinyBERT-L-2-v2",
         cache_dir: str | None = None,
     ) -> None:
         """
         Initialize FlashRank reranker.
 
         Args:
-            model_name: Model to use for re-ranking. Options:
-                - "ms-marco-TinyBERT-L-2-v2" (fastest, 4MB)
-                - "ms-marco-MiniLM-L-6-v2" (balanced, 22MB) [default]
+            model_name: Model to use for re-ranking. Valid options:
+                - "ms-marco-TinyBERT-L-2-v2" (fastest, 4MB) [default]
                 - "ms-marco-MiniLM-L-12-v2" (best quality, 33MB, calibrated scores)
                 - "rank-T5-flan" (good ranking but uncalibrated scores ~0.4-0.5)
+                - "ce-esci-MiniLM-L12-v2" (e-commerce tuned)
             cache_dir: Directory to cache downloaded models (optional)
 
         Raises:
@@ -138,7 +138,7 @@ class FlashRankReranker(Reranker):
 
         Example:
             ```python
-            reranker = FlashRankReranker(model_name="ms-marco-MiniLM-L-6-v2")
+            reranker = FlashRankReranker(model_name="ms-marco-TinyBERT-L-2-v2")
             reranked = await reranker.rerank(
                 query="authentication best practices",
                 results=initial_results,

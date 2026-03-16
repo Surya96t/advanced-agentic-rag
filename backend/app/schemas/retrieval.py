@@ -75,7 +75,15 @@ class SearchConfig(BaseSchema):
     - hybrid_alpha: 0.5 = balanced, 1.0 = vector only, 0.0 = text only
     """
 
-    top_k: int = Field(default=10, ge=1, le=100, description="Number of chunks to retrieve")
+    top_k: int = Field(
+        default=10, ge=1, le=100, description="Number of chunks to retrieve from vector search"
+    )
+    text_top_k: int = Field(
+        default=10,
+        ge=1,
+        le=100,
+        description="Number of chunks to retrieve from text/keyword search",
+    )
     min_similarity: float = Field(
         default=0.0,
         ge=0.0,

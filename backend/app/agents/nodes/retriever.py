@@ -49,10 +49,7 @@ def get_reranker() -> FlashRankReranker:
     """Get or create reranker singleton."""
     global _reranker
     if _reranker is None:
-        # ms-marco-MiniLM-L-6-v2 is ~22 MB vs ~33 MB for the L-12 variant.
-        # It has comparable ranking quality on retrieval benchmarks while using
-        # significantly less memory, which matters on constrained Railway instances.
-        _reranker = FlashRankReranker(model_name="ms-marco-MiniLM-L-6-v2")
+        _reranker = FlashRankReranker(model_name=settings.rerank_model)
     return _reranker
 
 
@@ -142,7 +139,8 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
 
     # Search configuration — sourced from settings so values are overridable via .env
     search_config = SearchConfig(
-        top_k=settings.vector_search_top_k,  # candidate pool before re-ranking
+        top_k=settings.vector_search_top_k,  # vector candidate pool before re-ranking
+        text_top_k=settings.text_search_top_k,  # text candidate pool before re-ranking
         min_similarity=settings.vector_search_min_similarity,
         hybrid_alpha=settings.hybrid_search_alpha,
     )
