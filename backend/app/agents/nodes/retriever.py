@@ -139,7 +139,8 @@ async def retriever_node(state: AgentState, config: RunnableConfig) -> dict:
 
     # Search configuration — sourced from settings so values are overridable via .env
     search_config = SearchConfig(
-        top_k=settings.vector_search_top_k,  # candidate pool before re-ranking
+        top_k=settings.vector_search_top_k,  # vector candidate pool before re-ranking
+        text_top_k=settings.text_search_top_k,  # text candidate pool before re-ranking
         min_similarity=settings.vector_search_min_similarity,
         hybrid_alpha=settings.hybrid_search_alpha,
     )

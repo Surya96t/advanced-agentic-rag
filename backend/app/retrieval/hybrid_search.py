@@ -202,7 +202,8 @@ class HybridSearcher:
         if config.hybrid_alpha <= 0.0:
             # Pure text search
             logger.debug("Using pure text search (alpha=0.0)")
-            results = await self.text_searcher.search(query, user_id, config)
+            text_config = config.model_copy(update={"top_k": config.text_top_k})
+            results = await self.text_searcher.search(query, user_id, text_config)
             # Update source to "hybrid" for consistency
             for result in results:
                 result.source = "hybrid"
@@ -211,9 +212,10 @@ class HybridSearcher:
         # True hybrid: run both searches in parallel for speed
         logger.debug("Running vector and text search in parallel")
 
+        text_config = config.model_copy(update={"top_k": config.text_top_k})
         vector_results, text_results = await asyncio.gather(
             self.vector_searcher.search(query, user_id, config),
-            self.text_searcher.search(query, user_id, config),
+            self.text_searcher.search(query, user_id, text_config),
         )
         logger.debug(f"Vector search returned {len(vector_results)} results")
         logger.debug(f"Text search returned {len(text_results)} results")
