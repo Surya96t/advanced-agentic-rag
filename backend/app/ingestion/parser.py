@@ -1,5 +1,5 @@
 """
-Document parser for Integration Forge.
+Document parser for Advanced Agentic RAG.
 
 This module extracts text content from various file formats (Markdown, PDF, TXT).
 Provides a unified interface for parsing different document types.

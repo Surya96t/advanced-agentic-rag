@@ -1,7 +1,7 @@
 """
 FastAPI application initialization and configuration.
 
-This is the main entry point for the Integration Forge backend API.
+This is the main entry point for the Advanced Agentic RAG backend API.
 """
 
 import time

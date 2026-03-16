@@ -1,5 +1,5 @@
 """
-Embeddings client for Integration Forge.
+Embeddings client for Advanced Agentic RAG.
 
 This module provides a production-grade wrapper around OpenAI's embedding API.
 Handles batching, retry logic, rate limiting, and cost tracking for embedding

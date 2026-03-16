@@ -93,7 +93,7 @@ def _is_transient(exc: BaseException) -> bool:
 
 
 celery_app = Celery(
-    "integration_forge",
+    "advanced_agentic_rag",
     broker=settings.redis_url,
     backend=settings.redis_url,
 )

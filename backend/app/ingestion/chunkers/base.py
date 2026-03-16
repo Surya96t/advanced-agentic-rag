@@ -1,5 +1,5 @@
 """
-Base chunker for Integration Forge.
+Base chunker for Advanced Agentic RAG.
 
 This module defines the abstract interface for all chunking strategies.
 Provides common utilities and data structures for text chunking.

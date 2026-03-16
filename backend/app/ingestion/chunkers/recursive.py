@@ -1,5 +1,5 @@
 """
-Recursive text chunker for Integration Forge.
+Recursive text chunker for Advanced Agentic RAG.
 
 This module implements recursive character-based text splitting using LangChain.
 The recursive strategy tries multiple separators in order, from largest to smallest,

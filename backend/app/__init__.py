@@ -1,5 +1,5 @@
 """
-Integration Forge - Advanced Agentic RAG Backend
+Advanced Agentic RAG Backend
 
 Production-grade FastAPI backend with LangGraph orchestration,
 multi-stage chunking, hybrid search, and re-ranking.

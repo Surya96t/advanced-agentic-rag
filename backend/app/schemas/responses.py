@@ -1,7 +1,7 @@
 """
 Response schemas for API endpoints.
 
-This module defines all response models for the Integration Forge API,
+This module defines all response models for the Advanced Agentic RAG API,
 including health checks, errors, and search results.
 """
 

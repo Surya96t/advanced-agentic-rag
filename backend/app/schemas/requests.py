@@ -1,7 +1,7 @@
 """
 Request schemas for API endpoints.
 
-This module defines all request models for the Integration Forge API,
+This module defines all request models for the Advanced Agentic RAG API,
 including document ingestion and search operations.
 """
 
